@@ -1,4 +1,6 @@
 {
+    "imageWidth": 64,
+    "imageHeight": 64,
     "tileSize": 32,
     "tilesPerRow": 2,
     "totalTiles": 4,

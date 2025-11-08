@@ -1,3 +1,4 @@
+import { loadImage } from "./assets";
 import { Camera } from "./camera";
 import { Renderer } from "./renderer";
 import { Scene } from "./scene";
@@ -27,6 +28,7 @@ const main = async () => {
     resize();
 
     const spriteAtlas = await SpriteAtlas.load("/assets/tileset.json");
+    const spriteAtlasImage = await loadImage("/assets/tileset.png");
 
     const scene = new Scene();
 
@@ -66,7 +68,9 @@ const main = async () => {
     }
 
     await renderer.init([{
-        atlas: spriteAtlas, name: "tileset", imageUrl: "/assets/tileset.png"
+        atlas: spriteAtlas, 
+        name: "tileset", 
+        imageData: spriteAtlasImage
     }]);
 
     const draw = () => {

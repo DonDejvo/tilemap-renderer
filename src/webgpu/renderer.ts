@@ -1,4 +1,3 @@
-import { loadImage } from "../assets";
 import { Camera } from "../camera";
 import { createSpritesData, quad } from "../geometry";
 import { getImageData } from "../imageUtils";
@@ -108,7 +107,7 @@ export class WebgpuRenderer implements Renderer {
 
         for (const texInfo of texturesInfo) {
             if (texInfo.atlas) {
-                await this.createAtlasTexture(texInfo.atlas, texInfo.name, texInfo.imageUrl);
+                this.createAtlasTexture(texInfo.atlas, texInfo.name, getImageData(texInfo.imageData));
             }
         }
 
@@ -219,9 +218,7 @@ export class WebgpuRenderer implements Renderer {
         this.cfg.device.queue.submit([commandBuffer]);
     }
 
-    async createAtlasTexture(atlas: SpriteAtlas, name: string, imageUrl: string) {
-        const image = await loadImage(imageUrl);
-
+    createAtlasTexture(atlas: SpriteAtlas, name: string, imageData: Uint8Array) {
         const tileSize = atlas.tileSize;
 
         const textureArray = this.cfg.device.createTexture({
@@ -233,8 +230,6 @@ export class WebgpuRenderer implements Renderer {
             format: "rgba8unorm",
             usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
         });
-
-        const imageData = getImageData(image);
 
         for (let i = 0; i < atlas.totalTiles; ++i) {
             const row = Math.floor(i / atlas.tilesPerRow);

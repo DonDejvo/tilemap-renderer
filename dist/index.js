@@ -1,28 +1,23 @@
-var __defProp = Object.defineProperty;
-var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
-var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
-var __async = (__this, __arguments, generator) => {
-  return new Promise((resolve, reject) => {
-    var fulfilled = (value) => {
-      try {
-        step(generator.next(value));
-      } catch (e) {
-        reject(e);
-      }
-    };
-    var rejected = (value) => {
-      try {
-        step(generator.throw(value));
-      } catch (e) {
-        reject(e);
-      }
-    };
-    var step = (x) => x.done ? resolve(x.value) : Promise.resolve(x.value).then(fulfilled, rejected);
-    step((generator = generator.apply(__this, __arguments)).next());
-  });
-};
 (function() {
   "use strict";
+  const loadImage = (url) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.src = url;
+      img.onload = () => {
+        resolve(img);
+      };
+      img.onerror = () => {
+        reject();
+      };
+    });
+  };
+  const loadJson = async (url) => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to load: ${url}`);
+    const data = await res.json();
+    return data;
+  };
   const identity = () => {
     return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
   };
@@ -46,9 +41,9 @@ var __async = (__this, __arguments, generator) => {
     return out;
   };
   class Vector {
+    x;
+    y;
     constructor(x = 0, y = 0) {
-      __publicField(this, "x");
-      __publicField(this, "y");
       this.x = x;
       this.y = y;
     }
@@ -58,11 +53,11 @@ var __async = (__this, __arguments, generator) => {
     }
   }
   class Camera {
+    vw;
+    vh;
+    projectionMatrix;
+    position;
     constructor() {
-      __publicField(this, "vw");
-      __publicField(this, "vh");
-      __publicField(this, "projectionMatrix");
-      __publicField(this, "position");
       this.projectionMatrix = identity();
       this.position = new Vector();
       this.vw = 0;
@@ -75,8 +70,8 @@ var __async = (__this, __arguments, generator) => {
     }
   }
   class Scene {
+    layers;
     constructor() {
-      __publicField(this, "layers");
       this.layers = [];
     }
     addSprite(sprite) {
@@ -92,12 +87,12 @@ var __async = (__this, __arguments, generator) => {
     }
   }
   class SceneLayer {
+    zIndex;
+    isStatic;
+    atlasName;
+    isLocked;
+    sprites;
     constructor(zIndex, isStatic, atlasName, isLocked) {
-      __publicField(this, "zIndex");
-      __publicField(this, "isStatic");
-      __publicField(this, "atlasName");
-      __publicField(this, "isLocked");
-      __publicField(this, "sprites");
       this.zIndex = zIndex;
       this.isStatic = isStatic;
       this.atlasName = atlasName;
@@ -112,13 +107,13 @@ var __async = (__this, __arguments, generator) => {
     }
   }
   class Sprite {
+    zIndex;
+    atlasName;
+    tileId;
+    isStatic;
+    position;
+    scale;
     constructor(zIndex, atlasName, tileId, isStatic) {
-      __publicField(this, "zIndex");
-      __publicField(this, "atlasName");
-      __publicField(this, "tileId");
-      __publicField(this, "isStatic");
-      __publicField(this, "position");
-      __publicField(this, "scale");
       this.zIndex = zIndex;
       this.atlasName = atlasName;
       this.tileId = tileId;
@@ -127,46 +122,31 @@ var __async = (__this, __arguments, generator) => {
       this.scale = new Vector(1, 1);
     }
   }
-  const loadImage = (url) => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.src = url;
-      img.onload = () => {
-        resolve(img);
-      };
-      img.onerror = () => {
-        reject();
-      };
-    });
-  };
-  const loadJson = (url) => __async(null, null, function* () {
-    const res = yield fetch(url);
-    if (!res.ok) throw new Error(`Failed to load: ${url}`);
-    const data = yield res.json();
-    return data;
-  });
   class Tile {
+    x;
+    y;
+    properties;
+    animation;
     constructor(x, y, tileData) {
-      __publicField(this, "x");
-      __publicField(this, "y");
-      __publicField(this, "properties");
-      __publicField(this, "animation");
       this.x = x;
       this.y = y;
-      this.properties = tileData == null ? void 0 : tileData.properties;
-      this.animation = tileData == null ? void 0 : tileData.animation;
+      this.properties = tileData?.properties;
+      this.animation = tileData?.animation;
     }
     getProperty(name) {
-      var _a, _b;
-      return (_b = (_a = this.properties) == null ? void 0 : _a.find((prop) => prop.name === name)) != null ? _b : null;
+      return this.properties?.find((prop) => prop.name === name) ?? null;
     }
   }
   class SpriteAtlas {
+    imageWidth;
+    imageHeight;
+    tileSize;
+    tilesPerRow;
+    totalTiles;
+    data;
     constructor(json) {
-      __publicField(this, "tileSize");
-      __publicField(this, "tilesPerRow");
-      __publicField(this, "totalTiles");
-      __publicField(this, "data");
+      this.imageWidth = json.imageWidth;
+      this.imageHeight = json.imageHeight;
       this.tileSize = json.tileSize;
       this.tilesPerRow = json.tilesPerRow;
       this.totalTiles = json.totalTiles;
@@ -175,11 +155,9 @@ var __async = (__this, __arguments, generator) => {
         this.data.set(tile.id, tile);
       }
     }
-    static load(url) {
-      return __async(this, null, function* () {
-        const json = yield loadJson(url);
-        return new SpriteAtlas(json);
-      });
+    static async load(url) {
+      const json = await loadJson(url);
+      return new SpriteAtlas(json);
     }
     getTile(x, y) {
       const data = this.data.get(y * this.tilesPerRow + x);
@@ -217,22 +195,36 @@ var __async = (__this, __arguments, generator) => {
     }
     return new Float32Array(data);
   };
-  const getImageData = (image) => {
-    const { width, height } = image;
-    const tmpCanvas = document.createElement("canvas");
-    tmpCanvas.width = width;
-    tmpCanvas.height = height;
+  const getImageData = (source) => {
+    if (source instanceof Uint8Array) {
+      return source;
+    }
+    let width;
+    let height;
+    let tmpCanvas;
+    if (source instanceof HTMLCanvasElement || source instanceof OffscreenCanvas) {
+      tmpCanvas = source;
+      width = tmpCanvas.width;
+      height = tmpCanvas.height;
+    } else {
+      width = source.width;
+      height = source.height;
+      tmpCanvas = document.createElement("canvas");
+      tmpCanvas.width = width;
+      tmpCanvas.height = height;
+    }
     const ctx = tmpCanvas.getContext("2d");
     if (!ctx) throw new Error("Could not get 2D context");
-    ctx.drawImage(image, 0, 0);
-    return ctx.getImageData(0, 0, width, height).data;
+    if (!(source instanceof HTMLCanvasElement || source instanceof OffscreenCanvas)) {
+      ctx.drawImage(source, 0, 0);
+    }
+    return new Uint8Array(ctx.getImageData(0, 0, width, height).data);
   };
   class ShaderProgram {
+    gl;
+    program;
+    uniforms;
     constructor(gl, vertSource, fragSource) {
-      __publicField(this, "gl");
-      __publicField(this, "program");
-      __publicField(this, "uniforms");
-      var _a;
       this.gl = gl;
       this.uniforms = /* @__PURE__ */ new Map();
       const vertexShader = this.compileShader(gl.VERTEX_SHADER, vertSource);
@@ -242,19 +234,18 @@ var __async = (__this, __arguments, generator) => {
       gl.attachShader(this.program, fragmentShader);
       gl.linkProgram(this.program);
       if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-        throw new Error((_a = gl.getProgramInfoLog(this.program)) != null ? _a : "Could not link program");
+        throw new Error(gl.getProgramInfoLog(this.program) ?? "Could not link program");
       }
       gl.deleteShader(vertexShader);
       gl.deleteShader(fragmentShader);
     }
     compileShader(type, source) {
-      var _a;
       const shader = this.gl.createShader(type);
       if (!shader) throw new Error("Could not create shader");
       this.gl.shaderSource(shader, source);
       this.gl.compileShader(shader);
       if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
-        throw new Error((_a = this.gl.getShaderInfoLog(shader)) != null ? _a : "Could not compile shader");
+        throw new Error(this.gl.getShaderInfoLog(shader) ?? "Could not compile shader");
       }
       return shader;
     }
@@ -309,32 +300,30 @@ void main() {
 }
 `;
   class WebglRenderer {
+    canvas;
+    gl;
+    shaderProgram;
+    vbo;
+    layersMap;
+    texturesMap;
     constructor(canvas) {
-      __publicField(this, "canvas");
-      __publicField(this, "gl");
-      __publicField(this, "shaderProgram");
-      __publicField(this, "vbo");
-      __publicField(this, "layersMap");
-      __publicField(this, "texturesMap");
       this.canvas = canvas;
       this.layersMap = /* @__PURE__ */ new Map();
       this.texturesMap = /* @__PURE__ */ new Map();
     }
-    init(texturesInfo) {
-      return __async(this, null, function* () {
-        const gl = this.canvas.getContext("webgl2");
-        if (!gl) throw new Error("WebGL2 not supported");
-        this.gl = gl;
-        for (const texInfo of texturesInfo) {
-          if (texInfo.atlas) {
-            yield this.createAtlasTexture(texInfo.atlas, texInfo.name, texInfo.imageUrl);
-          }
+    async init(texturesInfo) {
+      const gl = this.canvas.getContext("webgl2");
+      if (!gl) throw new Error("WebGL2 not supported");
+      this.gl = gl;
+      for (const texInfo of texturesInfo) {
+        if (texInfo.atlas) {
+          this.createAtlasTexture(texInfo.atlas, texInfo.name, getImageData(texInfo.imageData));
         }
-        this.shaderProgram = new ShaderProgram(gl, vertexSource, fragmentSource);
-        this.vbo = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
-        gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
-      });
+      }
+      this.shaderProgram = new ShaderProgram(gl, vertexSource, fragmentSource);
+      this.vbo = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
+      gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
     }
     render(scene, camera) {
       const layers = [];
@@ -360,49 +349,45 @@ void main() {
       }
     }
     getTexture(name) {
-      var _a;
-      return (_a = this.texturesMap.get(name)) != null ? _a : null;
+      return this.texturesMap.get(name) ?? null;
     }
     getVBO() {
       return this.vbo;
     }
-    createAtlasTexture(atlas, name, imageUrl) {
-      return __async(this, null, function* () {
-        const gl = this.gl;
-        const image = yield loadImage(imageUrl);
-        const pbo = gl.createBuffer();
-        gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, pbo);
-        gl.bufferData(gl.PIXEL_UNPACK_BUFFER, getImageData(image), gl.STATIC_DRAW);
-        gl.pixelStorei(gl.UNPACK_ROW_LENGTH, image.width);
-        gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, image.height);
-        const texture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
-        gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 4, gl.RGBA8, atlas.tileSize, atlas.tileSize, atlas.totalTiles);
-        for (let i = 0; i < atlas.totalTiles; ++i) {
-          const col = i % atlas.tilesPerRow;
-          const row = Math.floor(i / atlas.tilesPerRow);
-          gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, col * atlas.tileSize);
-          gl.pixelStorei(gl.UNPACK_SKIP_ROWS, row * atlas.tileSize);
-          gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, i, atlas.tileSize, atlas.tileSize, 1, gl.RGBA, gl.UNSIGNED_BYTE, 0);
-        }
-        gl.deleteBuffer(pbo);
-        gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
-        gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
-        this.texturesMap.set(name, texture);
-      });
+    createAtlasTexture(atlas, name, imageData) {
+      const gl = this.gl;
+      const pbo = gl.createBuffer();
+      gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, pbo);
+      gl.bufferData(gl.PIXEL_UNPACK_BUFFER, imageData, gl.STATIC_DRAW);
+      gl.pixelStorei(gl.UNPACK_ROW_LENGTH, atlas.imageWidth);
+      gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, atlas.imageHeight);
+      const texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
+      gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 4, gl.RGBA8, atlas.tileSize, atlas.tileSize, atlas.totalTiles);
+      for (let i = 0; i < atlas.totalTiles; ++i) {
+        const col = i % atlas.tilesPerRow;
+        const row = Math.floor(i / atlas.tilesPerRow);
+        gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, col * atlas.tileSize);
+        gl.pixelStorei(gl.UNPACK_SKIP_ROWS, row * atlas.tileSize);
+        gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, i, atlas.tileSize, atlas.tileSize, 1, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+      }
+      gl.deleteBuffer(pbo);
+      gl.generateMipmap(gl.TEXTURE_2D_ARRAY);
+      gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
+      this.texturesMap.set(name, texture);
     }
   }
   class WebglRendererLayer {
+    gl;
+    renderer;
+    instanceBuffer;
+    vao;
+    isStatic;
+    texName;
+    needsUpdate;
+    instanceCount;
     constructor(gl, rendrer, isStatic, texName) {
-      __publicField(this, "gl");
-      __publicField(this, "renderer");
-      __publicField(this, "instanceBuffer");
-      __publicField(this, "vao");
-      __publicField(this, "isStatic");
-      __publicField(this, "texName");
-      __publicField(this, "needsUpdate");
-      __publicField(this, "instanceCount");
       this.gl = gl;
       this.renderer = rendrer;
       this.isStatic = isStatic;
@@ -447,17 +432,16 @@ void main() {
       gl.bindVertexArray(null);
     }
   }
-  const requestConfig = () => __async(null, null, function* () {
-    var _a;
-    const adapter = yield (_a = navigator.gpu) == null ? void 0 : _a.requestAdapter();
-    const device = yield adapter == null ? void 0 : adapter.requestDevice();
+  const requestConfig = async () => {
+    const adapter = await navigator.gpu?.requestAdapter();
+    const device = await adapter?.requestDevice();
     if (!device) return null;
     const format = navigator.gpu.getPreferredCanvasFormat();
     return {
       device,
       format
     };
-  });
+  };
   const shaderSource = `
 struct VSInput {
     @location(0) vertexPos: vec2f,
@@ -507,91 +491,89 @@ fn fs_main(input: VSOutput) -> @location(0) vec4f {
 }
 `;
   class WebgpuRenderer {
+    canvas;
+    ctx;
+    cfg;
+    pipeline;
+    vbo;
+    layersMap;
+    texturesMap;
+    cameraBuffer;
+    cameraBindGroup;
+    sampler;
     constructor(canvas) {
-      __publicField(this, "canvas");
-      __publicField(this, "ctx");
-      __publicField(this, "cfg");
-      __publicField(this, "pipeline");
-      __publicField(this, "vbo");
-      __publicField(this, "layersMap");
-      __publicField(this, "texturesMap");
-      __publicField(this, "cameraBuffer");
-      __publicField(this, "cameraBindGroup");
-      __publicField(this, "sampler");
       this.layersMap = /* @__PURE__ */ new Map();
       this.texturesMap = /* @__PURE__ */ new Map();
       this.canvas = canvas;
     }
-    init(texturesInfo) {
-      return __async(this, null, function* () {
-        const gpuConfig = yield requestConfig();
-        if (!gpuConfig) throw new Error("WebGPU not supported");
-        this.cfg = gpuConfig;
-        const device = this.cfg.device;
-        const ctx = this.canvas.getContext("webgpu");
-        this.ctx = ctx;
-        this.ctx.configure(this.cfg);
-        for (const texInfo of texturesInfo) {
-          if (texInfo.atlas) {
-            yield this.createAtlasTexture(texInfo.atlas, texInfo.name, texInfo.imageUrl);
-          }
+    async init(texturesInfo) {
+      const gpuConfig = await requestConfig();
+      if (!gpuConfig) throw new Error("WebGPU not supported");
+      this.cfg = gpuConfig;
+      const device = this.cfg.device;
+      const ctx = this.canvas.getContext("webgpu");
+      this.ctx = ctx;
+      this.ctx.configure(this.cfg);
+      for (const texInfo of texturesInfo) {
+        if (texInfo.atlas) {
+          this.createAtlasTexture(texInfo.atlas, texInfo.name, getImageData(texInfo.imageData));
         }
-        const shaderModule = device.createShaderModule({
-          code: shaderSource
-        });
-        this.pipeline = device.createRenderPipeline({
-          layout: "auto",
-          vertex: {
-            module: shaderModule,
-            entryPoint: "vs_main",
-            buffers: [
-              {
-                arrayStride: 4 * 4,
-                stepMode: "vertex",
-                attributes: [
-                  { shaderLocation: 0, offset: 0, format: "float32x2" },
-                  { shaderLocation: 1, offset: 2 * 4, format: "float32x2" }
-                ]
-              },
-              {
-                arrayStride: 5 * 4,
-                stepMode: "instance",
-                attributes: [
-                  { shaderLocation: 2, offset: 0, format: "float32x2" },
-                  { shaderLocation: 3, offset: 2 * 4, format: "float32x2" },
-                  { shaderLocation: 4, offset: 4 * 4, format: "float32" }
-                ]
-              }
-            ]
-          },
-          fragment: {
-            module: shaderModule,
-            entryPoint: "fs_main",
-            targets: [{ format: this.cfg.format }]
-          },
-          primitive: { topology: "triangle-strip" }
-        });
-        this.cameraBuffer = device.createBuffer({
-          size: 4 * 4 * 4,
-          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-        });
-        this.cameraBindGroup = device.createBindGroup({
-          layout: this.pipeline.getBindGroupLayout(0),
-          entries: [{
-            binding: 0,
-            resource: { buffer: this.cameraBuffer }
-          }]
-        });
-        this.sampler = device.createSampler({
-          magFilter: "nearest",
-          minFilter: "nearest"
-        });
-        this.vbo = device.createBuffer({
-          size: quad.byteLength,
-          usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-        });
-        device.queue.writeBuffer(this.vbo, 0, quad);
+      }
+      const shaderModule = device.createShaderModule({
+        code: shaderSource
       });
+      this.pipeline = device.createRenderPipeline({
+        layout: "auto",
+        vertex: {
+          module: shaderModule,
+          entryPoint: "vs_main",
+          buffers: [
+            {
+              arrayStride: 4 * 4,
+              stepMode: "vertex",
+              attributes: [
+                { shaderLocation: 0, offset: 0, format: "float32x2" },
+                { shaderLocation: 1, offset: 2 * 4, format: "float32x2" }
+              ]
+            },
+            {
+              arrayStride: 5 * 4,
+              stepMode: "instance",
+              attributes: [
+                { shaderLocation: 2, offset: 0, format: "float32x2" },
+                { shaderLocation: 3, offset: 2 * 4, format: "float32x2" },
+                { shaderLocation: 4, offset: 4 * 4, format: "float32" }
+              ]
+            }
+          ]
+        },
+        fragment: {
+          module: shaderModule,
+          entryPoint: "fs_main",
+          targets: [{ format: this.cfg.format }]
+        },
+        primitive: { topology: "triangle-strip" }
+      });
+      this.cameraBuffer = device.createBuffer({
+        size: 4 * 4 * 4,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+      this.cameraBindGroup = device.createBindGroup({
+        layout: this.pipeline.getBindGroupLayout(0),
+        entries: [{
+          binding: 0,
+          resource: { buffer: this.cameraBuffer }
+        }]
+      });
+      this.sampler = device.createSampler({
+        magFilter: "nearest",
+        minFilter: "nearest"
+      });
+      this.vbo = device.createBuffer({
+        size: quad.byteLength,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+      });
+      device.queue.writeBuffer(this.vbo, 0, quad);
     }
     render(scene, camera) {
       const layers = [];
@@ -631,48 +613,44 @@ fn fs_main(input: VSOutput) -> @location(0) vec4f {
       const commandBuffer = encoder.finish();
       this.cfg.device.queue.submit([commandBuffer]);
     }
-    createAtlasTexture(atlas, name, imageUrl) {
-      return __async(this, null, function* () {
-        const image = yield loadImage(imageUrl);
-        const tileSize = atlas.tileSize;
-        const textureArray = this.cfg.device.createTexture({
-          size: {
+    createAtlasTexture(atlas, name, imageData) {
+      const tileSize = atlas.tileSize;
+      const textureArray = this.cfg.device.createTexture({
+        size: {
+          width: tileSize,
+          height: tileSize,
+          depthOrArrayLayers: atlas.totalTiles
+        },
+        format: "rgba8unorm",
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
+      });
+      for (let i = 0; i < atlas.totalTiles; ++i) {
+        const row = Math.floor(i / atlas.tilesPerRow);
+        const col = i % atlas.tilesPerRow;
+        const tilePixels = new Uint8Array(tileSize * tileSize * 4);
+        for (let j = 0; j < tileSize; ++j) {
+          const srcStart = ((row * tileSize + j) * atlas.tilesPerRow + col) * tileSize * 4;
+          const srcEnd = srcStart + tileSize * 4;
+          tilePixels.set(imageData.slice(srcStart, srcEnd), j * tileSize * 4);
+        }
+        this.cfg.device.queue.writeTexture(
+          {
+            texture: textureArray,
+            origin: { x: 0, y: 0, z: i }
+          },
+          tilePixels,
+          {
+            bytesPerRow: tileSize * 4,
+            rowsPerImage: tileSize
+          },
+          {
             width: tileSize,
             height: tileSize,
-            depthOrArrayLayers: atlas.totalTiles
-          },
-          format: "rgba8unorm",
-          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
-        });
-        const imageData = getImageData(image);
-        for (let i = 0; i < atlas.totalTiles; ++i) {
-          const row = Math.floor(i / atlas.tilesPerRow);
-          const col = i % atlas.tilesPerRow;
-          const tilePixels = new Uint8Array(tileSize * tileSize * 4);
-          for (let j = 0; j < tileSize; ++j) {
-            const srcStart = ((row * tileSize + j) * atlas.tilesPerRow + col) * tileSize * 4;
-            const srcEnd = srcStart + tileSize * 4;
-            tilePixels.set(imageData.slice(srcStart, srcEnd), j * tileSize * 4);
+            depthOrArrayLayers: 1
           }
-          this.cfg.device.queue.writeTexture(
-            {
-              texture: textureArray,
-              origin: { x: 0, y: 0, z: i }
-            },
-            tilePixels,
-            {
-              bytesPerRow: tileSize * 4,
-              rowsPerImage: tileSize
-            },
-            {
-              width: tileSize,
-              height: tileSize,
-              depthOrArrayLayers: 1
-            }
-          );
-        }
-        this.texturesMap.set(name, textureArray);
-      });
+        );
+      }
+      this.texturesMap.set(name, textureArray);
     }
     getConfig() {
       return this.cfg;
@@ -688,14 +666,14 @@ fn fs_main(input: VSOutput) -> @location(0) vec4f {
     }
   }
   class WebgpuRendererLayer {
+    isStatic;
+    texName;
+    needsUpdate;
+    instanceCount;
+    renderer;
+    instanceBuffer;
+    textureBindGroup;
     constructor(renderer, isStatic, texName) {
-      __publicField(this, "isStatic");
-      __publicField(this, "texName");
-      __publicField(this, "needsUpdate");
-      __publicField(this, "instanceCount");
-      __publicField(this, "renderer");
-      __publicField(this, "instanceBuffer");
-      __publicField(this, "textureBindGroup");
       this.renderer = renderer;
       this.isStatic = isStatic;
       this.texName = texName;
@@ -729,7 +707,7 @@ fn fs_main(input: VSOutput) -> @location(0) vec4f {
       pass.draw(4, this.instanceCount);
     }
   }
-  const main = () => __async(null, null, function* () {
+  const main = async () => {
     const canvas = document.createElement("canvas");
     canvas.style.position = "absolute";
     canvas.style.left = "0";
@@ -744,7 +722,8 @@ fn fs_main(input: VSOutput) -> @location(0) vec4f {
     };
     addEventListener("resize", resize);
     resize();
-    const spriteAtlas = yield SpriteAtlas.load("/assets/tileset.json");
+    const spriteAtlas = await SpriteAtlas.load("/assets/tileset.json");
+    const spriteAtlasImage = await loadImage("/assets/tileset.png");
     const scene = new Scene();
     const sprites = [];
     for (let i = 0; i < 4; ++i) {
@@ -776,17 +755,17 @@ fn fs_main(input: VSOutput) -> @location(0) vec4f {
       renderer = new WebglRenderer(canvas);
       rendererContext = "WebGL2";
     }
-    yield renderer.init([{
+    await renderer.init([{
       atlas: spriteAtlas,
       name: "tileset",
-      imageUrl: "/assets/tileset.png"
+      imageData: spriteAtlasImage
     }]);
     const draw = () => {
       requestAnimationFrame((t) => {
         t *= 1e-3;
         draw();
         frameCount++;
-        dt = t - (lastRAF != null ? lastRAF : t);
+        dt = t - (lastRAF ?? t);
         if (t - lastTime >= 1) {
           fps = frameCount;
           frameCount = 0;
@@ -804,6 +783,6 @@ fn fs_main(input: VSOutput) -> @location(0) vec4f {
       });
     };
     draw();
-  });
+  };
   main();
 })();

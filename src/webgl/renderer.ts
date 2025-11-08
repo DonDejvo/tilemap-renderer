@@ -1,4 +1,3 @@
-import { loadImage } from "../assets";
 import { Camera } from "../camera";
 import { createSpritesData, quad } from "../geometry";
 import { getImageData } from "../imageUtils";
@@ -68,7 +67,7 @@ export class WebglRenderer implements Renderer {
 
         for (const texInfo of texturesInfo) {
             if (texInfo.atlas) {
-                await this.createAtlasTexture(texInfo.atlas, texInfo.name, texInfo.imageUrl);
+                this.createAtlasTexture(texInfo.atlas, texInfo.name, getImageData(texInfo.imageData));
             }
         }
 
@@ -116,16 +115,15 @@ export class WebglRenderer implements Renderer {
         return this.vbo;
     }
 
-    public async createAtlasTexture(atlas: SpriteAtlas, name: string, imageUrl: string) {
+    public createAtlasTexture(atlas: SpriteAtlas, name: string, imageData: Uint8Array) {
         const gl = this.gl;
-        const image = await loadImage(imageUrl);
 
         const pbo = gl.createBuffer();
         gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, pbo);
-        gl.bufferData(gl.PIXEL_UNPACK_BUFFER, getImageData(image), gl.STATIC_DRAW);
+        gl.bufferData(gl.PIXEL_UNPACK_BUFFER, imageData, gl.STATIC_DRAW);
 
-        gl.pixelStorei(gl.UNPACK_ROW_LENGTH, image.width);
-        gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, image.height);
+        gl.pixelStorei(gl.UNPACK_ROW_LENGTH, atlas.imageWidth);
+        gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, atlas.imageHeight);
 
         const texture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);

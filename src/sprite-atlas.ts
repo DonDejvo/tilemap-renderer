@@ -14,6 +14,8 @@ export interface TileData {
 }
 
 export interface TilesetJSON {
+    imageWidth: number;
+    imageHeight: number;
     tileSize: number;
     tilesPerRow: number;
     totalTiles: number;
@@ -39,12 +41,16 @@ export class Tile {
 }
 
 export class SpriteAtlas {
+    imageWidth: number;
+    imageHeight: number;
     tileSize: number;
     tilesPerRow: number;
     totalTiles: number;
     data: Map<number, TileData>;
 
     constructor(json: TilesetJSON) {
+        this.imageWidth = json.imageWidth;
+        this.imageHeight = json.imageHeight;
         this.tileSize = json.tileSize;
         this.tilesPerRow = json.tilesPerRow;
         this.totalTiles = json.totalTiles;
