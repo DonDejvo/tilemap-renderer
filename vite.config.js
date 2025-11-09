@@ -4,7 +4,7 @@ import path from 'path';
 export default defineConfig({
   root: 'examples',
   build: {
-    outDir: '../dist',
+    outDir: '../build',
     emptyOutDir: true,
     minify: true,
     lib: {
