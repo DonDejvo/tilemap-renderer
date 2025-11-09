@@ -1,5 +1,5 @@
-import { createOrtho, identity, Matrix } from "./matrix";
-import { Vector } from "./vector";
+import { matrix, Matrix } from "./matrix";
+import { Vector } from "./Vector";
 
 export class Camera {
     vw: number;
@@ -7,16 +7,18 @@ export class Camera {
     projectionMatrix: Matrix;
     position: Vector;
 
-    constructor() {
-        this.projectionMatrix = identity();
+    constructor(vw: number, vh: number) {
+        this.projectionMatrix = matrix.identity();
         this.position = new Vector();
         this.vw = 0;
         this.vh = 0;
+
+        this.updateProjection(vw, vh);
     }
 
     public updateProjection(vw: number, vh: number) {
         this.vw = vw;
         this.vh = vh;
-        createOrtho(this.projectionMatrix, 0, vw, 0, vh);
+        matrix.createOrtho(this.projectionMatrix, 0, vw, 0, vh);
     }
 }

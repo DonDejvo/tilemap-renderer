@@ -1,15 +1,25 @@
 import { defineConfig } from 'vite';
+import path from 'path';
 
 export default defineConfig({
+  root: 'examples',
   build: {
-    target: "es2022",
-    outDir: "dist",
-    minify: false,
+    outDir: '../build',
+    emptyOutDir: true,
+    minify: true,
+    lib: {
+      entry: path.resolve(__dirname, 'src/TilemapRenderer.ts'),
+      name: 'TilemapRenderer',
+      fileName: (format) => `tilemap-renderer${format === "es" ? ".module" : ""}.min.js`,
+      formats: ['es', 'iife'],
+    },
     rollupOptions: {
       output: {
-        format: "iife",
-        entryFileNames: "index.js",
+        globals: {}
       },
     },
+  },
+  server: {
+    port: 5173,
   },
 });

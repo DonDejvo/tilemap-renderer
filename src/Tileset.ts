@@ -1,4 +1,4 @@
-import { loadJson } from "./assets";
+import { assets } from "./assets";
 
 type TileProperty = { name: string; value: boolean | number | string; };
 
@@ -14,12 +14,13 @@ export interface TileData {
 }
 
 export interface TilesetJSON {
+    name: string;
     imageWidth: number;
     imageHeight: number;
     tileSize: number;
     tilesPerRow: number;
     totalTiles: number;
-    data: TileData[];
+    data?: TileData[];
 }
 
 export class Tile {
@@ -40,7 +41,8 @@ export class Tile {
     }
 }
 
-export class SpriteAtlas {
+export class Tileset {
+    name: string;
     imageWidth: number;
     imageHeight: number;
     tileSize: number;
@@ -49,6 +51,7 @@ export class SpriteAtlas {
     data: Map<number, TileData>;
 
     constructor(json: TilesetJSON) {
+        this.name = json.name;
         this.imageWidth = json.imageWidth;
         this.imageHeight = json.imageHeight;
         this.tileSize = json.tileSize;
@@ -56,14 +59,16 @@ export class SpriteAtlas {
         this.totalTiles = json.totalTiles;
 
         this.data = new Map();
-        for (const tile of json.data) {
-            this.data.set(tile.id, tile);
+        if (json.data) {
+            for (const tile of json.data) {
+                this.data.set(tile.id, tile);
+            }
         }
     }
 
-    public static async load(url: string): Promise<SpriteAtlas> {
-        const json = await loadJson(url);
-        return new SpriteAtlas(json);
+    public static async load(url: string): Promise<Tileset> {
+        const json = await assets.loadJson(url);
+        return new Tileset(json);
     }
 
     public getTile(x: number, y: number) {

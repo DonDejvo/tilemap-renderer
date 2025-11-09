@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tilemap Renderer Example</title>
+    <style>
+        canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+            display: block;
+        }
+
+        #fps {
+            position: fixed;
+            left: 10px;
+            top: 10px;
+            color: white;
+            font: 14px monospace;
+            z-index: 9999;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="fps">FPS: 0</div>
+
+    <script type="module">
+        import * as TilemapRenderer from "../build/tilemap-renderer.module.min.js";
+
+        const main = async () => {
+            const camera = new TilemapRenderer.Camera(300, 150);
+
+            const tileset = new TilemapRenderer.Tileset({
+                name: "MyTileset",
+                imageWidth: 64,
+                imageHeight: 64,
+                tilesPerRow: 2,
+                totalTiles: 4,
+                tileSize: 32
+            });
+
+            const tilesetImage = await TilemapRenderer.assets.loadImage("/textures/tileset.png");
+
+            const scene = new TilemapRenderer.Scene();
+
+            const sprites = [];
+            for (let i = 0; i < 4; ++i) {
+                const s = new TilemapRenderer.Sprite({
+                    tilesetName: "MyTileset",
+                    tilesetIdx: i
+                });
+                s.position.set(32, 32 + i * 64);
+                s.scale.set(64, 64);
+                scene.addSprite(s);
+                sprites.push(s);
+            }
+
+            const fpsElem = document.getElementById("fps");
+
+            let dt = 0;
+            let lastRAF = undefined;
+            let lastTime = 0;
+            let frameCount = 0;
+            let fps = 0;
+
+            let renderer;
+            let rendererContext;
+
+            const type = prompt("Enter renderer type (webgl | webgl2 | webgpu):");
+            if (type === "webgpu") {
+                renderer = TilemapRenderer.createRenderer("webgpu");
+                rendererContext = "WebGPU";
+            } else if (type === "webgl2") {
+                renderer = TilemapRenderer.createRenderer("webgl2");
+                rendererContext = "WebGL2";
+            } else {
+                renderer = TilemapRenderer.createRenderer("webgl");
+                rendererContext = "WebGL";
+            }
+
+            document.body.appendChild(renderer.getCanvas());
+
+            const resize = () => {
+                const w = innerWidth, h = innerHeight;
+                renderer.setSize(w, h);
+                camera.updateProjection(w, h);
+            }
+
+            addEventListener("resize", resize);
+            resize();
+
+            await renderer.init([{
+                tileset,
+                image: tilesetImage
+            }]);
+
+            renderer.setClearColor(new TilemapRenderer.Color(0.5, 0.5, 0.5));
+
+            const draw = () => {
+                requestAnimationFrame((t) => {
+                    t *= 0.001;
+                    draw();
+
+                    frameCount++;
+                    dt = t - (lastRAF ?? t);
+                    if (t - lastTime >= 1) {
+                        fps = frameCount;
+                        frameCount = 0;
+                        lastTime = t;
+                        fpsElem.textContent = `${rendererContext} - FPS: ${fps}`;
+                    }
+                    lastRAF = t;
+
+                    for (let i = 0; i < sprites.length; ++i) {
+                        sprites[i].position.x += (i + 1) * 32 * dt;
+                        if (sprites[i].position.x - sprites[i].scale.x * 0.5 > camera.vw) {
+                            sprites[i].position.x -= camera.vw + sprites[i].scale.x;
+                        }
+                    }  
+
+                    renderer.render(scene, camera);
+                });
+            }
+
+            draw();
+        }
+
+        main();
+    </script>
+</body>
+
+</html>

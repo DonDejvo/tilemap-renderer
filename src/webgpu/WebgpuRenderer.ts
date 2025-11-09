@@ -1,10 +1,11 @@
-import { Camera } from "../camera";
-import { createSpritesData, quad } from "../geometry";
-import { getImageData } from "../imageUtils";
-import { Renderer, TextureInfo } from "../renderer";
-import { Scene } from "../scene";
-import { Sprite } from "../sprite";
-import { SpriteAtlas } from "../sprite-atlas";
+import { Camera } from "../Camera";
+import { Color } from "../Color";
+import { geometry } from "../geometry";
+import { imageUtils } from "../imageUtils";
+import { DYNAMIC_LAYER_MAX_SPRITES, Renderer, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
+import { Scene } from "../Scene";
+import { Sprite } from "../Sprite";
+import { Tileset } from "../Tileset";
 
 interface GPUConfig {
     device: GPUDevice;
@@ -36,7 +37,8 @@ struct VSInput {
 }
 
 struct Camera {
-    projectionMatrix: mat4x4f
+    projectionMatrix: mat4x4f,
+    pos: vec2f
 }
 
 @group(0) @binding(0)
@@ -56,7 +58,7 @@ fn vs_main(input: VSInput) -> VSOutput {
     out.depth = input.depth;
 
     let worldPos = input.vertexPos * input.tileScale + input.tilePos;
-    out.pos = camera.projectionMatrix * vec4f(worldPos, 0.0, 1.0);
+    out.pos = camera.projectionMatrix * vec4f(worldPos - camera.pos, 0.0, 1.0);
 
     return out;
 }
@@ -81,18 +83,33 @@ export class WebgpuRenderer implements Renderer {
     private pipeline!: GPURenderPipeline;
     private vbo!: GPUBuffer;
     private layersMap: Map<string, WebgpuRendererLayer>;
-    private texturesMap: Map<string, GPUTexture>;
+    private texturesMap: Map<string, { texture: GPUTexture; tileset: Tileset; }>;
     private cameraBuffer!: GPUBuffer;
     private cameraBindGroup!: GPUBindGroup;
     private sampler!: GPUSampler;
+    private clearColor: Color;
 
     constructor(canvas: HTMLCanvasElement) {
         this.layersMap = new Map();
         this.texturesMap = new Map();
         this.canvas = canvas;
+        this.clearColor = new Color(0, 0, 0, 0);
     }
 
-    async init(texturesInfo: TextureInfo[]) {
+    setClearColor(color: Color) {
+        this.clearColor.copy(color);
+    }
+
+    public setSize(width: number, height: number) {
+        this.canvas.width = width;
+        this.canvas.height = height;
+    }
+
+    public getCanvas() {
+        return this.canvas;
+    }
+
+    public async init(texturesInfo: TextureInfo[]) {
         const gpuConfig = await requestConfig();
         if (!gpuConfig) throw new Error("WebGPU not supported");
         this.cfg = gpuConfig;
@@ -106,8 +123,8 @@ export class WebgpuRenderer implements Renderer {
         this.ctx.configure(this.cfg);
 
         for (const texInfo of texturesInfo) {
-            if (texInfo.atlas) {
-                this.createAtlasTexture(texInfo.atlas, texInfo.name, getImageData(texInfo.imageData));
+            if (texInfo.tileset) {
+                this.createTexture(texInfo.tileset, texInfo.tileset.name, imageUtils.getImageData(texInfo.image));
             }
         }
 
@@ -149,7 +166,7 @@ export class WebgpuRenderer implements Renderer {
         });
 
         this.cameraBuffer = device.createBuffer({
-            size: 4 * 4 * 4,
+            size: 80,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         })
 
@@ -166,11 +183,11 @@ export class WebgpuRenderer implements Renderer {
         });
 
         this.vbo = device.createBuffer({
-            size: quad.byteLength,
+            size: geometry.quad.byteLength,
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
         });
 
-        device.queue.writeBuffer(this.vbo, 0, quad);
+        device.queue.writeBuffer(this.vbo, 0, geometry.quad);
     }
 
     render(scene: Scene, camera: Camera) {
@@ -194,11 +211,17 @@ export class WebgpuRenderer implements Renderer {
             camera.projectionMatrix
         );
 
+        this.cfg.device.queue.writeBuffer(
+            this.cameraBuffer,
+            64,
+            new Float32Array([camera.position.x, camera.position.y])
+        );
+
         const encoder = this.cfg.device.createCommandEncoder();
 
         const pass = encoder.beginRenderPass({
             colorAttachments: [{
-                clearValue: { r: 0.5, g: 0.5, b: 0.5, a: 1 },
+                clearValue: this.clearColor,
                 view: this.ctx.getCurrentTexture().createView(),
                 loadOp: "clear",
                 storeOp: "store"
@@ -218,26 +241,26 @@ export class WebgpuRenderer implements Renderer {
         this.cfg.device.queue.submit([commandBuffer]);
     }
 
-    createAtlasTexture(atlas: SpriteAtlas, name: string, imageData: Uint8Array) {
-        const tileSize = atlas.tileSize;
+    createTexture(tileset: Tileset, name: string, imageData: Uint8Array) {
+        const tileSize = tileset.tileSize;
 
         const textureArray = this.cfg.device.createTexture({
             size: {
                 width: tileSize,
                 height: tileSize,
-                depthOrArrayLayers: atlas.totalTiles
+                depthOrArrayLayers: tileset.totalTiles
             },
             format: "rgba8unorm",
             usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
         });
 
-        for (let i = 0; i < atlas.totalTiles; ++i) {
-            const row = Math.floor(i / atlas.tilesPerRow);
-            const col = i % atlas.tilesPerRow;
+        for (let i = 0; i < tileset.totalTiles; ++i) {
+            const row = Math.floor(i / tileset.tilesPerRow);
+            const col = i % tileset.tilesPerRow;
 
             const tilePixels = new Uint8Array(tileSize * tileSize * 4);
             for (let j = 0; j < tileSize; ++j) {
-                const srcStart = (((row * tileSize + j) * atlas.tilesPerRow + col) * tileSize) * 4;
+                const srcStart = (((row * tileSize + j) * tileset.tilesPerRow + col) * tileSize) * 4;
                 const srcEnd = srcStart + tileSize * 4;
                 tilePixels.set(imageData.slice(srcStart, srcEnd), j * tileSize * 4);
             }
@@ -260,15 +283,17 @@ export class WebgpuRenderer implements Renderer {
             );
         }
 
-        this.texturesMap.set(name, textureArray);
+        this.texturesMap.set(name, { texture: textureArray, tileset });
     }
 
     public getConfig() {
         return this.cfg;
     }
 
-    public getTexture(name: string) {
-        return this.texturesMap.get(name)!;
+    public getTextureInfo(name: string) {
+        const texInfo = this.texturesMap.get(name);
+        if (!texInfo) throw new Error("Texture not found: " + name);
+        return texInfo;
     }
 
     public getPipeline() {
@@ -297,7 +322,7 @@ class WebgpuRendererLayer {
         this.instanceCount = 0;
 
         this.instanceBuffer = renderer.getConfig().device.createBuffer({
-            size: 4 * 4 * (isStatic ? 10000 : 1000),
+            size: 5 * 4 * (isStatic ? STATIC_LAYER_MAX_SPRITES : DYNAMIC_LAYER_MAX_SPRITES),
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
         });
 
@@ -306,7 +331,9 @@ class WebgpuRendererLayer {
             entries: [
                 { binding: 0, resource: renderer.getSampler() },
                 {
-                    binding: 1, resource: renderer.getTexture(texName).createView()
+                    binding: 1, resource: renderer.getTextureInfo(texName).texture.createView({
+                        dimension: "2d-array"
+                    })
                 }
             ]
         });
@@ -314,7 +341,7 @@ class WebgpuRendererLayer {
 
     public upload(sprites: Sprite[]) {
 
-        this.renderer.getConfig().device.queue.writeBuffer(this.instanceBuffer, 0, createSpritesData(sprites));
+        this.renderer.getConfig().device.queue.writeBuffer(this.instanceBuffer, 0, geometry.createSpritesData(sprites));
 
         if (this.isStatic) {
             this.needsUpdate = false;

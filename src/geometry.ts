@@ -1,17 +1,23 @@
-import { Sprite } from "./sprite";
+import { Sprite } from "./Sprite";
 
-export const quad = new Float32Array([
-    -0.5, 0.5, 0, 0,
-    -0.5, -0.5, 0, 1,
-    0.5, 0.5, 1, 0,
-    0.5, -0.5, 1, 1,
-]);
+export const geometry = (() => {
+    const quad = new Float32Array([
+        -0.5, 0.5, 0, 0,
+        -0.5, -0.5, 0, 1,
+        0.5, 0.5, 1, 0,
+        0.5, -0.5, 1, 1,
+    ]);
 
-export const createSpritesData = (sprites: Sprite[]) => {
-    const data: number[] = [];
+    const createSpritesData = (sprites: Sprite[]) => {
+        const data: number[] = [];
 
-    for (const sprite of sprites) {
-        data.push(sprite.position.x, sprite.position.y, sprite.scale.x, sprite.scale.y, sprite.tileId);
+        for (const sprite of sprites) {
+            data.push(sprite.position.x, sprite.position.y, sprite.scale.x, sprite.scale.y, sprite.tilesetIdx);
+        }
+        return new Float32Array(data);
     }
-    return new Float32Array(data);
-}
+    return {
+        quad,
+        createSpritesData
+    }
+})();

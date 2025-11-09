@@ -1,4 +1,4 @@
-import { Sprite } from "./sprite";
+import { Sprite } from "./Sprite";
 
 export class Scene {
     layers: SceneLayer[];
@@ -11,9 +11,9 @@ export class Scene {
         let layer = this.layers.find(layer => layer.isLocked === false &&
             layer.isStatic === sprite.isStatic &&
             layer.zIndex === sprite.zIndex &&
-            layer.atlasName === sprite.atlasName);
+            layer.atlasName === sprite.tilesetName);
         if (!layer) {
-            layer = new SceneLayer(sprite.zIndex, sprite.isStatic, sprite.atlasName, false);
+            layer = new SceneLayer(sprite.zIndex, sprite.isStatic, sprite.tilesetName, false);
             this.layers.push(layer);
         }
         layer.add(sprite);

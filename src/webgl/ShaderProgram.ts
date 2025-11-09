@@ -1,9 +1,9 @@
 export class ShaderProgram {
-    private gl: WebGL2RenderingContext;
+    private gl: WebGL2RenderingContext | WebGLRenderingContext;
     private program: WebGLProgram;
     private uniforms: Map<string, WebGLUniformLocation | null>;
 
-    constructor(gl: WebGL2RenderingContext, vertSource: string, fragSource: string) {
+    constructor(gl: WebGL2RenderingContext | WebGLRenderingContext, vertSource: string, fragSource: string) {
         this.gl = gl;
         this.uniforms = new Map();
 
@@ -53,5 +53,9 @@ export class ShaderProgram {
         }
 
         return this.uniforms.get(name)!;
+    }
+
+    public getAttrib(name: string) {
+        return this.gl.getAttribLocation(this.program, name);
     }
 }
