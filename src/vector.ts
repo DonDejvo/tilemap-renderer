@@ -35,19 +35,19 @@ export class Vector {
         return this;
     }
 
-    multiplyScalar(s: number) {
+    scale(s: number) {
         this.x *= s;
         this.y *= s;
         return this;
     }
 
-    multiply(v: Vector) {
+    mul(v: Vector) {
         this.x *= v.x;
         this.y *= v.y;
         return this;
     }
 
-    divideScalar(s: number) {
+    div(s: number) {
         if (s !== 0) {
             this.x /= s;
             this.y /= s;
@@ -58,43 +58,46 @@ export class Vector {
         return this;
     }
 
-    dot(v: Vector) {
-        return this.x * v.x + this.y * v.y;
+    static dot(v1: Vector, v2: Vector) {
+        return v1.x * v2.x + v1.y * v2.y;
     }
 
-    cross(v: Vector) {
-        return this.x * v.y - this.y * v.x;
+    static cross(v1: Vector, v2: Vector) {
+        return v1.x * v2.y - v1.y * v2.x;
     }
 
-    length() {
+    len() {
         return Math.sqrt(this.x * this.x + this.y * this.y);
     }
 
-    lengthSq() {
+    lenSq() {
         return this.x * this.x + this.y * this.y;
     }
 
-    normalize() {
-        const len = this.length();
-        if (len > 0) this.divideScalar(len);
+    unit() {
+        const len = this.len();
+        if (len > 0) this.div(len);
         return this;
     }
 
-    distanceTo(v: Vector) {
-        return Math.sqrt(this.distanceToSq(v));
+    project(v: Vector) {
+        const vLen = v.lenSq();
+        if (vLen > 0) return this.scale(0);
+        const d = Vector.dot(this, v);
+        return this.copy(v).scale(d / vLen);
     }
 
-    distanceToSq(v: Vector) {
-        const dx = this.x - v.x;
-        const dy = this.y - v.y;
-        return dx * dx + dy * dy;
+    static distance(v1: Vector, v2: Vector) {
+        const dx = v1.x - v2.x;
+        const dy = v1.y - v2.y;
+        return Math.sqrt(dx * dx + dy * dy);
     }
 
     angle() {
         return Math.atan2(this.y, this.x);
     }
 
-    rotate(theta: number) {
+    rot(theta: number) {
         const cos = Math.cos(theta);
         const sin = Math.sin(theta);
         const x = this.x * cos - this.y * sin;
@@ -104,7 +107,7 @@ export class Vector {
         return this;
     }
 
-    setFromAngle(angle: number, length: number = 1) {
+    fromAngle(angle: number, length: number = 1) {
         this.x = Math.cos(angle) * length;
         this.y = Math.sin(angle) * length;
         return this;

@@ -1,9 +1,8 @@
 import { Camera } from "../Camera";
 import { Color } from "../Color";
 import { geometry } from "../geometry";
-import { imageUtils } from "../imageUtils";
-import { DYNAMIC_LAYER_MAX_SPRITES, Renderer, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
-import { Scene } from "../Scene";
+import { DYNAMIC_LAYER_MAX_SPRITES, LAYER_LIFETIME, Renderer, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
+import { Scene, SceneLayer } from "../Scene";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 import { ShaderProgram } from "./ShaderProgram";
@@ -14,18 +13,17 @@ attribute vec2 aVertexPos;
 attribute vec2 aTexCoord;
 attribute vec2 aTilePos;
 attribute vec2 aTileScale;
-attribute float aDepth;
+attribute vec4 aTileRegion;
 
 uniform mat4 uProjectionMatrix;
 uniform vec2 uCameraPos;
+
 uniform vec2 uTilesetDimensions;
 
-varying vec2 vTexCoord;
+varying vec2 uv;
 
 void main() {
-    float col = mod(aDepth, uTilesetDimensions.x);
-    float row = floor(aDepth / uTilesetDimensions.x);
-    vTexCoord = vec2(aTexCoord.x + col, aTexCoord.y + row) / uTilesetDimensions;
+    uv = (vec2(aTileRegion.xy) + aTexCoord * vec2(aTileRegion.zw)) / uTilesetDimensions;
 
     vec2 worldPos = aVertexPos * aTileScale + aTilePos;
     gl_Position = uProjectionMatrix * vec4(worldPos - uCameraPos, 0.0, 1.0);
@@ -36,12 +34,12 @@ const fragmentSource = `
 
 precision mediump float;
 
-varying vec2 vTexCoord;
+varying vec2 uv;
 
 uniform sampler2D uSampler;  
 
 void main() {
-    gl_FragColor = texture2D(uSampler, vTexCoord);
+    gl_FragColor = texture2D(uSampler, uv);
 }
 `;
 
@@ -50,7 +48,7 @@ interface AttribLocations {
     texCoord: number;
     tilePos: number;
     tileScale: number;
-    depth: number;
+    tileRegion: number;
 }
 
 export class WebglRenderer implements Renderer {
@@ -59,16 +57,29 @@ export class WebglRenderer implements Renderer {
     private shaderProgram!: ShaderProgram;
     private vbo!: WebGLBuffer;
     private ebo!: WebGLBuffer;
-    private layersMap: Map<string, WebglRendererLayer>;
+    private layersMap: Map<SceneLayer, WebglRendererLayer>;
     private texturesMap: Map<string, { texture: WebGLTexture; tileset: Tileset; }>;
     private attribLocations!: AttribLocations;
     private clearColor: Color;
+    private texturesInfo: TextureInfo[];
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
         this.layersMap = new Map();
         this.texturesMap = new Map();
         this.clearColor = new Color(0, 0, 0, 0);
+        this.texturesInfo = [];
+    }
+
+    addTextures(tilesets: Tileset[], images: Record<string, TexImageSource>): void {
+        for (const tileset of tilesets) {
+            if (images[tileset.name]) {
+                this.texturesInfo.push({
+                    tileset,
+                    image: images[tileset.name]
+                });
+            }
+        }
     }
 
     setClearColor(color: Color) {
@@ -84,15 +95,15 @@ export class WebglRenderer implements Renderer {
         return this.canvas;
     }
 
-    public async init(texturesInfo: TextureInfo[]) {
+    public async init() {
         const gl = this.canvas.getContext("webgl");
         if (!gl) throw new Error("WebGL not supported");
 
         this.gl = gl;
 
-        for (const texInfo of texturesInfo) {
+        for (const texInfo of this.texturesInfo) {
             if (texInfo.tileset) {
-                this.createTexture(texInfo.tileset, texInfo.tileset.name, imageUtils.getImageData(texInfo.image));
+                this.createTexture(texInfo.tileset, texInfo.tileset.name, texInfo.image);
             }
         }
 
@@ -103,7 +114,7 @@ export class WebglRenderer implements Renderer {
             texCoord: this.shaderProgram.getAttrib("aTexCoord"),
             tilePos: this.shaderProgram.getAttrib("aTilePos"),
             tileScale: this.shaderProgram.getAttrib("aTileScale"),
-            depth: this.shaderProgram.getAttrib("aDepth")
+            tileRegion: this.shaderProgram.getAttrib("aTileRegion")
         };
 
         this.vbo = gl.createBuffer();
@@ -124,19 +135,21 @@ export class WebglRenderer implements Renderer {
             }
         }
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     }
 
     public render(scene: Scene, camera: Camera) {
         const layers: WebglRendererLayer[] = [];
-        for (const sceneLayer of scene.layers.toSorted((layer1, layer2) => layer1.zIndex - layer2.zIndex)) {
-            const key = sceneLayer.getKey();
-            if (!this.layersMap.has(key)) {
-                const layer = new WebglRendererLayer(this.gl, this, sceneLayer.isStatic, sceneLayer.atlasName);
-                this.layersMap.set(key, layer);
+        for (const sceneLayer of scene.getLayersOrdered()) {
+            if (!this.layersMap.has(sceneLayer)) {
+                const layer = new WebglRendererLayer(this.gl, this, sceneLayer.isStatic);
+                this.layersMap.set(sceneLayer, layer);
             }
-            const layer = this.layersMap.get(key)!;
+            const layer = this.layersMap.get(sceneLayer)!;
             if (layer.needsUpdate) {
-                layer.upload(sceneLayer.sprites);
+                layer.upload(sceneLayer.getSpritesOrdered());
             }
             layers.push(layer);
         }
@@ -152,11 +165,14 @@ export class WebglRenderer implements Renderer {
         this.gl.uniform2f(this.shaderProgram.getUniform("uCameraPos"), camera.position.x, camera.position.y);
 
         for (let layer of layers) {
-            const texInfo = this.getTextureInfo(layer.texName);
-            const tilesetCols = texInfo.tileset.tilesPerRow;
-            const tilesetRows = Math.floor(texInfo.tileset.totalTiles / texInfo.tileset.tilesPerRow);
-            this.gl.uniform2f(this.shaderProgram.getUniform("uTilesetDimensions"), tilesetCols, tilesetRows);
             layer.render();
+        }
+
+        for (const [sceneLayer, rendererLayer] of this.layersMap) {
+            if (rendererLayer.lifetime <= 0) {
+                this.layersMap.delete(sceneLayer);
+                rendererLayer.destroy();
+            }
         }
     }
 
@@ -174,26 +190,37 @@ export class WebglRenderer implements Renderer {
         return this.ebo;
     }
 
+    public getShaderProgram() {
+        return this.shaderProgram;
+    }
+
     public getAttribLocations() {
         return this.attribLocations;
     }
 
-    public createTexture(tileset: Tileset, name: string, imageData: Uint8Array) {
+    public createTexture(tileset: Tileset, name: string, imageData: TexImageSource) {
         const gl = this.gl;
 
         const texture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, tileset.imageWidth, tileset.imageHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, imageData);
 
-        if (imageUtils.isPowerOf2(tileset.imageWidth) && imageUtils.isPowerOf2(tileset.imageHeight)) {
-            gl.generateMipmap(gl.TEXTURE_2D);
-        }
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageData);
+
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 
         this.texturesMap.set(name, { texture, tileset });
     }
+
+}
+
+interface DrawCall {
+    texName: string;
+    spriteOffset: number;
+    spriteCount: number;
 }
 
 class WebglRendererLayer {
@@ -201,17 +228,17 @@ class WebglRendererLayer {
     private renderer: WebglRenderer;
     private spriteBuffer: WebGLBuffer;
     isStatic: boolean;
-    texName: string;
+    drawCalls: DrawCall[];
     needsUpdate: boolean;
-    spriteCount: number;
+    lifetime: number;
 
-    constructor(gl: WebGLRenderingContext, renderer: WebglRenderer, isStatic: boolean, texName: string) {
+    constructor(gl: WebGLRenderingContext, renderer: WebglRenderer, isStatic: boolean) {
         this.gl = gl;
         this.renderer = renderer;
         this.isStatic = isStatic;
-        this.texName = texName;
         this.needsUpdate = true;
-        this.spriteCount = 0;
+        this.drawCalls = [];
+        this.lifetime = LAYER_LIFETIME;
 
         this.spriteBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteBuffer);
@@ -222,29 +249,34 @@ class WebglRendererLayer {
         const gl = this.gl;
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteBuffer);
-        const data: number[] = [];
-        for (let sprite of sprites) {
-            for (let i = 0; i < 4; ++i) {
-                data.push(sprite.position.x, sprite.position.y, sprite.scale.x, sprite.scale.y, sprite.tilesetIdx);
-            }
-        }
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(data));
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, geometry.createSpritesData(sprites));
 
         if (this.isStatic) {
             this.needsUpdate = false;
         }
 
-        this.spriteCount = sprites.length;
+        this.drawCalls.length = 0;
+
+        let currentCall: DrawCall | null = null;
+
+        for (let i = 0; i < sprites.length; ++i) {
+            const texName = sprites[i].tilesetName;
+
+            if (!currentCall || texName !== currentCall.texName) {
+                currentCall = { texName, spriteOffset: i, spriteCount: 1 };
+                this.drawCalls.push(currentCall);
+            } else {
+                currentCall.spriteCount++;
+            }
+        }
     }
 
     public render() {
         const gl = this.gl;
 
-        gl.bindTexture(gl.TEXTURE_2D, this.renderer.getTextureInfo(this.texName).texture);
+        const attribLocations = this.renderer.getAttribLocations();
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.renderer.getVBO());
-
-        const attribLocations = this.renderer.getAttribLocations();
 
         gl.enableVertexAttribArray(attribLocations.vertexPos);
         gl.vertexAttribPointer(attribLocations.vertexPos, 2, gl.FLOAT, false, 16, 0);
@@ -254,14 +286,29 @@ class WebglRendererLayer {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteBuffer);
 
         gl.enableVertexAttribArray(attribLocations.tilePos);
-        gl.vertexAttribPointer(attribLocations.tilePos, 2, gl.FLOAT, false, 20, 0);
+        gl.vertexAttribPointer(attribLocations.tilePos, 2, gl.FLOAT, false, 24, 0);
         gl.enableVertexAttribArray(attribLocations.tileScale);
-        gl.vertexAttribPointer(attribLocations.tileScale, 2, gl.FLOAT, false, 20, 8);
-        gl.enableVertexAttribArray(attribLocations.depth);
-        gl.vertexAttribPointer(attribLocations.depth, 1, gl.FLOAT, false, 20, 16);
+        gl.vertexAttribPointer(attribLocations.tileScale, 2, gl.FLOAT, false, 24, 8);
+        gl.enableVertexAttribArray(attribLocations.tileRegion);
+        gl.vertexAttribPointer(attribLocations.tileRegion, 4, gl.UNSIGNED_SHORT, false, 24, 16);
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.renderer.getEBO());
 
-        gl.drawElements(gl.TRIANGLES, 6 * this.spriteCount, gl.UNSIGNED_SHORT, 0);
+        for (const drawCall of this.drawCalls) {
+            const texInfo = this.renderer.getTextureInfo(drawCall.texName);
+            gl.bindTexture(gl.TEXTURE_2D, texInfo.texture);
+
+            const tilesetCols = texInfo.tileset.columns;
+            const tilesetRows = Math.floor(texInfo.tileset.tileCount / texInfo.tileset.columns);
+            this.gl.uniform2f(this.renderer.getShaderProgram().getUniform("uTilesetDimensions"), tilesetCols, tilesetRows);
+
+            gl.drawElements(gl.TRIANGLES, 6 * drawCall.spriteCount, gl.UNSIGNED_SHORT, drawCall.spriteOffset * 6 * 2);
+        }
+
+        this.lifetime = LAYER_LIFETIME;
+    }
+
+    public destroy() {
+        this.gl.deleteBuffer(this.spriteBuffer);
     }
 }

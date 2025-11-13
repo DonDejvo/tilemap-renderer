@@ -8,10 +8,10 @@
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
     "module": "esnext",
-    "target": "esnext",
+    "target": "es2015",
     "types": ["@webgpu/types"],
     // For nodejs:
-    "lib": ["esnext", "DOM", "DOM.Iterable"],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
     // "types": ["node"],
     // and npm install -D @types/node
 

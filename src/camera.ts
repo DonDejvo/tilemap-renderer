@@ -19,6 +19,6 @@ export class Camera {
     public updateProjection(vw: number, vh: number) {
         this.vw = vw;
         this.vh = vh;
-        matrix.createOrtho(this.projectionMatrix, 0, vw, 0, vh);
+        matrix.createOrtho(this.projectionMatrix, -vw * 0.5, vw * 0.5, -vh * 0.5, vh * 0.5);
     }
 }

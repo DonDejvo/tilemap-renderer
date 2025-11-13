@@ -13,11 +13,15 @@ export const assets = (() => {
         });
     };
 
-    const loadJson = async (url: string): Promise<any> => {
-        const res = await fetch(url);
-        if (!res.ok) throw new Error(`Failed to load: ${url}`);
-        const data = await res.json();
-        return data;
+    const loadJson = async <T>(url: string): Promise<T> => {
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+
+            return data;
+        } catch {
+            throw new Error(`Failed to load: ${url}`);
+        }
     };
 
     return {

@@ -1,35 +1,40 @@
 import { assets } from "./assets";
 
-type TileProperty = { name: string; value: boolean | number | string; };
+type TilePropertyJSON = { name: string; value: boolean | number | string; };
 
 export interface TileAnimation {
     frames: number[];
     framesPerSecond: number;
 }
 
-export interface TileData {
+export interface TileDataJSON {
     id: number;
-    properties?: TileProperty[];
+    properties?: TilePropertyJSON[];
     animation?: TileAnimation;
 }
 
 export interface TilesetJSON {
     name: string;
-    imageWidth: number;
-    imageHeight: number;
-    tileSize: number;
-    tilesPerRow: number;
-    totalTiles: number;
-    data?: TileData[];
+    imagewidth: number;
+    imageheight: number;
+    tilewidth: number;
+    tileheight: number;
+    columns: number;
+    tilecount: number;
+    tiles?: TileDataJSON[];
+    margin?: number;
+    spacing?: number;
 }
 
 export class Tile {
     x: number;
     y: number;
-    properties?: TileProperty[];
+    properties?: TilePropertyJSON[];
     animation?: TileAnimation;
+    tileset: Tileset;
 
-    constructor(x: number, y: number, tileData?: TileData) {
+    constructor(tileset: Tileset, x: number, y: number, tileData?: TileDataJSON) {
+        this.tileset = tileset;
         this.x = x;
         this.y = y;
         this.properties = tileData?.properties;
@@ -42,47 +47,56 @@ export class Tile {
 }
 
 export class Tileset {
+    static cache = new Map<string, Tileset>();
+
     name: string;
     imageWidth: number;
     imageHeight: number;
-    tileSize: number;
-    tilesPerRow: number;
-    totalTiles: number;
-    data: Map<number, TileData>;
+    tileWidth: number;
+    tileHeight: number;
+    columns: number;
+    tileCount: number;
+    margin?: number;
+    spacing?: number;
+    tiledata: Map<number, TileDataJSON>;
 
     constructor(json: TilesetJSON) {
         this.name = json.name;
-        this.imageWidth = json.imageWidth;
-        this.imageHeight = json.imageHeight;
-        this.tileSize = json.tileSize;
-        this.tilesPerRow = json.tilesPerRow;
-        this.totalTiles = json.totalTiles;
+        this.imageWidth = json.imagewidth;
+        this.imageHeight = json.imageheight;
+        this.tileWidth = json.tilewidth;
+        this.tileHeight = json.tileheight;
+        this.columns = json.columns;
+        this.tileCount = json.tilecount;
+        this.tiledata = new Map();
 
-        this.data = new Map();
-        if (json.data) {
-            for (const tile of json.data) {
-                this.data.set(tile.id, tile);
+        if(json.tiles) {
+            for(let item of json.tiles) {
+                this.tiledata.set(item.id, item);
             }
         }
     }
 
     public static async load(url: string): Promise<Tileset> {
-        const json = await assets.loadJson(url);
-        return new Tileset(json);
+        if(!this.cache.has(url)) {
+            const json = await assets.loadJson<TilesetJSON>(url);
+            this.cache.set(url, new Tileset(json));
+        }
+        return this.cache.get(url)!;
     }
 
     public getTile(x: number, y: number) {
-        const data = this.data.get(y * this.tilesPerRow + x);
+        const data = this.tiledata.get(y * this.columns + x);
 
-        return new Tile(x, y, data);
+        return new Tile(this, x, y, data);
     }
 
     public getTileById(id: number) {
-        const data = this.data.get(id);
+        if(id >= this.tileCount || id < 0) return null;
 
-        const x = id % this.tilesPerRow;
-        const y = Math.floor(id / this.tilesPerRow);
+        const x = id % this.columns;
+        const y = Math.floor(id / this.columns);
 
-        return new Tile(x, y, data);
+        return this.getTile(x, y);
     }
 }

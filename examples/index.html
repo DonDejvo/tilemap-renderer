@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tilemap Renderer Example</title>
+    <title>Tilemap Player Example</title>
     <style>
         canvas {
             position: absolute;
@@ -20,6 +20,66 @@
             color: white;
             font: 14px monospace;
             z-index: 9999;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        .controls {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 160px;
+            height: 160px;
+            display: grid;
+            grid-template-columns: 50px 50px 50px;
+            grid-template-rows: 50px 50px 50px;
+            gap: 5px;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            z-index: 9999;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        .btn:active {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .up {
+            grid-column: 2;
+            grid-row: 1;
+        }
+
+        .left {
+            grid-column: 1;
+            grid-row: 2;
+        }
+
+        .down {
+            grid-column: 2;
+            grid-row: 3;
+        }
+
+        .right {
+            grid-column: 3;
+            grid-row: 2;
         }
     </style>
 </head>
@@ -27,106 +87,192 @@
 <body>
     <div id="fps">FPS: 0</div>
 
+    <div class="controls" id="controls">
+        <div class="btn up" data-key="w">▲</div>
+        <div class="btn left" data-key="a">◀</div>
+        <div class="btn down" data-key="s">▼</div>
+        <div class="btn right" data-key="d">▶</div>
+    </div>
+
     <script type="module">
-        import * as TilemapRenderer from "../build/tilemap-renderer.module.min.js";
+        import * as TilemapRenderer from "../src/TilemapRenderer.ts";
 
-        const main = async () => {
-            const camera = new TilemapRenderer.Camera(300, 150);
+        const rendererContext = "webgpu";
 
-            const tileset = new TilemapRenderer.Tileset({
-                name: "MyTileset",
-                imageWidth: 64,
-                imageHeight: 64,
-                tilesPerRow: 2,
-                totalTiles: 4,
-                tileSize: 32
-            });
+        class KeyboardInput {
+            constructor() {
+                this.up = false;
+                this.down = false;
+                this.left = false;
+                this.right = false;
 
-            const tilesetImage = await TilemapRenderer.assets.loadImage("/textures/tileset.png");
+                const setKey = (key, isDown) => {
+                    switch (key.toLowerCase()) {
+                        case "w": this.up = isDown; break;
+                        case "s": this.down = isDown; break;
+                        case "a": this.left = isDown; break;
+                        case "d": this.right = isDown; break;
+                    }
+                };
 
-            const scene = new TilemapRenderer.Scene();
+                addEventListener("keydown", (e) => setKey(e.key, true));
+                addEventListener("keyup", (e) => setKey(e.key, false));
 
-            const sprites = [];
-            for (let i = 0; i < 4; ++i) {
-                const s = new TilemapRenderer.Sprite({
+                document.addEventListener("touchstart", (e) => e.preventDefault(), { passive: false });
+                document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+                document.addEventListener("contextmenu", (e) => e.preventDefault());
+
+                const controls = document.getElementById("controls");
+                for (const btn of controls.querySelectorAll(".btn")) {
+                    const key = btn.dataset.key;
+                    const start = () => setKey(key, true);
+                    const end = () => setKey(key, false);
+
+                    btn.addEventListener("touchstart", start);
+                    btn.addEventListener("mousedown", start);
+                    btn.addEventListener("touchend", end);
+                    btn.addEventListener("mouseup", end);
+                    btn.addEventListener("mouseleave", end);
+                }
+            }
+        }
+
+        class Player {
+            constructor(x, y) {
+                this.sprite = new TilemapRenderer.Sprite({
                     tilesetName: "MyTileset",
-                    tilesetIdx: i
+                    tilesetRegion: { x: 0, y: 0 },
+                    isStatic: false,
+                    origin: "bottom"
                 });
-                s.position.set(32, 32 + i * 64);
-                s.scale.set(64, 64);
-                scene.addSprite(s);
-                sprites.push(s);
+
+                this.position = new TilemapRenderer.Vector(x, y);
+                this.velocity = new TilemapRenderer.Vector();
+                this.speed = 100;
+
+                this.sprite.position.copy(this.position);
+                this.sprite.scale.set(32, 32);
             }
 
-            const fpsElem = document.getElementById("fps");
+            update(dt, input) {
+                this.velocity.set(0, 0);
+                if (input.up) this.velocity.y += 1;
+                if (input.down) this.velocity.y -= 1;
+                if (input.left) this.velocity.x -= 1;
+                if (input.right) this.velocity.x += 1;
 
-            let dt = 0;
-            let lastRAF = undefined;
+                if (this.velocity.lenSq() > 0) {
+                    this.velocity.unit().scale(this.speed * dt);
+                    this.position.add(this.velocity);
+                    this.sprite.position.copy(this.position);
+                }
+            }
+        }
+
+        const main = async () => {
+            const fpsElem = document.getElementById("fps");
             let lastTime = 0;
             let frameCount = 0;
             let fps = 0;
 
-            let renderer;
-            let rendererContext;
+            const camera = new TilemapRenderer.Camera(300, 150);
+            const cameraPos = new TilemapRenderer.Vector(0, 0);
+            const cameraLerpSpeed = 5;
+            const input = new KeyboardInput();
 
-            const type = prompt("Enter renderer type (webgl | webgl2 | webgpu):");
-            if (type === "webgpu") {
-                renderer = TilemapRenderer.createRenderer("webgpu");
-                rendererContext = "WebGPU";
-            } else if (type === "webgl2") {
-                renderer = TilemapRenderer.createRenderer("webgl2");
-                rendererContext = "WebGL2";
-            } else {
-                renderer = TilemapRenderer.createRenderer("webgl");
-                rendererContext = "WebGL";
-            }
+            const myTilesetImage = await TilemapRenderer.assets.loadImage("/textures/tileset.png");
+            const snowyLandsImage = await TilemapRenderer.assets.loadImage("/textures/RPGW_SnowyLands_v2.0/MainLev2.0.png");
+            const snowyLandsDecorativeImage = await TilemapRenderer.assets.loadImage("/textures/RPGW_SnowyLands_v2.0/decorative.png");
 
+            const exampleMap = await TilemapRenderer.Tilemap.load("/tilemaps/Example30x20.tmj", {
+                ["SnowyLands"]: "/tilesets/SnowyLands.tsj",
+                ["MyTileset"]: "/tilesets/MyTileset.tsj",
+                ["SnowyLands_Decorative"]: "/tilesets/SnowyLands_Decorative.tsj"
+            });
+
+            const scene = new TilemapRenderer.Scene();
+            let player = null;
+
+            scene.addTilemap(exampleMap, {
+                layers: [
+                    { name: "Decorative", zIndex: 1 },
+                    { name: "Entities", zIndex: 1 },
+                ],
+                onObject: (scene, obj, layer, zIndex) => {
+                    switch (obj.name) {
+                        case "tree_lg":
+                            const tree = new TilemapRenderer.Sprite({
+                                tilesetName: "SnowyLands_Decorative",
+                                tilesetRegion: { x: 3, y: 20, width: 3, height: 4 },
+                                zIndex,
+                                isStatic: false,
+                                origin: "bottom"
+                            });
+                            tree.scale.set(3 * layer.tilemap.tileWidth, 4 * layer.tilemap.tileHeight);
+                            tree.position.set(obj.x, -obj.y);
+                            scene.addSprite(tree);
+                            break;
+
+                        case "player":
+                            player = new Player(obj.x, -obj.y);
+                            player.sprite.zIndex = zIndex;
+                            scene.addSprite(player.sprite);
+                            break;
+                    }
+                }
+            });
+
+            const renderer = TilemapRenderer.createRenderer(rendererContext);
             document.body.appendChild(renderer.getCanvas());
 
             const resize = () => {
                 const w = innerWidth, h = innerHeight;
                 renderer.setSize(w, h);
                 camera.updateProjection(w, h);
-            }
-
+            };
             addEventListener("resize", resize);
             resize();
 
-            await renderer.init([{
-                tileset,
-                image: tilesetImage
-            }]);
+            renderer.addTextures(exampleMap.getTilesets(), {
+                ["SnowyLands"]: snowyLandsImage,
+                ["MyTileset"]: myTilesetImage,
+                ["SnowyLands_Decorative"]: snowyLandsDecorativeImage
+            });
 
+            await renderer.init();
             renderer.setClearColor(new TilemapRenderer.Color(0.5, 0.5, 0.5));
 
-            const draw = () => {
-                requestAnimationFrame((t) => {
-                    t *= 0.001;
-                    draw();
+            let lastRAF = 0;
 
-                    frameCount++;
-                    dt = t - (lastRAF ?? t);
-                    if (t - lastTime >= 1) {
-                        fps = frameCount;
-                        frameCount = 0;
-                        lastTime = t;
-                        fpsElem.textContent = `${rendererContext} - FPS: ${fps}`;
-                    }
-                    lastRAF = t;
+            const draw = (t) => {
+                requestAnimationFrame(draw);
+                t *= 0.001;
+                const dt = t - lastRAF;
+                lastRAF = t;
 
-                    for (let i = 0; i < sprites.length; ++i) {
-                        sprites[i].position.x += (i + 1) * 32 * dt;
-                        if (sprites[i].position.x - sprites[i].scale.x * 0.5 > camera.vw) {
-                            sprites[i].position.x -= camera.vw + sprites[i].scale.x;
-                        }
-                    }  
+                // Update FPS
+                frameCount++;
+                if (t - lastTime >= 1) {
+                    fps = frameCount;
+                    frameCount = 0;
+                    lastTime = t;
+                    fpsElem.textContent = `${rendererContext.toUpperCase()} - FPS: ${fps}`;
+                }
 
-                    renderer.render(scene, camera);
-                });
-            }
+                if (player) {
+                    player.update(dt, input);
 
-            draw();
-        }
+                    // Camera lerp to follow player
+                    const target = player.position.clone();
+                    cameraPos.lerp(target, 1 - Math.exp(-cameraLerpSpeed * dt));
+                    camera.position.set(cameraPos.x, cameraPos.y);
+                }
+
+                renderer.render(scene, camera);
+            };
+
+            requestAnimationFrame(draw);
+        };
 
         main();
     </script>

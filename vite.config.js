@@ -11,7 +11,7 @@ export default defineConfig({
       entry: path.resolve(__dirname, 'src/TilemapRenderer.ts'),
       name: 'TilemapRenderer',
       fileName: (format) => `tilemap-renderer${format === "es" ? ".module" : ""}.min.js`,
-      formats: ['es', 'iife'],
+      formats: ['es', 'iife']
     },
     rollupOptions: {
       output: {

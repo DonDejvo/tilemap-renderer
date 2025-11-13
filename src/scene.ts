@@ -1,49 +1,151 @@
 import { Sprite } from "./Sprite";
+import { ObjectLayer, TileLayer, Tilemap, TilemapObject } from "./Tilemap";
+
+interface SceneAddTilemapConfig {
+    layers?: {
+        name: string;
+        zIndex?: number;
+    }[];
+    onObject?: (scene: Scene, obj: TilemapObject, layer: ObjectLayer, zIndex: number) => void;
+}
 
 export class Scene {
-    layers: SceneLayer[];
+    private layers: SceneLayer[];
 
     constructor() {
         this.layers = [];
     }
 
     public addSprite(sprite: Sprite) {
-        let layer = this.layers.find(layer => layer.isLocked === false &&
+        let layer = this.layers.find(layer =>
             layer.isStatic === sprite.isStatic &&
-            layer.zIndex === sprite.zIndex &&
-            layer.atlasName === sprite.tilesetName);
+            layer.zIndex === sprite.zIndex);
         if (!layer) {
-            layer = new SceneLayer(sprite.zIndex, sprite.isStatic, sprite.tilesetName, false);
+            layer = new SceneLayer({
+                zIndex: sprite.zIndex,
+                isStatic: sprite.isStatic
+            });
             this.layers.push(layer);
         }
         layer.add(sprite);
     }
 
-    public addLayer(layer: SceneLayer) {
+    public addTilemap(tilemap: Tilemap, config: SceneAddTilemapConfig = {}) {
+        const layers = tilemap.getLayers();
+
+        let zIndex = 0;
+
+        for (const layer of layers) {
+            const layerConfig = config.layers?.find(item => item.name === layer.name);
+
+            if (layerConfig?.zIndex) {
+                zIndex = layerConfig.zIndex;
+            }
+
+            if (layer.renderOrder !== "manual") {
+                this.createLayer({
+                    zIndex,
+                    renderOrder: layer.renderOrder,
+                    isStatic: false
+                });
+            }
+
+            switch (layer.type) {
+                case "tilelayer": {
+
+                    for (let i = 0; i < layer.height; ++i) {
+                        for (let j = 0; j < layer.width; ++j) {
+                            const tile = (layer as TileLayer).getTile(j, i);
+
+                            if (!tile) continue;
+
+                            const s = new Sprite({
+                                isStatic: tile.animation === undefined,
+                                zIndex,
+                                tilesetName: tile.tileset.name,
+                                tilesetRegion: { x: tile.x, y: tile.y }
+                            });
+
+                            s.position.set((j + layer.x + 0.5) * tilemap.tileWidth, -(i + layer.y + 0.5) * tilemap.tileHeight);
+                            s.scale.set(tilemap.tileWidth, tilemap.tileHeight);
+
+                            this.addSprite(s);
+                        }
+                    }
+                    break;
+                }
+                case "objectgroup": {
+                    if (config.onObject) {
+                        const objects = (layer as ObjectLayer).getObjects();
+                        for (const obj of objects) {
+                            config.onObject(this, obj, layer as ObjectLayer, zIndex);
+                        }
+                    }
+                    break;
+                }
+            }
+
+            ++zIndex;
+        }
+    }
+
+    public createLayer(params: SceneLayerParams) {
+        const layer = new SceneLayer(params);
         this.layers.push(layer);
+        return layer;
+    }
+
+    public getLayersOrdered() {
+        return this.layers.sort((a, b) => a.zIndex - b.zIndex);
     }
 }
 
-class SceneLayer {
+export type SceneLayerRenderOrder = "manual" | "topdown";
+
+interface SceneLayerParams {
     zIndex: number;
     isStatic: boolean;
-    atlasName: string;
-    isLocked: boolean;
-    sprites: Sprite[];
+    renderOrder?: SceneLayerRenderOrder;
+}
 
-    constructor(zIndex: number, isStatic: boolean, atlasName: string, isLocked: boolean) {
-        this.zIndex = zIndex;
-        this.isStatic = isStatic;
-        this.atlasName = atlasName;
-        this.isLocked = isLocked;
+export class SceneLayer {
+    zIndex: number;
+    isStatic: boolean;
+    renderOrder: SceneLayerRenderOrder;
+    private sprites: Sprite[];
+
+    constructor(params: SceneLayerParams) {
+        this.zIndex = params.zIndex;
+        this.isStatic = params.isStatic;
+        this.renderOrder = params.renderOrder || "manual";
         this.sprites = [];
     }
 
     public add(sprite: Sprite) {
-        this.sprites.push(sprite);
+        if (this.renderOrder === "manual") {
+            let insertIndex = -1;
+            for (let i = this.sprites.length - 1; i >= 0; --i) {
+                if (this.sprites[i].tilesetName <= sprite.tilesetName) {
+                    insertIndex = i;
+                    break;
+                }
+            }
+            if (insertIndex === -1) {
+                this.sprites.unshift(sprite);
+            } else {
+                this.sprites.splice(insertIndex + 1, 0, sprite);
+            }
+        } else {
+            this.sprites.push(sprite);
+        }
     }
 
-    public getKey() {
-        return `${this.zIndex};${this.isStatic ? "static" : "dynamic"};${this.atlasName}`;
+    public getSpritesOrdered() {
+        switch (this.renderOrder) {
+            case "topdown":
+                return this.sprites.sort((a, b) => b.position.y - a.position.y);
+            default:
+                return this.sprites;
+        }
     }
 }

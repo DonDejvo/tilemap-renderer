@@ -1,0 +1,14 @@
+{ "columns":32,
+ "image":"..\/textures\/RPGW_SnowyLands_v2.0\/decorative.png",
+ "imageheight":800,
+ "imagewidth":1024,
+ "margin":0,
+ "name":"SnowyLands_Decorative",
+ "spacing":0,
+ "tilecount":800,
+ "tiledversion":"1.11.2",
+ "tileheight":32,
+ "tilewidth":32,
+ "type":"tileset",
+ "version":"1.10"
+}

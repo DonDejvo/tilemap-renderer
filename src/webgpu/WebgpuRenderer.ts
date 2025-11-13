@@ -1,9 +1,8 @@
 import { Camera } from "../Camera";
 import { Color } from "../Color";
 import { geometry } from "../geometry";
-import { imageUtils } from "../imageUtils";
-import { DYNAMIC_LAYER_MAX_SPRITES, Renderer, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
-import { Scene } from "../Scene";
+import { DYNAMIC_LAYER_MAX_SPRITES, LAYER_LIFETIME, LAYER_MAX_TEXTURES, Renderer, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
+import { Scene, SceneLayer } from "../Scene";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 
@@ -33,7 +32,7 @@ struct VSInput {
     
     @location(2) tilePos: vec2f,
     @location(3) tileScale: vec2f,
-    @location(4) depth: f32
+    @location(4) tileRegion: vec2u
 }
 
 struct Camera {
@@ -44,18 +43,26 @@ struct Camera {
 @group(0) @binding(0)
 var<uniform> camera: Camera;
 
+@group(1) @binding(2)
+var<uniform> tilesetDimensions: vec2f;
+
 struct VSOutput {
     @builtin(position) pos: vec4f,
-    @location(0) texCoord: vec2f,
-    @location(1) depth: f32
+    @location(0) uv: vec2f,
 }
 
 @vertex
 fn vs_main(input: VSInput) -> VSOutput {
     var out: VSOutput;
 
-    out.texCoord = input.texCoord;
-    out.depth = input.depth;
+    let x = f32(input.tileRegion.x & 0xFFFFu);
+    let y = f32(input.tileRegion.x >> 16);
+    let w = f32(input.tileRegion.y & 0xFFFFu);
+    let h = f32(input.tileRegion.y >> 16);
+
+    let tileRegion = vec4f(x, y, w, h);
+
+    out.uv = (tileRegion.xy + input.texCoord * tileRegion.zw) / tilesetDimensions;
 
     let worldPos = input.vertexPos * input.tileScale + input.tilePos;
     out.pos = camera.projectionMatrix * vec4f(worldPos - camera.pos, 0.0, 1.0);
@@ -67,12 +74,11 @@ fn vs_main(input: VSInput) -> VSOutput {
 var spriteSampler: sampler;
 
 @group(1) @binding(1)
-var spriteTexture: texture_2d_array<f32>;
+var spriteTexture: texture_2d<f32>;
 
 @fragment
 fn fs_main(input: VSOutput) -> @location(0) vec4f {
-    let idx: u32 = u32(input.depth);
-    return textureSample(spriteTexture, spriteSampler, input.texCoord, idx);
+    return textureSample(spriteTexture, spriteSampler, input.uv);
 }
 `;
 
@@ -82,18 +88,31 @@ export class WebgpuRenderer implements Renderer {
     private cfg!: GPUConfig;
     private pipeline!: GPURenderPipeline;
     private vbo!: GPUBuffer;
-    private layersMap: Map<string, WebgpuRendererLayer>;
+    private layersMap: Map<SceneLayer, WebgpuRendererLayer>;
     private texturesMap: Map<string, { texture: GPUTexture; tileset: Tileset; }>;
     private cameraBuffer!: GPUBuffer;
     private cameraBindGroup!: GPUBindGroup;
     private sampler!: GPUSampler;
     private clearColor: Color;
+    private texturesInfo: TextureInfo[];
 
     constructor(canvas: HTMLCanvasElement) {
         this.layersMap = new Map();
         this.texturesMap = new Map();
         this.canvas = canvas;
         this.clearColor = new Color(0, 0, 0, 0);
+        this.texturesInfo = [];
+    }
+
+    addTextures(tilesets: Tileset[], images: Record<string, TexImageSource>): void {
+        for (const tileset of tilesets) {
+            if (images[tileset.name]) {
+                this.texturesInfo.push({
+                    tileset,
+                    image: images[tileset.name]
+                });
+            }
+        }
     }
 
     setClearColor(color: Color) {
@@ -109,7 +128,7 @@ export class WebgpuRenderer implements Renderer {
         return this.canvas;
     }
 
-    public async init(texturesInfo: TextureInfo[]) {
+    public async init() {
         const gpuConfig = await requestConfig();
         if (!gpuConfig) throw new Error("WebGPU not supported");
         this.cfg = gpuConfig;
@@ -122,9 +141,9 @@ export class WebgpuRenderer implements Renderer {
 
         this.ctx.configure(this.cfg);
 
-        for (const texInfo of texturesInfo) {
+        for (const texInfo of this.texturesInfo) {
             if (texInfo.tileset) {
-                this.createTexture(texInfo.tileset, texInfo.tileset.name, imageUtils.getImageData(texInfo.image));
+                this.createTexture(texInfo.tileset, texInfo.tileset.name, texInfo.image);
             }
         }
 
@@ -147,12 +166,12 @@ export class WebgpuRenderer implements Renderer {
                         ]
                     },
                     {
-                        arrayStride: 5 * 4,
+                        arrayStride: 6 * 4,
                         stepMode: "instance",
                         attributes: [
                             { shaderLocation: 2, offset: 0, format: "float32x2" },
                             { shaderLocation: 3, offset: 2 * 4, format: "float32x2" },
-                            { shaderLocation: 4, offset: 4 * 4, format: "float32" }
+                            { shaderLocation: 4, offset: 4 * 4, format: "uint32x2" }
                         ]
                     }
                 ]
@@ -160,7 +179,23 @@ export class WebgpuRenderer implements Renderer {
             fragment: {
                 module: shaderModule,
                 entryPoint: "fs_main",
-                targets: [{ format: this.cfg.format }]
+                targets: [
+                    {
+                        format: this.cfg.format,
+                        blend: {
+                            color: {
+                                srcFactor: "src-alpha",
+                                dstFactor: "one-minus-src-alpha",
+                                operation: "add"
+                            },
+                            alpha: {
+                                srcFactor: "one",
+                                dstFactor: "one-minus-src-alpha",
+                                operation: "add"
+                            }
+                        }
+                    }
+                ],
             },
             primitive: { topology: "triangle-strip" }
         });
@@ -179,7 +214,9 @@ export class WebgpuRenderer implements Renderer {
 
         this.sampler = device.createSampler({
             magFilter: "nearest",
-            minFilter: "nearest"
+            minFilter: "nearest",
+            addressModeU: "clamp-to-edge",
+            addressModeV: "clamp-to-edge"
         });
 
         this.vbo = device.createBuffer({
@@ -192,15 +229,14 @@ export class WebgpuRenderer implements Renderer {
 
     render(scene: Scene, camera: Camera) {
         const layers: WebgpuRendererLayer[] = [];
-        for (const sceneLayer of scene.layers.toSorted((layer1, layer2) => layer1.zIndex - layer2.zIndex)) {
-            const key = sceneLayer.getKey();
-            if (!this.layersMap.has(key)) {
-                const layer = new WebgpuRendererLayer(this, sceneLayer.isStatic, sceneLayer.atlasName);
-                this.layersMap.set(key, layer);
+        for (const sceneLayer of scene.getLayersOrdered()) {
+            if (!this.layersMap.has(sceneLayer)) {
+                const layer = new WebgpuRendererLayer(this, sceneLayer.isStatic);
+                this.layersMap.set(sceneLayer, layer);
             }
-            const layer = this.layersMap.get(key)!;
+            const layer = this.layersMap.get(sceneLayer)!;
             if (layer.needsUpdate) {
-                layer.upload(sceneLayer.sprites);
+                layer.upload(sceneLayer.getSpritesOrdered());
             }
             layers.push(layer);
         }
@@ -239,51 +275,81 @@ export class WebgpuRenderer implements Renderer {
 
         const commandBuffer = encoder.finish();
         this.cfg.device.queue.submit([commandBuffer]);
+
+        for (const [sceneLayer, rendererLayer] of this.layersMap) {
+            if (rendererLayer.lifetime <= 0) {
+                rendererLayer.destroy();
+                this.layersMap.delete(sceneLayer);
+            }
+        }
     }
 
-    createTexture(tileset: Tileset, name: string, imageData: Uint8Array) {
-        const tileSize = tileset.tileSize;
+    createTexture(tileset: Tileset, name: string, imageData: GPUCopyExternalImageSource) {
 
-        const textureArray = this.cfg.device.createTexture({
+        const texture = this.cfg.device.createTexture({
             size: {
-                width: tileSize,
-                height: tileSize,
-                depthOrArrayLayers: tileset.totalTiles
+                width: tileset.imageWidth,
+                height: tileset.imageHeight,
+                depthOrArrayLayers: 1
             },
             format: "rgba8unorm",
             usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
         });
 
-        for (let i = 0; i < tileset.totalTiles; ++i) {
-            const row = Math.floor(i / tileset.tilesPerRow);
-            const col = i % tileset.tilesPerRow;
+        this.cfg.device.queue.copyExternalImageToTexture
 
-            const tilePixels = new Uint8Array(tileSize * tileSize * 4);
-            for (let j = 0; j < tileSize; ++j) {
-                const srcStart = (((row * tileSize + j) * tileset.tilesPerRow + col) * tileSize) * 4;
-                const srcEnd = srcStart + tileSize * 4;
-                tilePixels.set(imageData.slice(srcStart, srcEnd), j * tileSize * 4);
+        this.cfg.device.queue.copyExternalImageToTexture(
+            { source: imageData },
+            { texture },
+            [tileset.imageWidth, tileset.imageHeight, 1]
+        );
+
+        this.texturesMap.set(name, { texture, tileset });
+    }
+
+    createTextureArray(tileset: Tileset, name: string, imageData: Uint8Array) {
+        const tileW = tileset.tileWidth, tileH = tileset.tileHeight;
+
+        const texture = this.cfg.device.createTexture({
+            size: {
+                width: tileW,
+                height: tileH,
+                depthOrArrayLayers: tileset.tileCount
+            },
+            format: "rgba8unorm",
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT
+        });
+
+        for (let i = 0; i < tileset.tileCount; ++i) {
+            const row = Math.floor(i / tileset.columns);
+            const col = i % tileset.columns;
+
+            const tilePixels = new Uint8Array(tileW * tileH * 4);
+            for (let j = 0; j < tileH; ++j) {
+                const srcStart = (((row * tileH + j) * tileset.columns + col) * tileW) * 4;
+                const srcEnd = srcStart + tileW * 4;
+                tilePixels.set(imageData.slice(srcStart, srcEnd), j * tileW * 4);
             }
 
             this.cfg.device.queue.writeTexture(
                 {
-                    texture: textureArray,
+                    texture,
                     origin: { x: 0, y: 0, z: i }
                 },
                 tilePixels,
                 {
-                    bytesPerRow: tileSize * 4,
-                    rowsPerImage: tileSize
+                    bytesPerRow: tileW * 4,
+                    rowsPerImage: tileH
                 },
                 {
-                    width: tileSize,
-                    height: tileSize,
+                    width: tileW,
+                    height: tileH,
                     depthOrArrayLayers: 1
                 }
             );
         }
 
-        this.texturesMap.set(name, { texture: textureArray, tileset });
+        this.texturesMap.set(name, { texture, tileset });
     }
 
     public getConfig() {
@@ -305,54 +371,121 @@ export class WebgpuRenderer implements Renderer {
     }
 }
 
+interface DrawCall {
+    texName: string;
+    instanceCount: number;
+    instanceOffset: number;
+}
+
 class WebgpuRendererLayer {
     isStatic: boolean;
-    texName: string;
     needsUpdate: boolean;
-    instanceCount: number;
+    drawCalls: DrawCall[];
+    bindGroups: Map<string, GPUBindGroup>;
+    lastTexIdx: number;
     private renderer: WebgpuRenderer;
     private instanceBuffer: GPUBuffer;
-    private textureBindGroup: GPUBindGroup;
+    private tilesetDimBuffer: GPUBuffer;
+    lifetime: number;
 
-    constructor(renderer: WebgpuRenderer, isStatic: boolean, texName: string) {
+    constructor(renderer: WebgpuRenderer, isStatic: boolean) {
         this.renderer = renderer;
         this.isStatic = isStatic;
-        this.texName = texName;
         this.needsUpdate = true;
-        this.instanceCount = 0;
+        this.drawCalls = [];
+        this.bindGroups = new Map();
+        this.lifetime = LAYER_LIFETIME;
+        this.lastTexIdx = 0;
 
         this.instanceBuffer = renderer.getConfig().device.createBuffer({
-            size: 5 * 4 * (isStatic ? STATIC_LAYER_MAX_SPRITES : DYNAMIC_LAYER_MAX_SPRITES),
+            label: "Instance Buffer",
+            size: 6 * 4 * (isStatic ? STATIC_LAYER_MAX_SPRITES : DYNAMIC_LAYER_MAX_SPRITES),
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
         });
 
-        this.textureBindGroup = renderer.getConfig().device.createBindGroup({
-            layout: renderer.getPipeline().getBindGroupLayout(1),
-            entries: [
-                { binding: 0, resource: renderer.getSampler() },
-                {
-                    binding: 1, resource: renderer.getTextureInfo(texName).texture.createView({
-                        dimension: "2d-array"
-                    })
-                }
-            ]
+        this.tilesetDimBuffer = renderer.getConfig().device.createBuffer({
+            label: "Tileset Dimensions Buffer",
+            size: LAYER_MAX_TEXTURES * 256,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
     }
 
     public upload(sprites: Sprite[]) {
+        const device = this.renderer.getConfig().device;
+        const pipeline = this.renderer.getPipeline();
+        const sampler = this.renderer.getSampler();
 
-        this.renderer.getConfig().device.queue.writeBuffer(this.instanceBuffer, 0, geometry.createSpritesData(sprites));
+        device.queue.writeBuffer(this.instanceBuffer, 0, geometry.createSpritesData(sprites, true));
 
         if (this.isStatic) {
             this.needsUpdate = false;
         }
 
-        this.instanceCount = sprites.length;
+        this.drawCalls.length = 0;
+
+        let currentCall: DrawCall | null = null;
+
+        for (let i = 0; i < sprites.length; ++i) {
+            const texName = sprites[i].tilesetName;
+
+            if (!currentCall || texName !== currentCall.texName) {
+                const textureInfo = this.renderer.getTextureInfo(texName);
+
+                const dimData = new Float32Array([
+                    textureInfo.tileset.columns,
+                    Math.floor(textureInfo.tileset.tileCount / textureInfo.tileset.columns)
+                ]);
+                device.queue.writeBuffer(
+                    this.tilesetDimBuffer,
+                    this.lastTexIdx * 256,
+                    dimData
+                );
+
+                const bindGroup = device.createBindGroup({
+                    layout: pipeline.getBindGroupLayout(1),
+                    entries: [
+                        { binding: 0, resource: sampler },
+                        { binding: 1, resource: textureInfo.texture.createView() },
+                        {
+                            binding: 2,
+                            resource: {
+                                buffer: this.tilesetDimBuffer,
+                                offset: this.lastTexIdx * 256,
+                                size: 8
+                            }
+                        }
+                    ],
+                });
+
+                currentCall = {
+                    texName,
+                    instanceOffset: i,
+                    instanceCount: 1
+                };
+                if (!this.bindGroups.has(currentCall.texName)) {
+                    this.bindGroups.set(currentCall.texName, bindGroup);
+                    ++this.lastTexIdx;
+                }
+                this.drawCalls.push(currentCall);
+            } else {
+                currentCall.instanceCount++;
+            }
+        }
     }
 
     public render(pass: GPURenderPassEncoder) {
         pass.setVertexBuffer(1, this.instanceBuffer);
-        pass.setBindGroup(1, this.textureBindGroup);
-        pass.draw(4, this.instanceCount);
+
+        for (const drawCall of this.drawCalls) {
+            pass.setBindGroup(1, this.bindGroups.get(drawCall.texName));
+            pass.draw(4, drawCall.instanceCount, 0, drawCall.instanceOffset);
+        }
+
+        this.lifetime = LAYER_LIFETIME;
+    }
+
+    public destroy() {
+        this.instanceBuffer.destroy();
+        this.tilesetDimBuffer.destroy();
     }
 }
