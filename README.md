@@ -15,7 +15,7 @@ const tileset = new TilemapRenderer.Tileset({
     tileSize: 32
 });
 
-const tilesetImage = await TilemapRenderer.loadImage("url_path_to_image");
+const tilesetImage = await TilemapRenderer.assets.loadImage("url_path_to_image");
 ```
 
 Create camera:
