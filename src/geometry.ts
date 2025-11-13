@@ -16,16 +16,26 @@ export const geometry = (() => {
 
         let offset = 0;
         for (const sprite of sprites) {
-            for (let i = 0; i < count; ++i) {
-                view.setFloat32(offset, sprite.position.x + sprite.offset.x * sprite.scale.x, true);
-                view.setFloat32(offset + 4, sprite.position.y + sprite.offset.y * sprite.scale.y, true);
-                view.setFloat32(offset + 8, sprite.scale.x, true);
-                view.setFloat32(offset + 12, sprite.scale.y, true);
+            const posX = Math.round(sprite.position.x + sprite.offset.x * sprite.scale.x);
+            const posY = Math.round(sprite.position.y + sprite.offset.y * sprite.scale.y);
+            const scaleX = Math.round(sprite.scale.x);
+            const scaleY = Math.round(sprite.scale.y);
 
-                view.setUint16(offset + 16, sprite.tilesetRegion.x, true);
-                view.setUint16(offset + 18, sprite.tilesetRegion.y, true);
-                view.setUint16(offset + 20, sprite.tilesetRegion.width || 1, true);
-                view.setUint16(offset + 22, sprite.tilesetRegion.height || 1, true);
+            const regionX = sprite.tilesetRegion.x * (sprite.tileset.tileWidth + sprite.tileset.spacing) + sprite.tileset.margin;
+            const regionY = sprite.tilesetRegion.y * (sprite.tileset.tileHeight + sprite.tileset.spacing) + sprite.tileset.margin;
+            const regionW = sprite.tileset.tileWidth + ((sprite.tilesetRegion.width || 1) - 1) * (sprite.tileset.tileWidth + sprite.tileset.spacing);
+            const regionH = sprite.tileset.tileHeight + ((sprite.tilesetRegion.height || 1) - 1) * (sprite.tileset.tileHeight + sprite.tileset.spacing);
+
+            for (let i = 0; i < count; ++i) {
+                view.setFloat32(offset, posX, true);
+                view.setFloat32(offset + 4, posY, true);
+                view.setFloat32(offset + 8, scaleX, true);
+                view.setFloat32(offset + 12, scaleY, true);
+
+                view.setUint16(offset + 16, regionX, true);
+                view.setUint16(offset + 18, regionY, true);
+                view.setUint16(offset + 20, regionW, true);
+                view.setUint16(offset + 22, regionH, true);
 
                 offset += stride;
             }

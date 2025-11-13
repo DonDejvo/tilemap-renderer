@@ -37,7 +37,7 @@ struct VSInput {
 
 struct Camera {
     projectionMatrix: mat4x4f,
-    pos: vec2f
+    viewMatrix: mat4x4f
 }
 
 @group(0) @binding(0)
@@ -65,7 +65,7 @@ fn vs_main(input: VSInput) -> VSOutput {
     out.uv = (tileRegion.xy + input.texCoord * tileRegion.zw) / tilesetDimensions;
 
     let worldPos = input.vertexPos * input.tileScale + input.tilePos;
-    out.pos = camera.projectionMatrix * vec4f(worldPos - camera.pos, 0.0, 1.0);
+    out.pos = camera.projectionMatrix * camera.viewMatrix * vec4f(worldPos, 0.0, 1.0);
 
     return out;
 }
@@ -201,7 +201,7 @@ export class WebgpuRenderer implements Renderer {
         });
 
         this.cameraBuffer = device.createBuffer({
-            size: 80,
+            size: 128,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         })
 
@@ -250,7 +250,7 @@ export class WebgpuRenderer implements Renderer {
         this.cfg.device.queue.writeBuffer(
             this.cameraBuffer,
             64,
-            new Float32Array([camera.position.x, camera.position.y])
+            camera.viewMatrix
         );
 
         const encoder = this.cfg.device.createCommandEncoder();
@@ -426,26 +426,22 @@ class WebgpuRendererLayer {
         let currentCall: DrawCall | null = null;
 
         for (let i = 0; i < sprites.length; ++i) {
-            const texName = sprites[i].tilesetName;
+            const texName = sprites[i].tileset.name;
 
             if (!currentCall || texName !== currentCall.texName) {
-                const textureInfo = this.renderer.getTextureInfo(texName);
+                const texInfo = this.renderer.getTextureInfo(texName);
 
-                const dimData = new Float32Array([
-                    textureInfo.tileset.columns,
-                    Math.floor(textureInfo.tileset.tileCount / textureInfo.tileset.columns)
-                ]);
                 device.queue.writeBuffer(
                     this.tilesetDimBuffer,
                     this.lastTexIdx * 256,
-                    dimData
+                    new Float32Array([texInfo.tileset.imageWidth, texInfo.tileset.imageHeight])
                 );
 
                 const bindGroup = device.createBindGroup({
                     layout: pipeline.getBindGroupLayout(1),
                     entries: [
                         { binding: 0, resource: sampler },
-                        { binding: 1, resource: textureInfo.texture.createView() },
+                        { binding: 1, resource: texInfo.texture.createView() },
                         {
                             binding: 2,
                             resource: {

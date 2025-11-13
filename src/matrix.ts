@@ -1,8 +1,50 @@
+import { Vector } from "./Vector";
+
 export type Matrix = Float32Array<any>;
 
 export const matrix = (() => {
-    const identity = (): Matrix => {
+    const create = (): Matrix => {
         return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    }
+
+    const identity = (out: Matrix): Matrix => {
+        out[0] = 1;
+        out[1] = 0;
+        out[2] = 0;
+        out[3] = 0;
+
+        out[4] = 0;
+        out[5] = 1;
+        out[6] = 0;
+        out[7] = 0;
+
+        out[8] = 0;
+        out[9] = 0;
+        out[10] = 1;
+        out[11] = 0;
+
+        out[12] = 0;
+        out[13] = 0;
+        out[14] = 0;
+        out[15] = 1;
+
+        return out;
+    }
+
+    const translate = (out: Matrix, v: Vector) => {
+        out[12] += v.x;
+        out[13] += v.y;
+
+        return out;
+    }
+
+    const scale = (out: Matrix, v: Vector) => {
+        out[0] *= v.x;
+        out[1] *= v.x;
+        out[4] *= v.y;
+        out[5] *= v.y;
+
+        return out;
     }
 
     const createOrtho = (
@@ -36,8 +78,11 @@ export const matrix = (() => {
         return out;
     };
     return {
+        create,
         identity,
-        createOrtho
+        createOrtho,
+        translate,
+        scale
     }
 })();
 

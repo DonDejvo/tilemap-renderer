@@ -1,3 +1,5 @@
+import { math } from "./math";
+
 export class Vector {
     x: number;
     y: number;
@@ -121,5 +123,36 @@ export class Vector {
 
     toString() {
         return `Vector(${this.x}, ${this.y})`;
+    }
+}
+
+export class LinearSplineVector {
+    points: Vector[];
+
+    constructor(points: Vector[] = []) {
+        this.points = points.slice().sort((a, b) => a.x - b.x);
+    }
+
+    addPoint(point: Vector) {
+        this.points.push(point);
+        this.points.sort((a, b) => a.x - b.x);
+    }
+
+    getValue(x: number): Vector {
+        const n = this.points.length;
+        if (n === 0) return new Vector();
+        if (x <= this.points[0].x) return this.points[0].clone();
+        if (x >= this.points[n - 1].x) return this.points[n - 1].clone();
+
+        for (let i = 0; i < n - 1; i++) {
+            const p0 = this.points[i];
+            const p1 = this.points[i + 1];
+            if (x >= p0.x && x <= p1.x) {
+                const t = math.unlerp(p0.x, p1.x, x);
+                return p0.clone().lerp(p1, t);
+            }
+        }
+
+        return new Vector();
     }
 }

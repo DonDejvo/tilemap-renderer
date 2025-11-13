@@ -144,6 +144,10 @@ export class Tilemap {
         return this.tilesets.map((tileset) => tileset.tileset);
     }
 
+    public getTilesetByName(name: string) {
+        return this.tilesets.find((tileset) => tileset.tileset.name === name)?.tileset || null;
+    }
+
     public getLayers() {
         return this.layers;
     }

@@ -5,11 +5,15 @@ export class Camera {
     vw: number;
     vh: number;
     projectionMatrix: Matrix;
+    viewMatrix: Matrix;
     position: Vector;
+    zoom: number;
 
     constructor(vw: number, vh: number) {
-        this.projectionMatrix = matrix.identity();
+        this.projectionMatrix = matrix.create();
+        this.viewMatrix = matrix.create();
         this.position = new Vector();
+        this.zoom = 1;
         this.vw = 0;
         this.vh = 0;
 
@@ -19,6 +23,15 @@ export class Camera {
     public updateProjection(vw: number, vh: number) {
         this.vw = vw;
         this.vh = vh;
-        matrix.createOrtho(this.projectionMatrix, -vw * 0.5, vw * 0.5, -vh * 0.5, vh * 0.5);
+    }
+
+    public update() {
+        matrix.identity(this.viewMatrix);
+        matrix.translate(this.viewMatrix, new Vector(-this.position.x, -this.position.y));
+
+        const halfW = this.vw * 0.5 / this.zoom;
+        const halfH = this.vh * 0.5 / this.zoom;
+
+        matrix.createOrtho(this.projectionMatrix, -halfW, halfW, -halfH, halfH);
     }
 }

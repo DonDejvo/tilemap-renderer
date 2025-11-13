@@ -16,7 +16,7 @@ attribute vec2 aTileScale;
 attribute vec4 aTileRegion;
 
 uniform mat4 uProjectionMatrix;
-uniform vec2 uCameraPos;
+uniform mat4 uViewMatrix;
 
 uniform vec2 uTilesetDimensions;
 
@@ -26,7 +26,7 @@ void main() {
     uv = (vec2(aTileRegion.xy) + aTexCoord * vec2(aTileRegion.zw)) / uTilesetDimensions;
 
     vec2 worldPos = aVertexPos * aTileScale + aTilePos;
-    gl_Position = uProjectionMatrix * vec4(worldPos - uCameraPos, 0.0, 1.0);
+    gl_Position = uProjectionMatrix * uViewMatrix * vec4(worldPos, 0.0, 1.0);
 }
 `;
 
@@ -162,7 +162,7 @@ export class WebglRenderer implements Renderer {
         this.shaderProgram.use();
 
         this.gl.uniformMatrix4fv(this.shaderProgram.getUniform("uProjectionMatrix"), false, camera.projectionMatrix);
-        this.gl.uniform2f(this.shaderProgram.getUniform("uCameraPos"), camera.position.x, camera.position.y);
+        this.gl.uniformMatrix4fv(this.shaderProgram.getUniform("uViewMatrix"), false, camera.viewMatrix);
 
         for (let layer of layers) {
             layer.render();
@@ -260,7 +260,7 @@ class WebglRendererLayer {
         let currentCall: DrawCall | null = null;
 
         for (let i = 0; i < sprites.length; ++i) {
-            const texName = sprites[i].tilesetName;
+            const texName = sprites[i].tileset.name;
 
             if (!currentCall || texName !== currentCall.texName) {
                 currentCall = { texName, spriteOffset: i, spriteCount: 1 };
@@ -298,9 +298,7 @@ class WebglRendererLayer {
             const texInfo = this.renderer.getTextureInfo(drawCall.texName);
             gl.bindTexture(gl.TEXTURE_2D, texInfo.texture);
 
-            const tilesetCols = texInfo.tileset.columns;
-            const tilesetRows = Math.floor(texInfo.tileset.tileCount / texInfo.tileset.columns);
-            this.gl.uniform2f(this.renderer.getShaderProgram().getUniform("uTilesetDimensions"), tilesetCols, tilesetRows);
+            this.gl.uniform2f(this.renderer.getShaderProgram().getUniform("uTilesetDimensions"), texInfo.tileset.imageWidth, texInfo.tileset.imageHeight);
 
             gl.drawElements(gl.TRIANGLES, 6 * drawCall.spriteCount, gl.UNSIGNED_SHORT, drawCall.spriteOffset * 6 * 2);
         }

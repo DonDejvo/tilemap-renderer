@@ -62,7 +62,7 @@ export class Scene {
                             const s = new Sprite({
                                 isStatic: tile.animation === undefined,
                                 zIndex,
-                                tilesetName: tile.tileset.name,
+                                tileset: tile.tileset,
                                 tilesetRegion: { x: tile.x, y: tile.y }
                             });
 
@@ -125,7 +125,7 @@ export class SceneLayer {
         if (this.renderOrder === "manual") {
             let insertIndex = -1;
             for (let i = this.sprites.length - 1; i >= 0; --i) {
-                if (this.sprites[i].tilesetName <= sprite.tilesetName) {
+                if (this.sprites[i].tileset.name <= sprite.tileset.name) {
                     insertIndex = i;
                     break;
                 }

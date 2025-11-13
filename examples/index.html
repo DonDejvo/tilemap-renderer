@@ -6,6 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tilemap Player Example</title>
     <style>
+        body {
+            margin: 0;
+        }
+
         canvas {
             position: absolute;
             left: 0;
@@ -140,7 +144,7 @@
         class Player {
             constructor(x, y) {
                 this.sprite = new TilemapRenderer.Sprite({
-                    tilesetName: "MyTileset",
+                    tileset: TilemapRenderer.Tileset.getByName("MyTileset"),
                     tilesetRegion: { x: 0, y: 0 },
                     isStatic: false,
                     origin: "bottom"
@@ -176,12 +180,15 @@
             let fps = 0;
 
             const camera = new TilemapRenderer.Camera(300, 150);
-            const cameraPos = new TilemapRenderer.Vector(0, 0);
             const cameraLerpSpeed = 5;
             const input = new KeyboardInput();
 
+            const zoomSpline = new TilemapRenderer.LinearSpline([1, 1.5, 1.2, 2, 1.8, 1]);
+            const zoomDuration = 5;
+            let zoomTime = 0;
+
             const myTilesetImage = await TilemapRenderer.assets.loadImage("/textures/tileset.png");
-            const snowyLandsImage = await TilemapRenderer.assets.loadImage("/textures/RPGW_SnowyLands_v2.0/MainLev2.0.png");
+            const snowyLandsImage = await TilemapRenderer.assets.loadImage("/textures/RPGW_SnowyLands_v2.0/MainLev2.0_extruded.png");
             const snowyLandsDecorativeImage = await TilemapRenderer.assets.loadImage("/textures/RPGW_SnowyLands_v2.0/decorative.png");
 
             const exampleMap = await TilemapRenderer.Tilemap.load("/tilemaps/Example30x20.tmj", {
@@ -202,7 +209,7 @@
                     switch (obj.name) {
                         case "tree_lg":
                             const tree = new TilemapRenderer.Sprite({
-                                tilesetName: "SnowyLands_Decorative",
+                                tileset: TilemapRenderer.Tileset.getByName("SnowyLands_Decorative"),
                                 tilesetRegion: { x: 3, y: 20, width: 3, height: 4 },
                                 zIndex,
                                 isStatic: false,
@@ -250,7 +257,6 @@
                 const dt = t - lastRAF;
                 lastRAF = t;
 
-                // Update FPS
                 frameCount++;
                 if (t - lastTime >= 1) {
                     fps = frameCount;
@@ -262,11 +268,14 @@
                 if (player) {
                     player.update(dt, input);
 
-                    // Camera lerp to follow player
-                    const target = player.position.clone();
-                    cameraPos.lerp(target, 1 - Math.exp(-cameraLerpSpeed * dt));
-                    camera.position.set(cameraPos.x, cameraPos.y);
+                    camera.position.lerp(player.position, 1 - Math.exp(-cameraLerpSpeed * dt));
                 }
+
+                zoomTime += dt;
+                const zoomT = (zoomTime % zoomDuration) / zoomDuration * (zoomSpline.points.length - 1);
+                camera.zoom = zoomSpline.getValue(zoomT);
+
+                camera.update();
 
                 renderer.render(scene, camera);
             };

@@ -56,8 +56,8 @@ export class Tileset {
     tileHeight: number;
     columns: number;
     tileCount: number;
-    margin?: number;
-    spacing?: number;
+    margin: number;
+    spacing: number;
     tiledata: Map<number, TileDataJSON>;
 
     constructor(json: TilesetJSON) {
@@ -68,6 +68,8 @@ export class Tileset {
         this.tileHeight = json.tileheight;
         this.columns = json.columns;
         this.tileCount = json.tilecount;
+        this.margin = json.margin || 0;
+        this.spacing = json.spacing || 0;
         this.tiledata = new Map();
 
         if(json.tiles) {
@@ -83,6 +85,10 @@ export class Tileset {
             this.cache.set(url, new Tileset(json));
         }
         return this.cache.get(url)!;
+    }
+
+    public static getByName(name: string) {
+        return this.cache.values().find(tileset => tileset.name === name) || null;
     }
 
     public getTile(x: number, y: number) {

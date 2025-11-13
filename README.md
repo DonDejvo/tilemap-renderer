@@ -37,7 +37,7 @@ Create scene:
 const scene = new TilemapRenderer.Scene();
 
 const sprite = new TilemapRenderer.Sprite({
-    tilesetName: "MyTileset",
+    tileset,
     tilesetRegion: { x: 0, y: 0 },
     /* optional */
     // zIndex: 0,
@@ -68,5 +68,6 @@ renderer.setClearColor(new TilemapRenderer.Color(r, g, b, a));
 document.body.appendChild(renderer.getCanvas());
 
 // Render
+camera.update();
 renderer.render(scene, camera);
 ```

@@ -1,3 +1,4 @@
+import { Tileset } from "./Tileset";
 import { Vector } from "./Vector";
 
 interface TilesetRegion {
@@ -10,7 +11,7 @@ interface TilesetRegion {
 type SpriteOrigin = "center" | "bottom" | "top";
 
 interface SpriteParams {
-    tilesetName: string;
+    tileset: Tileset;
     tilesetRegion: TilesetRegion;
     zIndex?: number;
     isStatic?: boolean;
@@ -19,7 +20,7 @@ interface SpriteParams {
 
 export class Sprite {
     zIndex: number;
-    tilesetName: string;
+    tileset: Tileset;
     tilesetRegion: TilesetRegion;
     isStatic: boolean;
     position: Vector;
@@ -28,7 +29,7 @@ export class Sprite {
 
     constructor(params: SpriteParams) {
         this.zIndex = params.zIndex || 0;
-        this.tilesetName = params.tilesetName;
+        this.tileset = params.tileset;
         this.tilesetRegion = params.tilesetRegion;
         this.isStatic = params.isStatic || false;
         this.position = new Vector();
