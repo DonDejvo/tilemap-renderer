@@ -8,11 +8,12 @@ Load tilesets:
 ```js
 const tileset = new TilemapRenderer.Tileset({
     name: "MyTileset",
-    imageWidth: 64,
-    imageHeight: 64,
-    tilesPerRow: 2,
-    totalTiles: 4,
-    tileSize: 32
+    imagewidth: 64,
+    imageheight: 64,
+    columns: 2,
+    tilecount: 4,
+    tilewidth: 32,
+    tileheight: 32
 });
 
 const tilesetImage = await TilemapRenderer.assets.loadImage("url_path_to_image");
@@ -37,7 +38,7 @@ const scene = new TilemapRenderer.Scene();
 
 const sprite = new TilemapRenderer.Sprite({
     tilesetName: "MyTileset",
-    tilesetIdx: 0,
+    tilesetRegion: { x: 0, y: 0 },
     /* optional */
     // zIndex: 0,
     // isStatic: false
@@ -56,9 +57,9 @@ Finally create renderer:
 ```js
 const renderer = TilemapRenderer.createRenderer(type /* webgl | webgl2 | webgpu */);
 
-await renderer.init([
-    { tileset, image: tilesetImage }
-]);
+renderer.addTextures([tileset], { ["MyTileset"]: tilesetImage });
+
+await renderer.init();
 
 renderer.setSize(width, height);
 renderer.setClearColor(new TilemapRenderer.Color(r, g, b, a));
