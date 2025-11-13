@@ -101,7 +101,7 @@
     <script type="module">
         import * as TilemapRenderer from "../src/TilemapRenderer.ts";
 
-        const rendererContext = "webgpu";
+        const rendererContext = "webgl2";
 
         class KeyboardInput {
             constructor() {
@@ -183,7 +183,7 @@
             const cameraLerpSpeed = 5;
             const input = new KeyboardInput();
 
-            const zoomSpline = new TilemapRenderer.LinearSpline([1, 1.5, 1.2, 2, 1.8, 1]);
+            const zoomSpline = new TilemapRenderer.LinearSpline([1, 0.5, 1.2, 2, 1.8, 1]);
             const zoomDuration = 5;
             let zoomTime = 0;
 
@@ -273,7 +273,7 @@
 
                 zoomTime += dt;
                 const zoomT = (zoomTime % zoomDuration) / zoomDuration * (zoomSpline.points.length - 1);
-                camera.zoom = zoomSpline.getValue(zoomT);
+                //camera.zoom = zoomSpline.getValue(zoomT);
 
                 camera.update();
 

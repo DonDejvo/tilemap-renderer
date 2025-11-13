@@ -16,10 +16,10 @@ export const geometry = (() => {
 
         let offset = 0;
         for (const sprite of sprites) {
-            const posX = Math.round(sprite.position.x + sprite.offset.x * sprite.scale.x);
-            const posY = Math.round(sprite.position.y + sprite.offset.y * sprite.scale.y);
-            const scaleX = Math.round(sprite.scale.x);
-            const scaleY = Math.round(sprite.scale.y);
+            const posX = sprite.position.x + sprite.offset.x * sprite.scale.x;
+            const posY = sprite.position.y + sprite.offset.y * sprite.scale.y;
+            const scaleX = sprite.scale.x;
+            const scaleY = sprite.scale.y;
 
             const regionX = sprite.tilesetRegion.x * (sprite.tileset.tileWidth + sprite.tileset.spacing) + sprite.tileset.margin;
             const regionY = sprite.tilesetRegion.y * (sprite.tileset.tileHeight + sprite.tileset.spacing) + sprite.tileset.margin;
