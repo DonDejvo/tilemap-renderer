@@ -1,3 +1,4 @@
+import { Animator } from "./Animator";
 import { Sprite } from "./Sprite";
 import { ObjectLayer, TileLayer, Tilemap, TilemapObject } from "./Tilemap";
 
@@ -28,12 +29,16 @@ export class Scene {
             this.layers.push(layer);
         }
         layer.add(sprite);
+        return sprite;
     }
 
     public addTilemap(tilemap: Tilemap, config: SceneAddTilemapConfig = {}) {
         const layers = tilemap.getLayers();
 
         let zIndex = 0;
+
+        const sprites = [];
+        const animators = [];
 
         for (const layer of layers) {
             const layerConfig = config.layers?.find(item => item.name === layer.name);
@@ -66,10 +71,16 @@ export class Scene {
                                 tilesetRegion: { x: tile.x, y: tile.y }
                             });
 
-                            s.position.set((j + layer.x + 0.5) * tilemap.tileWidth, -(i + layer.y + 0.5) * tilemap.tileHeight);
+                            s.position.set((j + layer.x) * tilemap.tileWidth, (i + layer.y) * tilemap.tileHeight);
                             s.scale.set(tilemap.tileWidth, tilemap.tileHeight);
 
-                            this.addSprite(s);
+                            sprites.push(this.addSprite(s));
+
+                            if(tile.animation) {
+                                const animator = new Animator(s);
+                                animator.play({ x: tile.x, y: tile.y }, { repeat: true });
+                                animators.push(animator);
+                            }
                         }
                     }
                     break;
@@ -86,6 +97,11 @@ export class Scene {
             }
 
             ++zIndex;
+        }
+
+        return {
+            sprites,
+            animators
         }
     }
 
@@ -143,7 +159,7 @@ export class SceneLayer {
     public getSpritesOrdered() {
         switch (this.renderOrder) {
             case "topdown":
-                return this.sprites.sort((a, b) => b.position.y - a.position.y);
+                return this.sprites.sort((a, b) => a.position.y - b.position.y);
             default:
                 return this.sprites;
         }

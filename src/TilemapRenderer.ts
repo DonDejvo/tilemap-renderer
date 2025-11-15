@@ -1,3 +1,4 @@
+import { Animator } from "./Animator";
 import { assets } from "./assets";
 import { Camera } from "./Camera";
 import { Color } from "./Color";
@@ -10,4 +11,4 @@ import { Tilemap } from "./Tilemap";
 import { Tileset } from "./Tileset";
 import { Vector, LinearSplineVector } from "./Vector";
 
-export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, LinearSpline, LinearSplineVector, assets, matrix, math, createRenderer };
+export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, LinearSpline, LinearSplineVector, Animator, assets, matrix, math, createRenderer };

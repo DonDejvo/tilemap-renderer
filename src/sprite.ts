@@ -8,14 +8,11 @@ interface TilesetRegion {
     height?: number;
 }
 
-type SpriteOrigin = "center" | "bottom" | "top";
-
 interface SpriteParams {
     tileset: Tileset;
     tilesetRegion: TilesetRegion;
     zIndex?: number;
     isStatic?: boolean;
-    origin?: SpriteOrigin;
 }
 
 export class Sprite {
@@ -33,18 +30,18 @@ export class Sprite {
         this.tilesetRegion = params.tilesetRegion;
         this.isStatic = params.isStatic || false;
         this.position = new Vector();
-        this.offset = this.getOffsetFromOrigin(params.origin);
+        this.offset = new Vector();
         this.scale = new Vector(1, 1);
     }
 
-    private getOffsetFromOrigin(origin?: SpriteOrigin) {
-        switch(origin) {
-            case "bottom":
-                return new Vector(0, 0.5);
-            case "top":
-                return new Vector(0, -0.5);
-            default:
-                return new Vector();
-        }
+    public setTilesetRegion(x: number, y: number, width: number = 1, height: number = 1) {
+        this.tilesetRegion.x = x;
+        this.tilesetRegion.y = y;
+        this.tilesetRegion.width = width;
+        this.tilesetRegion.height = height;
+    }
+
+    public getTile() {
+        return this.tileset.getTile(this.tilesetRegion.x, this.tilesetRegion.y)!;
     }
 }

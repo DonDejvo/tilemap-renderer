@@ -15,18 +15,21 @@ attribute vec2 aTilePos;
 attribute vec2 aTileScale;
 attribute vec4 aTileRegion;
 
-uniform mat4 uProjectionMatrix;
-uniform mat4 uViewMatrix;
+uniform vec2 uViewportDimensions;
+uniform vec2 uCameraPos;
 
 uniform vec2 uTilesetDimensions;
 
 varying vec2 uv;
 
 void main() {
-    uv = (vec2(aTileRegion.xy) + aTexCoord * vec2(aTileRegion.zw)) / uTilesetDimensions;
+    vec2 flippedTexCoord = vec2(aTexCoord.x, 1.0 - aTexCoord.y);
+    uv = (vec2(aTileRegion.xy) + flippedTexCoord * vec2(aTileRegion.zw)) / uTilesetDimensions;
 
     vec2 worldPos = aVertexPos * aTileScale + aTilePos;
-    gl_Position = uProjectionMatrix * uViewMatrix * vec4(worldPos, 0.0, 1.0);
+    vec2 pixelPos = worldPos - uCameraPos;
+    vec2 clipPos = vec2(pixelPos.x / uViewportDimensions.x, 1.0 - pixelPos.y / uViewportDimensions.y) * 2.0 - 1.0;
+    gl_Position = vec4(clipPos, 0.0, 1.0);
 }
 `;
 
@@ -161,8 +164,8 @@ export class WebglRenderer implements Renderer {
 
         this.shaderProgram.use();
 
-        this.gl.uniformMatrix4fv(this.shaderProgram.getUniform("uProjectionMatrix"), false, camera.projectionMatrix);
-        this.gl.uniformMatrix4fv(this.shaderProgram.getUniform("uViewMatrix"), false, camera.viewMatrix);
+        this.gl.uniform2f(this.shaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
+        this.gl.uniform2f(this.shaderProgram.getUniform("uCameraPos"), camera.position.x, camera.position.y);
 
         for (let layer of layers) {
             layer.render();

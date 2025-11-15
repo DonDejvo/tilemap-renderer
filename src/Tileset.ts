@@ -2,10 +2,12 @@ import { assets } from "./assets";
 
 type TilePropertyJSON = { name: string; value: boolean | number | string; };
 
-export interface TileAnimation {
-    frames: number[];
-    framesPerSecond: number;
+export interface TileAnimationFrameJSON {
+    duration: number; // in ms
+    tileid: number;
 }
+
+export type TileAnimation = TileAnimationFrameJSON[];
 
 export interface TileDataJSON {
     id: number;
@@ -27,14 +29,16 @@ export interface TilesetJSON {
 }
 
 export class Tile {
+    id: number;
     x: number;
     y: number;
     properties?: TilePropertyJSON[];
     animation?: TileAnimation;
     tileset: Tileset;
 
-    constructor(tileset: Tileset, x: number, y: number, tileData?: TileDataJSON) {
+    constructor(tileset: Tileset, id: number, x: number, y: number, tileData?: TileDataJSON) {
         this.tileset = tileset;
+        this.id = id;
         this.x = x;
         this.y = y;
         this.properties = tileData?.properties;
@@ -72,15 +76,15 @@ export class Tileset {
         this.spacing = json.spacing || 0;
         this.tiledata = new Map();
 
-        if(json.tiles) {
-            for(let item of json.tiles) {
+        if (json.tiles) {
+            for (let item of json.tiles) {
                 this.tiledata.set(item.id, item);
             }
         }
     }
 
     public static async load(url: string): Promise<Tileset> {
-        if(!this.cache.has(url)) {
+        if (!this.cache.has(url)) {
             const json = await assets.loadJson<TilesetJSON>(url);
             this.cache.set(url, new Tileset(json));
         }
@@ -92,17 +96,29 @@ export class Tileset {
     }
 
     public getTile(x: number, y: number) {
-        const data = this.tiledata.get(y * this.columns + x);
+        if (x < 0 || x >= this.columns || y < 0 || y >= Math.ceil(this.tileCount / this.columns)) return null;
 
-        return new Tile(this, x, y, data);
+        const id = y * this.columns + x;
+
+        const data = this.tiledata.get(id);
+
+        return new Tile(this, id, x, y, data);
     }
 
     public getTileById(id: number) {
-        if(id >= this.tileCount || id < 0) return null;
+        if (id >= this.tileCount || id < 0) return null;
 
         const x = id % this.columns;
         const y = Math.floor(id / this.columns);
 
-        return this.getTile(x, y);
+        const data = this.tiledata.get(id);
+
+        return new Tile(this, id, x, y, data);
+    }
+
+    public getTileXY(id: number) {
+        const x = id % this.columns;
+        const y = Math.floor(id / this.columns);
+        return { x, y };
     }
 }

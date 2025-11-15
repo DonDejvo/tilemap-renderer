@@ -124,6 +124,10 @@ export class Vector {
     toString() {
         return `Vector(${this.x}, ${this.y})`;
     }
+
+    toArray() {
+        return new Float32Array([this.x, this.y]);
+    }
 }
 
 export class LinearSplineVector {

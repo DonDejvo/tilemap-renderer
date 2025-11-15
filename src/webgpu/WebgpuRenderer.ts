@@ -36,8 +36,8 @@ struct VSInput {
 }
 
 struct Camera {
-    projectionMatrix: mat4x4f,
-    viewMatrix: mat4x4f
+    pos: vec2f,
+    viewportDimensions: vec2f
 }
 
 @group(0) @binding(0)
@@ -62,10 +62,13 @@ fn vs_main(input: VSInput) -> VSOutput {
 
     let tileRegion = vec4f(x, y, w, h);
 
-    out.uv = (tileRegion.xy + input.texCoord * tileRegion.zw) / tilesetDimensions;
+    let flippedTexCoord = vec2f(input.texCoord.x, 1.0 - input.texCoord.y);
+    out.uv = (tileRegion.xy + flippedTexCoord * tileRegion.zw) / tilesetDimensions;
 
     let worldPos = input.vertexPos * input.tileScale + input.tilePos;
-    out.pos = camera.projectionMatrix * camera.viewMatrix * vec4f(worldPos, 0.0, 1.0);
+    let pixelPos = worldPos - camera.pos;
+    let clipPos = vec2f(pixelPos.x / camera.viewportDimensions.x, 1.0 - pixelPos.y / camera.viewportDimensions.y) * 2.0 - 1.0;
+    out.pos = vec4f(clipPos, 0.0, 1.0);
 
     return out;
 }
@@ -201,7 +204,7 @@ export class WebgpuRenderer implements Renderer {
         });
 
         this.cameraBuffer = device.createBuffer({
-            size: 128,
+            size: 16,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         })
 
@@ -244,13 +247,13 @@ export class WebgpuRenderer implements Renderer {
         this.cfg.device.queue.writeBuffer(
             this.cameraBuffer,
             0,
-            camera.projectionMatrix
+            camera.position.toArray()
         );
 
         this.cfg.device.queue.writeBuffer(
             this.cameraBuffer,
-            64,
-            camera.viewMatrix
+            8,
+            new Float32Array([camera.vw, camera.vh])
         );
 
         const encoder = this.cfg.device.createCommandEncoder();

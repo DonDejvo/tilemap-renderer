@@ -2,10 +2,10 @@ import { Sprite } from "./Sprite";
 
 export const geometry = (() => {
     const quad = new Float32Array([
-        -0.5, 0.5, 0, 0,
-        -0.5, -0.5, 0, 1,
-        0.5, 0.5, 1, 0,
-        0.5, -0.5, 1, 1,
+        0, 1, 0, 0,
+        0, 0, 0, 1,
+        1, 1, 1, 0,
+        1, 0, 1, 1,
     ]);
 
     const createSpritesData = (sprites: Sprite[], instanced: boolean = false) => {
@@ -16,8 +16,9 @@ export const geometry = (() => {
 
         let offset = 0;
         for (const sprite of sprites) {
-            const posX = sprite.position.x + sprite.offset.x * sprite.scale.x;
-            const posY = sprite.position.y + sprite.offset.y * sprite.scale.y;
+            const posX = sprite.position.x + sprite.offset.x;
+            const posY = sprite.position.y + sprite.offset.y;
+            
             const scaleX = sprite.scale.x;
             const scaleY = sprite.scale.y;
 
