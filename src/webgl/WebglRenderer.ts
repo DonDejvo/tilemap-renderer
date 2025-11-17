@@ -1,17 +1,20 @@
 import { Camera } from "../Camera";
 import { Color } from "../Color";
 import { geometry } from "../geometry";
-import { DYNAMIC_LAYER_MAX_SPRITES, LAYER_LIFETIME, Renderer, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
+import { DYNAMIC_LAYER_MAX_SPRITES, LAYER_LIFETIME, Renderer, RendererBuilderOptions, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
+import { ShaderBuilder } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
+import { Framebuffer } from "./Framebuffer";
 import { ShaderProgram } from "./ShaderProgram";
 
-const vertexSource = `
+const mainVertex = `
 
 attribute vec2 aVertexPos;
 attribute vec2 aTexCoord;
 attribute vec2 aTilePos;
+attribute float aTileAngle;
 attribute vec2 aTileScale;
 attribute vec4 aTileRegion;
 
@@ -26,14 +29,20 @@ void main() {
     vec2 flippedTexCoord = vec2(aTexCoord.x, 1.0 - aTexCoord.y);
     uv = (vec2(aTileRegion.xy) + flippedTexCoord * vec2(aTileRegion.zw)) / uTilesetDimensions;
 
-    vec2 worldPos = aVertexPos * aTileScale + aTilePos;
+    float c = cos(aTileAngle);
+    float s = sin(aTileAngle);
+    vec2 rotatedPos = vec2(
+        aVertexPos.x * c - aVertexPos.y * s,
+        aVertexPos.x * s + aVertexPos.y * c
+    );
+    vec2 worldPos = rotatedPos * aTileScale + aTilePos;
     vec2 pixelPos = worldPos - uCameraPos;
     vec2 clipPos = vec2(pixelPos.x / uViewportDimensions.x, 1.0 - pixelPos.y / uViewportDimensions.y) * 2.0 - 1.0;
     gl_Position = vec4(clipPos, 0.0, 1.0);
 }
 `;
 
-const fragmentSource = `
+const mainFragment = `
 
 precision mediump float;
 
@@ -46,38 +55,91 @@ void main() {
 }
 `;
 
+const fullscreenVertex = `
+
+attribute vec2 aPos;
+attribute vec2 aUv;
+
+varying vec2 uv;
+
+void main() {
+    uv = aUv;
+    gl_Position = vec4(aPos, 0.0, 1.0);
+}
+`;
+
+const fullscreenFragment = (mainImageBody = "") => `
+precision mediump float;
+
+varying vec2 uv;
+
+uniform sampler2D uSampler;
+uniform vec2 u_resolution;
+uniform float u_time;
+
+vec4 mainImage(vec4 inColor, vec2 fragCoord) {
+    vec4 fragColor = inColor;
+${mainImageBody.split("\n").map(line => "    " + line).join("\n")}
+    return fragColor;
+}
+
+void main() {
+    gl_FragColor = texture2D(uSampler, vec2(uv.x, 1.0 - uv.y));
+    vec2 fragCoord = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y);
+    gl_FragColor = mainImage(gl_FragColor, fragCoord);
+}
+`;
+
+const builderOptions: RendererBuilderOptions = {
+    componentMap: { r: "r", g: "g", b: "b", a: "a" },
+    uniformMap: { "$time": "u_time", "$resolution": "u_resolution" },
+    declareVar: (name, type, mutable = true) => {
+        return `${type} ${name};`;
+    }
+};
+
 interface AttribLocations {
     vertexPos: number;
     texCoord: number;
     tilePos: number;
     tileScale: number;
+    tileAngle: number;
     tileRegion: number;
 }
 
 export class WebglRenderer implements Renderer {
     private canvas: HTMLCanvasElement;
     private gl!: WebGLRenderingContext;
-    private shaderProgram!: ShaderProgram;
+    private mainProgram!: ShaderProgram;
+    private fullscreenProgram!: ShaderProgram;
+    private fullscreenVbo!: WebGLBuffer;
     private vbo!: WebGLBuffer;
     private ebo!: WebGLBuffer;
     private layersMap: Map<SceneLayer, WebglRendererLayer>;
-    private texturesMap: Map<string, { texture: WebGLTexture; tileset: Tileset; }>;
+    private texturesMap: Map<string, TextureInfo>;
+    private shaderMap: Map<string, { shader?: ShaderProgram, builder: ShaderBuilder }>;
     private attribLocations!: AttribLocations;
     private clearColor: Color;
-    private texturesInfo: TextureInfo[];
+    private framebuffer!: Framebuffer;
+    initialized: boolean;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
         this.layersMap = new Map();
         this.texturesMap = new Map();
         this.clearColor = new Color(0, 0, 0, 0);
-        this.texturesInfo = [];
+        this.shaderMap = new Map();
+        this.initialized = false;
     }
 
-    addTextures(tilesets: Tileset[], images: Record<string, TexImageSource>): void {
+    public getBuilderOptions(): RendererBuilderOptions {
+        return builderOptions;
+    }
+
+    public addTextures(tilesets: Tileset[], images: Record<string, TexImageSource>): void {
         for (const tileset of tilesets) {
             if (images[tileset.name]) {
-                this.texturesInfo.push({
+                this.texturesMap.set(tileset.name, {
                     tileset,
                     image: images[tileset.name]
                 });
@@ -85,13 +147,29 @@ export class WebglRenderer implements Renderer {
         }
     }
 
-    setClearColor(color: Color) {
+    public addShader(name: string, builder: ShaderBuilder) {
+        this.shaderMap.set(name, { builder });
+    }
+
+    public setShader(name: string) {
+        const shaderInfo = this.shaderMap.get(name);
+        if (!shaderInfo) throw new Error(`Program not found: ${name}`);
+        this.fullscreenProgram = shaderInfo.shader!;
+    }
+
+    public setClearColor(color: Color) {
         this.clearColor.copy(color);
     }
 
     public setSize(width: number, height: number) {
         this.canvas.width = width;
         this.canvas.height = height;
+
+        if(this.initialized) {
+            this.framebuffer.destroy();
+
+            this.framebuffer = new Framebuffer(this.gl, width, height);
+        }
     }
 
     public getCanvas() {
@@ -104,20 +182,32 @@ export class WebglRenderer implements Renderer {
 
         this.gl = gl;
 
-        for (const texInfo of this.texturesInfo) {
+        for (const texInfo of this.texturesMap.values()) {
             if (texInfo.tileset) {
-                this.createTexture(texInfo.tileset, texInfo.tileset.name, texInfo.image);
+                texInfo.texture = this.createTexture(texInfo.image);
             }
         }
 
-        this.shaderProgram = new ShaderProgram(gl, vertexSource, fragmentSource);
+        this.addShader("default", new ShaderBuilder());
+
+        for (const shaderInfo of this.shaderMap.values()) {
+            const mainImageBody = shaderInfo.builder.build(this);
+            
+            shaderInfo.shader = new ShaderProgram(gl, fullscreenVertex, fullscreenFragment(mainImageBody));
+            
+        }
+
+        this.setShader("default");
+
+        this.mainProgram = new ShaderProgram(gl, mainVertex, mainFragment);
 
         this.attribLocations = {
-            vertexPos: this.shaderProgram.getAttrib("aVertexPos"),
-            texCoord: this.shaderProgram.getAttrib("aTexCoord"),
-            tilePos: this.shaderProgram.getAttrib("aTilePos"),
-            tileScale: this.shaderProgram.getAttrib("aTileScale"),
-            tileRegion: this.shaderProgram.getAttrib("aTileRegion")
+            vertexPos: this.mainProgram.getAttrib("aVertexPos"),
+            texCoord: this.mainProgram.getAttrib("aTexCoord"),
+            tilePos: this.mainProgram.getAttrib("aTilePos"),
+            tileScale: this.mainProgram.getAttrib("aTileScale"),
+            tileAngle: this.mainProgram.getAttrib("aTileAngle"),
+            tileRegion: this.mainProgram.getAttrib("aTileRegion")
         };
 
         this.vbo = gl.createBuffer();
@@ -141,6 +231,14 @@ export class WebglRenderer implements Renderer {
 
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+        this.framebuffer = new Framebuffer(gl, this.canvas.width, this.canvas.height);
+
+        this.fullscreenVbo = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.fullscreenVbo);
+        gl.bufferData(gl.ARRAY_BUFFER, geometry.fullscreenQuad, gl.STATIC_DRAW);
+
+        this.initialized = true;
     }
 
     public render(scene: Scene, camera: Camera) {
@@ -157,19 +255,46 @@ export class WebglRenderer implements Renderer {
             layers.push(layer);
         }
 
-        this.gl.viewport(0, 0, camera.vw, camera.vh);
+        this.framebuffer.bind();
 
         this.gl.clearColor(this.clearColor.r, this.clearColor.g, this.clearColor.b, this.clearColor.a);
         this.gl.clear(this.gl.COLOR_BUFFER_BIT);
 
-        this.shaderProgram.use();
+        this.mainProgram.use();
 
-        this.gl.uniform2f(this.shaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
-        this.gl.uniform2f(this.shaderProgram.getUniform("uCameraPos"), camera.position.x, camera.position.y);
+        this.gl.uniform2f(this.mainProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
+        this.gl.uniform2f(this.mainProgram.getUniform("uCameraPos"), camera.position.x, camera.position.y);
 
         for (let layer of layers) {
             layer.render();
         }
+
+        this.framebuffer.unbind();
+
+        this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+
+        this.fullscreenProgram.use();
+
+        const time = performance.now() * 0.001;
+        this.gl.uniform1f(this.fullscreenProgram.getUniform("u_time"), time);
+        this.gl.uniform2f(this.fullscreenProgram.getUniform("u_resolution"), this.canvas.width, this.canvas.height);
+
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.fullscreenVbo);
+
+        const fullscreenAttribs = {
+            pos: this.fullscreenProgram.getAttrib("aPos"),
+            uv: this.fullscreenProgram.getAttrib("aUv")
+        };
+
+        this.gl.enableVertexAttribArray(fullscreenAttribs.pos);
+        this.gl.vertexAttribPointer(fullscreenAttribs.pos, 2, this.gl.FLOAT, false, 16, 0);
+
+        this.gl.enableVertexAttribArray(fullscreenAttribs.uv);
+        this.gl.vertexAttribPointer(fullscreenAttribs.uv, 2, this.gl.FLOAT, false, 16, 8);
+
+        this.gl.bindTexture(this.gl.TEXTURE_2D, this.framebuffer.texture);
+
+        this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
 
         for (const [sceneLayer, rendererLayer] of this.layersMap) {
             if (rendererLayer.lifetime <= 0) {
@@ -194,14 +319,14 @@ export class WebglRenderer implements Renderer {
     }
 
     public getShaderProgram() {
-        return this.shaderProgram;
+        return this.mainProgram;
     }
 
     public getAttribLocations() {
         return this.attribLocations;
     }
 
-    public createTexture(tileset: Tileset, name: string, imageData: TexImageSource) {
+    public createTexture(imageData: TexImageSource) {
         const gl = this.gl;
 
         const texture = gl.createTexture();
@@ -215,7 +340,7 @@ export class WebglRenderer implements Renderer {
 
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-        this.texturesMap.set(name, { texture, tileset });
+        return texture;
     }
 
 }
@@ -288,18 +413,22 @@ class WebglRendererLayer {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteBuffer);
 
+        const stride = 28;
+
         gl.enableVertexAttribArray(attribLocations.tilePos);
-        gl.vertexAttribPointer(attribLocations.tilePos, 2, gl.FLOAT, false, 24, 0);
+        gl.vertexAttribPointer(attribLocations.tilePos, 2, gl.FLOAT, false, stride, 0);
         gl.enableVertexAttribArray(attribLocations.tileScale);
-        gl.vertexAttribPointer(attribLocations.tileScale, 2, gl.FLOAT, false, 24, 8);
+        gl.vertexAttribPointer(attribLocations.tileScale, 2, gl.FLOAT, false, stride, 8);
+        gl.enableVertexAttribArray(attribLocations.tileAngle);
+        gl.vertexAttribPointer(attribLocations.tileAngle, 1, gl.FLOAT, false, stride, 16);
         gl.enableVertexAttribArray(attribLocations.tileRegion);
-        gl.vertexAttribPointer(attribLocations.tileRegion, 4, gl.UNSIGNED_SHORT, false, 24, 16);
+        gl.vertexAttribPointer(attribLocations.tileRegion, 4, gl.UNSIGNED_SHORT, false, stride, 20);
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.renderer.getEBO());
 
         for (const drawCall of this.drawCalls) {
             const texInfo = this.renderer.getTextureInfo(drawCall.texName);
-            gl.bindTexture(gl.TEXTURE_2D, texInfo.texture);
+            gl.bindTexture(gl.TEXTURE_2D, texInfo.texture!);
 
             this.gl.uniform2f(this.renderer.getShaderProgram().getUniform("uTilesetDimensions"), texInfo.tileset.imageWidth, texInfo.tileset.imageHeight);
 

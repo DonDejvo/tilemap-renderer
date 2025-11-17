@@ -103,7 +103,8 @@
     <script type="module">
         import * as TilemapRenderer from "../src/TilemapRenderer.ts";
 
-        const rendererContext = "webgl2";
+        const assetsUrl = "";
+        const rendererContext = "webgpu";
 
         class KeyboardInput {
             constructor() {
@@ -212,17 +213,17 @@
             const camera = new TilemapRenderer.Camera(w, h);
             const input = new KeyboardInput();
 
-            const myTilesetImage = await TilemapRenderer.assets.loadImage("/textures/tileset.png");
-            const snowyLandsImage = await TilemapRenderer.assets.loadImage("/textures/RPGW_SnowyLands_v2.0/MainLev2.0_extruded.png");
-            const snowyLandsDecorativeImage = await TilemapRenderer.assets.loadImage("/textures/RPGW_SnowyLands_v2.0/decorative.png");
-            const skeletonBodyImage = await TilemapRenderer.assets.loadImage("/textures/lpc_entry/png/walkcycle/BODY_skeleton.png");
+            const myTilesetImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/tileset.png");
+            const snowyLandsImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/RPGW_SnowyLands_v2.0/MainLev2.0_extruded.png");
+            const snowyLandsDecorativeImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/RPGW_SnowyLands_v2.0/decorative.png");
+            const skeletonBodyImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/lpc_entry/png/walkcycle/BODY_skeleton.png");
 
-            const skeletonBodyTileset = await TilemapRenderer.Tileset.load("/tilesets/BODY_skeleton.tsj");
+            const skeletonBodyTileset = await TilemapRenderer.Tileset.load(assetsUrl + "/tilesets/BODY_skeleton.tsj");
 
-            const exampleMap = await TilemapRenderer.Tilemap.load("/tilemaps/Example30x20.tmj", {
-                ["SnowyLands"]: "/tilesets/SnowyLands.tsj",
-                ["MyTileset"]: "/tilesets/MyTileset.tsj",
-                ["SnowyLands_Decorative"]: "/tilesets/SnowyLands_Decorative.tsj"
+            const exampleMap = await TilemapRenderer.Tilemap.load(assetsUrl + "/tilemaps/Example30x20.tmj", {
+                ["SnowyLands"]: assetsUrl + "/tilesets/SnowyLands.tsj",
+                ["MyTileset"]: assetsUrl + "/tilesets/MyTileset.tsj",
+                ["SnowyLands_Decorative"]: assetsUrl + "/tilesets/SnowyLands_Decorative.tsj"
             });
 
             const scene = new TilemapRenderer.Scene();
@@ -260,6 +261,7 @@
             const renderer = TilemapRenderer.createRenderer(rendererContext);
             document.body.appendChild(renderer.getCanvas());
 
+            camera.updateProjection(w, h);
             renderer.setSize(w, h);
 
             renderer.addTextures(exampleMap.getTilesets(), {
@@ -270,8 +272,26 @@
 
             renderer.addTextures([skeletonBodyTileset], { ["BODY_skeleton"]: skeletonBodyImage });
 
+            const builder = new TilemapRenderer.ShaderBuilder();
+
+            builder
+                .declare("center", "vec2")
+                .declare("dist", "float")
+                .declare("pulse", "float")
+                .declare("inverted", "vec3")
+                .declare("modifiedColor", "vec3")
+                .set("center", "0.5 * $resolution.xy")
+                .set("dist", "2.0 * length($fragCoord - center) / min($resolution.x, $resolution.y)")
+                .set("pulse", "0.25 + 0.75 * sin($time * 0.5)")
+                .set("inverted", "vec3(1.0) - fragColor.rgb")
+                .set("modifiedColor", "mix(inverted, vec3(0.0), dist * pulse)")
+                .set("fragColor", "vec4(modifiedColor, fragColor.a)");
+
+            renderer.addShader("myShader", builder);
+
             await renderer.init();
-            renderer.setClearColor(new TilemapRenderer.Color(0.1, 0.1, 0.1));
+            renderer.setClearColor(new TilemapRenderer.Color(0.5, 0.5, 0.5));
+            renderer.setShader("myShader");
 
             const draw = () => {
                 requestAnimationFrame(now => {

@@ -13,6 +13,7 @@ interface SpriteParams {
     tilesetRegion: TilesetRegion;
     zIndex?: number;
     isStatic?: boolean;
+    angle?: number;
 }
 
 export class Sprite {
@@ -23,6 +24,7 @@ export class Sprite {
     position: Vector;
     offset: Vector;
     scale: Vector;
+    angle: number;
 
     constructor(params: SpriteParams) {
         this.zIndex = params.zIndex || 0;
@@ -32,6 +34,7 @@ export class Sprite {
         this.position = new Vector();
         this.offset = new Vector();
         this.scale = new Vector(1, 1);
+        this.angle = params.angle || 0;
     }
 
     public setTilesetRegion(x: number, y: number, width: number = 1, height: number = 1) {

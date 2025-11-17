@@ -1,8 +1,9 @@
 import { Camera } from "../Camera";
 import { Color } from "../Color";
 import { geometry } from "../geometry";
-import { DYNAMIC_LAYER_MAX_SPRITES, LAYER_LIFETIME, LAYER_MAX_TEXTURES, Renderer, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
+import { DYNAMIC_LAYER_MAX_SPRITES, LAYER_LIFETIME, LAYER_MAX_TEXTURES, Renderer, RendererBuilderOptions, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
+import { ShaderBuilder } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 
@@ -25,14 +26,15 @@ export const requestConfig = async (): Promise<GPUConfig | null> => {
     };
 }
 
-const shaderSource = `
+const mainSource = `
 struct VSInput {
     @location(0) vertexPos: vec2f,
     @location(1) texCoord: vec2f,
     
     @location(2) tilePos: vec2f,
     @location(3) tileScale: vec2f,
-    @location(4) tileRegion: vec2u
+    @location(4) tileAngle: f32,
+    @location(5) tileRegion: vec2u
 }
 
 struct Camera {
@@ -65,7 +67,13 @@ fn vs_main(input: VSInput) -> VSOutput {
     let flippedTexCoord = vec2f(input.texCoord.x, 1.0 - input.texCoord.y);
     out.uv = (tileRegion.xy + flippedTexCoord * tileRegion.zw) / tilesetDimensions;
 
-    let worldPos = input.vertexPos * input.tileScale + input.tilePos;
+    let c = cos(input.tileAngle);
+    let s = sin(input.tileAngle);
+    let rotatedPos = vec2f(
+        input.vertexPos.x * c - input.vertexPos.y * s,
+        input.vertexPos.x * s + input.vertexPos.y * c
+    );
+    let worldPos = rotatedPos * input.tileScale + input.tilePos;
     let pixelPos = worldPos - camera.pos;
     let clipPos = vec2f(pixelPos.x / camera.viewportDimensions.x, 1.0 - pixelPos.y / camera.viewportDimensions.y) * 2.0 - 1.0;
     out.pos = vec4f(clipPos, 0.0, 1.0);
@@ -85,37 +93,125 @@ fn fs_main(input: VSOutput) -> @location(0) vec4f {
 }
 `;
 
+const fullscreenSource = (mainImageBody: string = "") => {
+    return `
+struct VSInput {
+    @location(0) pos: vec2f,
+    @location(1) uv: vec2f
+}
+
+struct VSOutput {
+    @builtin(position) pos: vec4f,
+    @location(0) uv: vec2f,
+}
+
+@vertex
+fn vs_main(input: VSInput) -> VSOutput {
+    var out: VSOutput;
+    out.pos = vec4f(input.pos, 0.0, 1.0);
+    out.uv = input.uv;
+    return out;
+}
+
+struct Uniforms {
+    resolution: vec2f,
+    time: f32,
+}
+
+@group(0) @binding(0)
+var<uniform> uniforms: Uniforms;
+
+@group(1) @binding(0)
+var screenSampler: sampler;
+
+@group(1) @binding(1)
+var screenTexture: texture_2d<f32>;
+
+fn mainImage(inColor: vec4f, fragCoord: vec2f) -> vec4f {
+    var fragColor = inColor;
+${mainImageBody.split("\n").map(line => "    " + line).join("\n")}
+    return fragColor;
+}
+
+@fragment
+fn fs_main(input: VSOutput) -> @location(0) vec4f {
+    _ = uniforms.resolution.x;
+    let fragCoord = input.pos.xy;
+    var fragColor = textureSample(screenTexture, screenSampler, input.uv);
+    fragColor = mainImage(fragColor, fragCoord);
+    return fragColor;
+}
+`;
+}
+
+interface FullscreenShaderInfo {
+    module?: GPUShaderModule;
+    pipeline?: GPURenderPipeline;
+    uniformBuffer?: GPUBuffer;
+    uniformBindGroup?: GPUBindGroup;
+    textureBindGroup?: GPUBindGroup;
+    builder: ShaderBuilder;
+}
+
+const builderOptions: RendererBuilderOptions = {
+    componentMap: { r: "x", g: "y", b: "z", a: "w" },
+    uniformMap: { "$time": "uniforms.time", "$resolution": "uniforms.resolution" },
+    declareVar: (name, type, mutable = true) => {
+        return `var ${name}: ${type === "float" ? "f32" : type + "f"};`;
+    }
+};
+
 export class WebgpuRenderer implements Renderer {
     private canvas: HTMLCanvasElement;
     private ctx!: GPUCanvasContext;
     private cfg!: GPUConfig;
     private pipeline!: GPURenderPipeline;
     private vbo!: GPUBuffer;
+    private fullscreenVbo!: GPUBuffer;
     private layersMap: Map<SceneLayer, WebgpuRendererLayer>;
-    private texturesMap: Map<string, { texture: GPUTexture; tileset: Tileset; }>;
+    private texturesMap: Map<string, TextureInfo>;
     private cameraBuffer!: GPUBuffer;
     private cameraBindGroup!: GPUBindGroup;
     private sampler!: GPUSampler;
     private clearColor: Color;
-    private texturesInfo: TextureInfo[];
+    private shaderMap = new Map<string, FullscreenShaderInfo>();
+    private offscreenTexture!: GPUTexture;
+    private fullscreenSampler!: GPUSampler;
+    private activeFullscreenShader!: FullscreenShaderInfo;
+    private initialized: boolean;
 
     constructor(canvas: HTMLCanvasElement) {
         this.layersMap = new Map();
         this.texturesMap = new Map();
         this.canvas = canvas;
         this.clearColor = new Color(0, 0, 0, 0);
-        this.texturesInfo = [];
+        this.shaderMap = new Map();
+        this.initialized = false;
+    }
+
+    public getBuilderOptions(): RendererBuilderOptions {
+        return builderOptions;
     }
 
     addTextures(tilesets: Tileset[], images: Record<string, TexImageSource>): void {
         for (const tileset of tilesets) {
             if (images[tileset.name]) {
-                this.texturesInfo.push({
+                this.texturesMap.set(tileset.name, {
                     tileset,
                     image: images[tileset.name]
                 });
             }
         }
+    }
+
+    public addShader(name: string, builder: ShaderBuilder) {
+        this.shaderMap.set(name, { builder });
+    }
+
+    public setShader(name: string) {
+        const shaderInfo = this.shaderMap.get(name);
+        if (!shaderInfo) throw new Error(`Shader not found: ${name}`);
+        this.activeFullscreenShader = shaderInfo;
     }
 
     setClearColor(color: Color) {
@@ -125,6 +221,27 @@ export class WebgpuRenderer implements Renderer {
     public setSize(width: number, height: number) {
         this.canvas.width = width;
         this.canvas.height = height;
+
+        if (this.initialized) {
+            this.offscreenTexture.destroy();
+
+            this.offscreenTexture = this.cfg.device.createTexture({
+                size: { width: this.canvas.width, height: this.canvas.height, depthOrArrayLayers: 1 },
+                format: this.cfg.format,
+                usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+            });
+
+            for (const [name, shaderInfo] of this.shaderMap.entries()) {
+                shaderInfo.textureBindGroup = this.cfg.device.createBindGroup({
+                    label: name + " texture bind group",
+                    layout: shaderInfo.pipeline!.getBindGroupLayout(1),
+                    entries: [
+                        { binding: 0, resource: this.fullscreenSampler },
+                        { binding: 1, resource: this.offscreenTexture.createView() }
+                    ]
+                });
+            }
+        }
     }
 
     public getCanvas() {
@@ -144,43 +261,129 @@ export class WebgpuRenderer implements Renderer {
 
         this.ctx.configure(this.cfg);
 
-        for (const texInfo of this.texturesInfo) {
+        for (const texInfo of this.texturesMap.values()) {
             if (texInfo.tileset) {
-                this.createTexture(texInfo.tileset, texInfo.tileset.name, texInfo.image);
+                texInfo.texture = this.createTexture(texInfo.tileset, texInfo.image);
             }
         }
 
-        const shaderModule = device.createShaderModule({
-            code: shaderSource
+        this.offscreenTexture = this.cfg.device.createTexture({
+            size: { width: this.canvas.width, height: this.canvas.height, depthOrArrayLayers: 1 },
+            format: this.cfg.format,
+            usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+        });
+
+        this.sampler = device.createSampler({
+            magFilter: "nearest",
+            minFilter: "nearest",
+            addressModeU: "clamp-to-edge",
+            addressModeV: "clamp-to-edge"
+        });
+
+        this.fullscreenSampler = device.createSampler({
+            magFilter: "linear",
+            minFilter: "linear",
+            addressModeU: "clamp-to-edge",
+            addressModeV: "clamp-to-edge",
+        });
+
+        this.addShader("default", new ShaderBuilder());
+
+        for (const [name, shaderInfo] of this.shaderMap.entries()) {
+            const code = fullscreenSource(shaderInfo.builder.build(this));
+
+            const module = device.createShaderModule({
+                label: name + " shader module",
+                code
+            });
+
+            const pipeline = device.createRenderPipeline({
+                layout: "auto",
+                vertex: {
+                    module,
+                    entryPoint: "vs_main",
+                    buffers: [
+                        {
+                            arrayStride: 16,
+                            stepMode: "vertex",
+                            attributes: [
+                                { shaderLocation: 0, offset: 0, format: "float32x2" },
+                                { shaderLocation: 1, offset: 8, format: "float32x2" }
+                            ]
+                        }
+                    ]
+                },
+                fragment: {
+                    module,
+                    entryPoint: "fs_main",
+                    targets: [{ format: this.cfg.format }]
+                },
+                primitive: { topology: "triangle-strip" }
+            });
+
+            const uniformBuffer = device.createBuffer({
+                size: 16,
+                usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+            });
+
+            const uniformBindGroup = device.createBindGroup({
+                label: name + " uniform bind group",
+                layout: pipeline.getBindGroupLayout(0),
+                entries: [
+                    { binding: 0, resource: { buffer: uniformBuffer } }
+                ]
+            });
+
+            const textureBindGroup = device.createBindGroup({
+                label: name + " texture bind group",
+                layout: pipeline.getBindGroupLayout(1),
+                entries: [
+                    { binding: 0, resource: this.fullscreenSampler },
+                    { binding: 1, resource: this.offscreenTexture.createView() }
+                ]
+            });
+
+            shaderInfo.module = module;
+            shaderInfo.pipeline = pipeline;
+            shaderInfo.uniformBuffer = uniformBuffer;
+            shaderInfo.uniformBindGroup = uniformBindGroup;
+            shaderInfo.textureBindGroup = textureBindGroup;
+        }
+
+        this.setShader("default");
+
+        const mainModule = device.createShaderModule({
+            code: mainSource
         });
 
         this.pipeline = device.createRenderPipeline({
             layout: "auto",
             vertex: {
-                module: shaderModule,
+                module: mainModule,
                 entryPoint: "vs_main",
                 buffers: [
                     {
-                        arrayStride: 4 * 4,
+                        arrayStride: 16,
                         stepMode: "vertex",
                         attributes: [
                             { shaderLocation: 0, offset: 0, format: "float32x2" },
-                            { shaderLocation: 1, offset: 2 * 4, format: "float32x2" }
+                            { shaderLocation: 1, offset: 8, format: "float32x2" }
                         ]
                     },
                     {
-                        arrayStride: 6 * 4,
+                        arrayStride: 28,
                         stepMode: "instance",
                         attributes: [
                             { shaderLocation: 2, offset: 0, format: "float32x2" },
-                            { shaderLocation: 3, offset: 2 * 4, format: "float32x2" },
-                            { shaderLocation: 4, offset: 4 * 4, format: "uint32x2" }
+                            { shaderLocation: 3, offset: 8, format: "float32x2" },
+                            { shaderLocation: 4, offset: 16, format: "float32" },
+                            { shaderLocation: 5, offset: 20, format: "uint32x2" }
                         ]
                     }
                 ]
             },
             fragment: {
-                module: shaderModule,
+                module: mainModule,
                 entryPoint: "fs_main",
                 targets: [
                     {
@@ -215,19 +418,19 @@ export class WebgpuRenderer implements Renderer {
             }]
         });
 
-        this.sampler = device.createSampler({
-            magFilter: "nearest",
-            minFilter: "nearest",
-            addressModeU: "clamp-to-edge",
-            addressModeV: "clamp-to-edge"
-        });
-
         this.vbo = device.createBuffer({
             size: geometry.quad.byteLength,
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
         });
 
         device.queue.writeBuffer(this.vbo, 0, geometry.quad);
+
+        this.fullscreenVbo = device.createBuffer({
+            size: geometry.fullscreenQuad.byteLength,
+            usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+        });
+
+        device.queue.writeBuffer(this.fullscreenVbo, 0, geometry.fullscreenQuad);
     }
 
     render(scene: Scene, camera: Camera) {
@@ -256,25 +459,49 @@ export class WebgpuRenderer implements Renderer {
             new Float32Array([camera.vw, camera.vh])
         );
 
+        const time = performance.now() * 0.001;
+        this.cfg.device.queue.writeBuffer(
+            this.activeFullscreenShader.uniformBuffer!,
+            0,
+            new Float32Array([this.canvas.width, this.canvas.height, time])
+        );
+
         const encoder = this.cfg.device.createCommandEncoder();
 
-        const pass = encoder.beginRenderPass({
+        const scenePass = encoder.beginRenderPass({
             colorAttachments: [{
                 clearValue: this.clearColor,
+                view: this.offscreenTexture.createView(),
+                loadOp: "clear",
+                storeOp: "store"
+            }]
+        });
+        scenePass.setPipeline(this.pipeline);
+        scenePass.setBindGroup(0, this.cameraBindGroup);
+        scenePass.setVertexBuffer(0, this.vbo);
+
+        for (const layer of layers) {
+            layer.render(scenePass);
+        }
+
+        scenePass.end();
+
+        const fullscreenPass = encoder.beginRenderPass({
+            colorAttachments: [{
                 view: this.ctx.getCurrentTexture().createView(),
                 loadOp: "clear",
                 storeOp: "store"
             }]
         });
-        pass.setPipeline(this.pipeline);
-        pass.setBindGroup(0, this.cameraBindGroup);
-        pass.setVertexBuffer(0, this.vbo);
 
-        for (const layer of layers) {
-            layer.render(pass);
-        }
+        fullscreenPass.setPipeline(this.activeFullscreenShader.pipeline!);
 
-        pass.end();
+        fullscreenPass.setBindGroup(0, this.activeFullscreenShader.uniformBindGroup!);
+        fullscreenPass.setBindGroup(1, this.activeFullscreenShader.textureBindGroup!);
+
+        fullscreenPass.setVertexBuffer(0, this.fullscreenVbo);
+        fullscreenPass.draw(4, 1, 0, 0);
+        fullscreenPass.end();
 
         const commandBuffer = encoder.finish();
         this.cfg.device.queue.submit([commandBuffer]);
@@ -287,7 +514,7 @@ export class WebgpuRenderer implements Renderer {
         }
     }
 
-    createTexture(tileset: Tileset, name: string, imageData: GPUCopyExternalImageSource) {
+    createTexture(tileset: Tileset, imageData: GPUCopyExternalImageSource) {
 
         const texture = this.cfg.device.createTexture({
             size: {
@@ -307,10 +534,10 @@ export class WebgpuRenderer implements Renderer {
             [tileset.imageWidth, tileset.imageHeight, 1]
         );
 
-        this.texturesMap.set(name, { texture, tileset });
+        return texture;
     }
 
-    createTextureArray(tileset: Tileset, name: string, imageData: Uint8Array) {
+    createTextureArray(tileset: Tileset, imageData: Uint8Array) {
         const tileW = tileset.tileWidth, tileH = tileset.tileHeight;
 
         const texture = this.cfg.device.createTexture({
@@ -352,7 +579,7 @@ export class WebgpuRenderer implements Renderer {
             );
         }
 
-        this.texturesMap.set(name, { texture, tileset });
+        return texture;
     }
 
     public getConfig() {
@@ -444,7 +671,7 @@ class WebgpuRendererLayer {
                     layout: pipeline.getBindGroupLayout(1),
                     entries: [
                         { binding: 0, resource: sampler },
-                        { binding: 1, resource: texInfo.texture.createView() },
+                        { binding: 1, resource: (texInfo.texture as GPUTexture).createView() },
                         {
                             binding: 2,
                             resource: {

@@ -1,6 +1,7 @@
 import { Camera } from "./Camera";
 import { Color } from "./Color";
 import { Scene } from "./Scene";
+import { ShaderBuilder, VariableType } from "./ShaderBuilder";
 import { Tileset } from "./Tileset";
 import { WebglRenderer } from "./webgl/WebglRenderer";
 import { Webgl2Renderer } from "./webgl2/Webgl2Renderer";
@@ -12,11 +13,18 @@ export const LAYER_LIFETIME = 30;
 export const LAYER_MAX_TEXTURES = 16;
 
 export interface TextureInfo {
-    tileset?: Tileset;
+    texture?: WebGLTexture | GPUTexture;
+    tileset: Tileset;
     image: TexImageSource;
 }
 
 export type RendererType = "webgl" | "webgl2" | "webgpu";
+
+export interface RendererBuilderOptions {
+    componentMap: Record<string, string>;
+    uniformMap: Record<string, string>;
+    declareVar: (name: string, type: VariableType, mutable?: boolean) => string;
+}
 
 export interface Renderer {
     addTextures(tilesets: Tileset[], images: Record<string, TexImageSource>): void;
@@ -25,17 +33,20 @@ export interface Renderer {
     setSize: (width: number, height: number) => void;
     getCanvas: () => HTMLCanvasElement;
     setClearColor: (color: Color) => void;
+    getBuilderOptions(): RendererBuilderOptions;
+    addShader: (name: string, builder: ShaderBuilder) => void;
+    setShader: (name: string) => void;
 }
 
 export const createRenderer = (type: RendererType): Renderer => {
     const canvas = document.createElement("canvas");
 
-    switch(type) {
-        case "webgl": 
+    switch (type) {
+        case "webgl":
             return new WebglRenderer(canvas);
-        case "webgl2": 
+        case "webgl2":
             return new Webgl2Renderer(canvas);
-        case "webgpu": 
+        case "webgpu":
             return new WebgpuRenderer(canvas);
         default:
             throw new Error("Unknwn renderer type");
