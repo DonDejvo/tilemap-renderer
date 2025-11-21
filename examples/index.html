@@ -284,7 +284,12 @@
                 .set("uv", "fragCoord / uniforms.resolution")
                 .set("color", "texture(0, uv)")
                 .set("b", "max(color.rgb - vec3(uniforms.threshold), vec3(0.0))")
-                .set("fragColor", "vec4(b, 1.0)");
+                // .set("fragColor", "vec4(b,1.0)");
+                .if("b.r > 0.0")
+                .set("fragColor", "vec4(color.rgb, 1.0)")
+                .else()
+                .set("fragColor", "vec4(vec3(0.0), 1.0)")
+                .endif();
 
             const neonBlurH = new TilemapRenderer.ShaderBuilder();
 
@@ -337,7 +342,7 @@
                 .set("uv", "fragCoord / uniforms.resolution")
                 .set("base", "texture(0, uv)")
                 .set("glow", "texture(1, uv)")
-                .set("fragColor", "vec4(base.rgb + glow.rgb * 1.5, 1.0)");
+                .set("fragColor", "vec4(base.rgb + glow.rgb, 1.0)");
 
             renderer.registerShader("blurX", neonBlurH);
             renderer.registerShader("blurY", neonBlurV);
@@ -346,7 +351,6 @@
 
             await renderer.init();
             renderer.setClearColor(new TilemapRenderer.Color(0.5, 0.5, 0.5));
-
 
             renderer.pass = [
                 // downscale to quarter

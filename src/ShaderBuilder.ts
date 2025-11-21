@@ -7,7 +7,11 @@ export enum ShaderOp {
     SUB,
     MUL,
     DIV,
-    UNIFORM
+    UNIFORM,
+    IF,
+    ELSEIF,
+    ELSE,
+    ENDIF
 }
 
 export interface ShaderBuilderOutput {
@@ -28,8 +32,9 @@ const getComponentCountByType = (type: VariableType) => {
 
 export type DeclareOp = [ShaderOp.DECLARE, name: string, type: VariableType];
 export type MathOp = [ShaderOp.ADD | ShaderOp.SUB | ShaderOp.MUL | ShaderOp.DIV | ShaderOp.SET, name: string, expr: string];
+export type ConditionalOp = [ShaderOp.IF | ShaderOp.ELSEIF | ShaderOp.ELSE | ShaderOp.ENDIF, condition?: string];
 
-export type ShaderOperation = DeclareOp | MathOp;
+export type ShaderOperation = DeclareOp | MathOp | ConditionalOp;
 
 export class ShaderBuilder {
     private ops: ShaderOperation[];
@@ -75,6 +80,26 @@ export class ShaderBuilder {
         return this;
     }
 
+    public if(condition: string) {
+        this.ops.push([ShaderOp.IF, condition]);
+        return this;
+    }
+
+    public elseif(condition: string) {
+        this.ops.push([ShaderOp.ELSEIF, condition]);
+        return this;
+    }
+
+    public else() {
+        this.ops.push([ShaderOp.ELSE]);
+        return this;
+    }
+
+    public endif() {
+        this.ops.push([ShaderOp.ENDIF]);
+        return this;
+    }
+
     public uniform(name: string, type: VariableType) {
         this.uniforms.push({ name, type, offset: this.uniformOffset });
         this.uniformOffset += getComponentCountByType(type);
@@ -89,7 +114,7 @@ export class ShaderBuilder {
         const lines: string[] = [];
 
         for (const op of this.ops) {
-            const [type, name, arg] = op;
+            const [type, ...args] = op;
 
             switch (type) {
                 case ShaderOp.DECLARE: {
@@ -104,10 +129,21 @@ export class ShaderBuilder {
                 case ShaderOp.SUB:
                 case ShaderOp.MUL:
                 case ShaderOp.DIV: {
-                    const target = name;
-                    const expr = this.replaceExpression(renderer, arg);
+                    const target = args[0];
+                    const expr = args[1];
                     const line = `${target} ${this.getOpAssignmentSymbol(type)} ${expr};`;
-                    lines.push(this.replaceComponents(renderer, line));
+                    lines.push(this.replaceExpression(renderer, line));
+                    break;
+                }
+                case ShaderOp.IF:
+                case ShaderOp.ELSEIF: {
+                    const condition = args[0]!;
+                    lines.push(`${type === ShaderOp.IF ? "" : "} else "}if (${this.replaceExpression(renderer, condition)}) {`);
+                    break;
+                }
+                case ShaderOp.ELSE:
+                case ShaderOp.ENDIF: {
+                    lines.push("}" + (type === ShaderOp.ENDIF ? "" : " else {"));
                     break;
                 }
             }
@@ -137,7 +173,7 @@ export class ShaderBuilder {
                 expr = expr.replace(new RegExp("texture\\s*\\(\\s*" + i + "\\s*,", "g"), "texture(uChannel" + i + ", ");
             }
         }
-        return expr;
+        return this.replaceComponents(renderer, expr);
     }
 
     private replaceComponents(renderer: Renderer, expr: string): string {
