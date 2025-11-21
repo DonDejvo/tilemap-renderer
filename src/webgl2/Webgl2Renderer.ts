@@ -1,15 +1,16 @@
 import { Camera } from "../Camera";
 import { Color } from "../Color";
 import { geometry } from "../geometry";
-import { DYNAMIC_LAYER_MAX_SPRITES, LAYER_LIFETIME, Renderer, RendererBuilderOptions, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
+import { math } from "../math";
+import { defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
-import { ShaderBuilder } from "../ShaderBuilder";
+import { ShaderBuilderOutput, defaultShaderBuilder, ShaderBuilder } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 import { Framebuffer } from "../webgl/Framebuffer";
 import { ShaderProgram } from "../webgl/ShaderProgram";
 
-const vertexSource = `#version 300 es
+const mainVertex = `#version 300 es
 
 layout(location = 0) in vec2 aVertexPos;
 layout(location = 1) in vec2 aTexCoord;
@@ -19,14 +20,19 @@ layout(location = 3) in vec2 aTileScale;
 layout(location = 4) in float aTileAngle;
 layout(location = 5) in uvec4 aTileRegion;
 
+layout(location=6) in vec4 aMaskColor;
+
 uniform vec2 uViewportDimensions;
 uniform vec2 uCameraPos;
 
 uniform vec2 uTilesetDimensions;
 
 out vec2 uv;
+out vec4 maskColor;
 
 void main() {
+    maskColor = aMaskColor;
+
     vec2 flippedTexCoord = vec2(aTexCoord.x, 1.0 - aTexCoord.y);
     uv = (vec2(aTileRegion.xy) + flippedTexCoord * vec2(aTileRegion.zw)) / uTilesetDimensions;
 
@@ -43,7 +49,7 @@ void main() {
 }
 `;
 
-const fragmentSource = `#version 300 es
+const mainFragment = `#version 300 es
 
 precision mediump float;
 
@@ -58,46 +64,68 @@ void main() {
 }
 `;
 
-const fullscreenVertex = `#version 300 es
+const maskFragment = `#version 300 es
 
-layout(location=0) in vec2 aPos;
-layout(location=1) in vec2 aUv;
+precision mediump float;
+
+in vec2 uv;
+in vec4 maskColor;
+
+uniform mediump sampler2D uSampler;  
+
+out vec4 fragColor;
+
+void main() {
+    vec4 texColor = texture(uSampler, uv);
+    fragColor = vec4(maskColor.rgb, texColor.a * maskColor.a);
+}
+`;
+
+const fullscreenVertex = `#version 300 es
 
 out vec2 uv;
 
 void main() {
-    uv = aUv;
-    gl_Position = vec4(aPos, 0.0, 1.0);
+    float x = float((gl_VertexID & 1) << 2);
+    float y = float((gl_VertexID & 2) << 1);
+
+    gl_Position = vec4(x - 1.0, y - 1.0, 0.0, 1.0);
 }
 `;
 
-const fullscreenFragment = (mainImageBody = "") => `#version 300 es
+const fullscreenFragment = (input: ShaderBuilderOutput) => `#version 300 es
 precision mediump float;
 
-in vec2 uv;
+struct Uniforms {
+${input.uniforms.map(line => "    " + line).join("\n")}
+};
 
-uniform sampler2D uSampler;
-uniform vec2 u_resolution;
-uniform float u_time;
+uniform sampler2D uChannel0;
+uniform sampler2D uChannel1;
+uniform sampler2D uChannel2;
+uniform sampler2D uChannel3;
+uniform sampler2D uChannel4;
+uniform sampler2D uChannel5;
+uniform sampler2D uChannel6;
+uniform sampler2D uChannel7;
+
+uniform Uniforms uniforms;
 
 out vec4 fragColor;
 
-void mainImage(out vec4 fragColor, in vec4 inColor, in vec2 fragCoord) {
-    fragColor = inColor;
-${mainImageBody.split("\n").map(line => "    " + line).join("\n")}
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+${input.mainImage.map(line => "    " + line).join("\n")}
 }
 
 void main() {
-    fragColor = texture(uSampler, vec2(uv.x, 1.0 - uv.y));
-    vec2 fragCoord = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y);
-    mainImage(fragColor, fragColor, fragCoord);
+    vec2 fragCoord = gl_FragCoord.xy;
+    mainImage(fragColor, fragCoord);
 }
 `;
 
 const builderOptions: RendererBuilderOptions = {
     componentMap: { r: "r", g: "g", b: "b", a: "a" },
-    uniformMap: { "$time": "u_time", "$resolution": "u_resolution" },
-    declareVar: (name, type, mutable = true) => {
+    declareVar: (name, type) => {
         return `${type} ${name};`;
     }
 };
@@ -106,16 +134,16 @@ export class Webgl2Renderer implements Renderer {
     private canvas: HTMLCanvasElement;
     private gl!: WebGL2RenderingContext;
     private shaderProgram!: ShaderProgram;
-    private framebuffer!: Framebuffer;
-    private fullscreenProgram!: ShaderProgram;
-    private fullscreenVbo!: WebGLBuffer;
+    private maskShaderProgram!: ShaderProgram;
+    private framebuffers: Framebuffer[];
     private vbo!: WebGLBuffer;
     private ebo!: WebGLBuffer;
     private layersMap: Map<SceneLayer, WebglRendererLayer>;
     private texturesMap: Map<string, TextureInfo>;
     private shaderMap: Map<string, { shader?: ShaderProgram, builder: ShaderBuilder }>;
     private clearColor: Color;
-    initialized: boolean;
+    private initialized: boolean;
+    public pass: RenderPassStage[];
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -124,6 +152,12 @@ export class Webgl2Renderer implements Renderer {
         this.clearColor = new Color(0, 0, 0, 0);
         this.shaderMap = new Map();
         this.initialized = false;
+        this.pass = [defaultPassStage];
+        this.framebuffers = [];
+    }
+
+    public getType(): RendererType {
+        return "webgl2";
     }
 
     public getBuilderOptions(): RendererBuilderOptions {
@@ -141,14 +175,8 @@ export class Webgl2Renderer implements Renderer {
         }
     }
 
-    public addShader(name: string, builder: ShaderBuilder) {
+    public registerShader(name: string, builder: ShaderBuilder) {
         this.shaderMap.set(name, { builder });
-    }
-
-    public setShader(name: string) {
-        const shaderInfo = this.shaderMap.get(name);
-        if (!shaderInfo) throw new Error(`Program not found: ${name}`);
-        this.fullscreenProgram = shaderInfo.shader!;
     }
 
     public setClearColor(color: Color) {
@@ -159,15 +187,21 @@ export class Webgl2Renderer implements Renderer {
         this.canvas.width = width;
         this.canvas.height = height;
 
-        if(this.initialized) {
-            this.framebuffer.destroy();
-
-            this.framebuffer = new Framebuffer(this.gl, width, height);
+        if (this.initialized) {
+            this.initFramebuffers();
         }
     }
 
     public getCanvas() {
         return this.canvas;
+    }
+
+    private initFramebuffers() {
+        for (let i = 0; i < OFFSCREEN_TEXTURES; ++i) {
+            const n = getOffscreenTextureSizeFactor(i)
+            this.framebuffers[i]?.destroy();
+            this.framebuffers[i] = new Framebuffer(this.gl, this.canvas.width * n, this.canvas.height * n);
+        }
     }
 
     public async init() {
@@ -182,16 +216,17 @@ export class Webgl2Renderer implements Renderer {
             }
         }
 
-        this.addShader("default", new ShaderBuilder());
+        this.initFramebuffers();
+
+        this.registerShader("default", defaultShaderBuilder);
 
         for (const shaderInfo of this.shaderMap.values()) {
             const mainImageBody = shaderInfo.builder.build(this);
             shaderInfo.shader = new ShaderProgram(gl, fullscreenVertex, fullscreenFragment(mainImageBody));
         }
 
-        this.setShader("default");
-
-        this.shaderProgram = new ShaderProgram(gl, vertexSource, fragmentSource);
+        this.shaderProgram = new ShaderProgram(gl, mainVertex, mainFragment);
+        this.maskShaderProgram = new ShaderProgram(gl, mainVertex, maskFragment);
 
         this.vbo = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
@@ -217,13 +252,27 @@ export class Webgl2Renderer implements Renderer {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-        this.framebuffer = new Framebuffer(gl, this.canvas.width, this.canvas.height);
-
-        this.fullscreenVbo = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.fullscreenVbo);
-        gl.bufferData(gl.ARRAY_BUFFER, geometry.fullscreenQuad, gl.STATIC_DRAW);
-
         this.initialized = true;
+    }
+
+    private renderScene(framebuffer: Framebuffer, shaderProgram: ShaderProgram, camera: Camera, clearColor: Color, layers: WebglRendererLayer[]) {
+        framebuffer.bind();
+
+        this.gl.clearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
+        this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+
+        shaderProgram.use();
+
+        this.gl.uniform2f(shaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
+        this.gl.uniform2f(shaderProgram.getUniform("uCameraPos"), camera.position.x, camera.position.y);
+
+        this.gl.activeTexture(this.gl.TEXTURE0);
+
+        for (let layer of layers) {
+            layer.render(shaderProgram);
+        }
+
+        framebuffer.unbind();
     }
 
     public render(scene: Scene, camera: Camera) {
@@ -240,41 +289,80 @@ export class Webgl2Renderer implements Renderer {
             layers.push(layer);
         }
 
-        this.framebuffer.bind();
-
-        this.gl.clearColor(this.clearColor.r, this.clearColor.g, this.clearColor.b, this.clearColor.a);
-        this.gl.clear(this.gl.COLOR_BUFFER_BIT);
-
-        this.shaderProgram.use();
-
-        this.gl.uniform2f(this.shaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
-        this.gl.uniform2f(this.shaderProgram.getUniform("uCameraPos"), camera.position.x, camera.position.y);
-
-        for (let layer of layers) {
-            layer.render();
-        }
-
-        this.framebuffer.unbind();
-
-        this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-
-        this.fullscreenProgram.use();
+        this.renderScene(this.framebuffers[0], this.shaderProgram, camera, this.clearColor, layers);
+        this.renderScene(this.framebuffers[1], this.maskShaderProgram, camera, maskClearColor, layers);
 
         const time = performance.now() * 0.001;
-        this.gl.uniform1f(this.fullscreenProgram.getUniform("u_time"), time);
-        this.gl.uniform2f(this.fullscreenProgram.getUniform("u_resolution"), this.canvas.width, this.canvas.height);
 
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.fullscreenVbo);
+        for (let i = 0; i < this.pass.length; ++i) {
+            const passStage = this.pass[i];
 
-        this.gl.enableVertexAttribArray(0);
-        this.gl.vertexAttribPointer(0, 2, this.gl.FLOAT, false, 16, 0);
+            const shaderInfo = this.shaderMap.get(passStage.shader);
+            if (!shaderInfo) {
+                throw new Error("Unknown shader " + passStage.shader);
+            }
 
-        this.gl.enableVertexAttribArray(1);
-        this.gl.vertexAttribPointer(1, 2, this.gl.FLOAT, false, 16, 8);
+            const shader = shaderInfo.shader!;
 
-        this.gl.bindTexture(this.gl.TEXTURE_2D, this.framebuffer.texture);
+            let sw = this.canvas.width, sh = this.canvas.height;
+            if (passStage.output !== -1) {
+                const outFbo = this.framebuffers[math.clamp(passStage.output, 0, OFFSCREEN_TEXTURES - 1)];
+                sw = outFbo.width;
+                sh = outFbo.height;
+                outFbo.bind();
+            } else {
+                this.gl.viewport(0, 0, sw, sh);
+            }
 
-        this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
+            shader.use();
+
+            const stageUniforms = [{ name: "time", value: time }, { name: "resolution", value: [sw, sh] }].concat(passStage.uniforms ?? []);
+
+            const uniforms = shaderInfo.builder.getUniforms();
+            for (let uniform of uniforms) {
+                const stageUniform = stageUniforms.find(elem => elem.name === uniform.name);
+                if (stageUniform) {
+                    const value = typeof stageUniform.value === "number" ? [stageUniform.value] : stageUniform.value;
+                    const loc = shader.getUniform("uniforms." + uniform.name);
+                    switch (uniform.type) {
+                        case "float":
+                            this.gl.uniform1f(loc, value[0]);
+                            break;
+                        case "vec2":
+                            this.gl.uniform2fv(loc, value);
+                            break;
+                        case "vec3":
+                            this.gl.uniform3fv(loc, value);
+                            break;
+                        case "vec4":
+                            this.gl.uniform4fv(loc, value);
+                            break;
+                    }
+                }
+            }
+
+            for (let c = 0; c < MAX_CHANNELS; c++) {
+                const texIndex = passStage.inputs[c] ?? passStage.inputs[0];
+                const texture = this.framebuffers[math.clamp(texIndex, 0, OFFSCREEN_TEXTURES - 1)].texture;
+
+                this.gl.activeTexture(this.gl.TEXTURE0 + c);
+                this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+
+                const loc = shader.getUniform(`uChannel${c}`);
+                this.gl.uniform1i(loc, c);
+            }
+
+            this.gl.drawArrays(this.gl.TRIANGLES, 0, 3);
+
+            for (let c = 0; c < MAX_CHANNELS; c++) {
+                this.gl.activeTexture(this.gl.TEXTURE0 + c);
+                this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+            }
+
+            if (passStage.output !== -1) {
+                this.framebuffers[math.clamp(passStage.output, 0, OFFSCREEN_TEXTURES - 1)].unbind();
+            }
+        }
 
         for (const [sceneLayer, rendererLayer] of this.layersMap) {
             if (rendererLayer.lifetime <= 0) {
@@ -296,10 +384,6 @@ export class Webgl2Renderer implements Renderer {
 
     public getEBO() {
         return this.ebo;
-    }
-
-    public getShaderProgram() {
-        return this.shaderProgram;
     }
 
     public createTexture(imageData: TexImageSource) {
@@ -386,7 +470,7 @@ class WebglRendererLayer {
         gl.enableVertexAttribArray(1);
         gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 8);
 
-        const stride = 28;
+        const stride = 44;
 
         this.spriteBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteBuffer);
@@ -394,15 +478,14 @@ class WebglRendererLayer {
 
         gl.enableVertexAttribArray(2);
         gl.vertexAttribPointer(2, 2, gl.FLOAT, false, stride, 0);
-
         gl.enableVertexAttribArray(3);
         gl.vertexAttribPointer(3, 2, gl.FLOAT, false, stride, 8);
-
         gl.enableVertexAttribArray(4);
         gl.vertexAttribPointer(4, 1, gl.FLOAT, false, stride, 16);
-
         gl.enableVertexAttribArray(5);
         gl.vertexAttribIPointer(5, 4, gl.UNSIGNED_SHORT, stride, 20);
+        gl.enableVertexAttribArray(6);
+        gl.vertexAttribPointer(6, 4, gl.FLOAT, false, stride, 28);
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, renderer.getEBO());
 
@@ -436,7 +519,7 @@ class WebglRendererLayer {
 
     }
 
-    public render() {
+    public render(shaderProgram: ShaderProgram) {
         const gl = this.gl;
 
         gl.bindVertexArray(this.vao);
@@ -445,7 +528,7 @@ class WebglRendererLayer {
             const texInfo = this.renderer.getTextureInfo(drawCall.texName);
             gl.bindTexture(gl.TEXTURE_2D, texInfo.texture!);
 
-            this.gl.uniform2f(this.renderer.getShaderProgram().getUniform("uTilesetDimensions"), texInfo.tileset.imageWidth, texInfo.tileset.imageHeight);
+            this.gl.uniform2f(shaderProgram.getUniform("uTilesetDimensions"), texInfo.tileset.imageWidth, texInfo.tileset.imageHeight);
 
             gl.drawElements(gl.TRIANGLES, 6 * drawCall.spriteCount, gl.UNSIGNED_INT, drawCall.spriteOffset * 6 * 4);
         }

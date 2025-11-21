@@ -1,3 +1,4 @@
+import { Color } from "./Color";
 import { Tileset } from "./Tileset";
 import { Vector } from "./Vector";
 
@@ -25,6 +26,7 @@ export class Sprite {
     offset: Vector;
     scale: Vector;
     angle: number;
+    maskColor: Color;
 
     constructor(params: SpriteParams) {
         this.zIndex = params.zIndex || 0;
@@ -35,6 +37,7 @@ export class Sprite {
         this.offset = new Vector();
         this.scale = new Vector(1, 1);
         this.angle = params.angle || 0;
+        this.maskColor = new Color(0, 0, 0, 1);
     }
 
     public setTilesetRegion(x: number, y: number, width: number = 1, height: number = 1) {

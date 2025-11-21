@@ -11,6 +11,13 @@ export const STATIC_LAYER_MAX_SPRITES = 100000;
 export const DYNAMIC_LAYER_MAX_SPRITES = 100000;
 export const LAYER_LIFETIME = 30;
 export const LAYER_MAX_TEXTURES = 16;
+export const OFFSCREEN_TEXTURES = 12;
+export const MAX_CHANNELS = 8;
+export const UNIFORMS_MAX_SIZE = 32;
+
+export const getOffscreenTextureSizeFactor = (idx: number) => {
+    return 1 / (1 << Math.max(0, Math.floor((idx - 2) * 0.5)));
+}
 
 export interface TextureInfo {
     texture?: WebGLTexture | GPUTexture;
@@ -18,15 +25,26 @@ export interface TextureInfo {
     image: TexImageSource;
 }
 
+export interface RenderPassStage {
+    shader: string;
+    inputs: number[];
+    output: number;
+    uniforms?: ({ name: string; value: number } | { name: string; value: number[] })[];
+}
+
+export const defaultPassStage: RenderPassStage = { shader: "default", inputs: [0], output: -1 };
+
 export type RendererType = "webgl" | "webgl2" | "webgpu";
 
 export interface RendererBuilderOptions {
     componentMap: Record<string, string>;
-    uniformMap: Record<string, string>;
-    declareVar: (name: string, type: VariableType, mutable?: boolean) => string;
+    declareVar: (name: string, type: VariableType, isUniform?: boolean) => string;
 }
 
+export const maskClearColor = new Color(0, 0, 0, 1);
+
 export interface Renderer {
+    getType(): RendererType;
     addTextures(tilesets: Tileset[], images: Record<string, TexImageSource>): void;
     init(): Promise<void>;
     render: (scene: Scene, camera: Camera) => void;
@@ -34,8 +52,8 @@ export interface Renderer {
     getCanvas: () => HTMLCanvasElement;
     setClearColor: (color: Color) => void;
     getBuilderOptions(): RendererBuilderOptions;
-    addShader: (name: string, builder: ShaderBuilder) => void;
-    setShader: (name: string) => void;
+    registerShader: (name: string, builder: ShaderBuilder) => void;
+    pass: RenderPassStage[];
 }
 
 export const createRenderer = (type: RendererType): Renderer => {
@@ -49,6 +67,6 @@ export const createRenderer = (type: RendererType): Renderer => {
         case "webgpu":
             return new WebgpuRenderer(canvas);
         default:
-            throw new Error("Unknwn renderer type");
+            throw new Error("Unknown renderer type");
     }
 }

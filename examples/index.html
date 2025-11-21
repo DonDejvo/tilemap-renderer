@@ -105,6 +105,7 @@
 
         const assetsUrl = "";
         const rendererContext = "webgpu";
+        let k = 8;
 
         class KeyboardInput {
             constructor() {
@@ -151,6 +152,7 @@
                     tilesetRegion: { x: 0, y: 0 },
                     isStatic: false
                 });
+                this.sprite.maskColor.set(1, 0, 0, 1);
 
                 this.animator = new TilemapRenderer.Animator(this.sprite);
 
@@ -272,26 +274,94 @@
 
             renderer.addTextures([skeletonBodyTileset], { ["BODY_skeleton"]: skeletonBodyImage });
 
-            const builder = new TilemapRenderer.ShaderBuilder();
+            const neonExtract = new TilemapRenderer.ShaderBuilder();
 
-            builder
-                .declare("center", "vec2")
-                .declare("dist", "float")
-                .declare("pulse", "float")
-                .declare("inverted", "vec3")
-                .declare("modifiedColor", "vec3")
-                .set("center", "0.5 * $resolution.xy")
-                .set("dist", "2.0 * length($fragCoord - center) / min($resolution.x, $resolution.y)")
-                .set("pulse", "0.25 + 0.75 * sin($time * 0.5)")
-                .set("inverted", "vec3(1.0) - fragColor.rgb")
-                .set("modifiedColor", "mix(inverted, vec3(0.0), dist * pulse)")
-                .set("fragColor", "vec4(modifiedColor, fragColor.a)");
+            neonExtract
+                .uniform("threshold", "float")
+                .declare("uv", "vec2")
+                .declare("color", "vec4")
+                .declare("b", "vec3")
+                .set("uv", "fragCoord / uniforms.resolution")
+                .set("color", "texture(0, uv)")
+                .set("b", "max(color.rgb - vec3(uniforms.threshold), vec3(0.0))")
+                .set("fragColor", "vec4(b, 1.0)");
 
-            renderer.addShader("myShader", builder);
+            const neonBlurH = new TilemapRenderer.ShaderBuilder();
+
+            neonBlurH
+                .declare("uv", "vec2")
+                .declare("w", "float")
+                .declare("sum", "vec4")
+                .set("uv", "fragCoord / uniforms.resolution")
+                .set("w", "1.0 / uniforms.resolution.x")
+                .set("sum",
+                    `(
+                    texture(0, uv + vec2(-3.0 * w, 0.0)) * 0.05 +
+                    texture(0, uv + vec2(-2.0 * w, 0.0)) * 0.1 +
+                    texture(0, uv + vec2(-1.0 * w, 0.0)) * 0.2 +
+                    texture(0, uv) * 0.3 +
+                    texture(0, uv + vec2(1.0 * w, 0.0)) * 0.2 +
+                    texture(0, uv + vec2(2.0 * w, 0.0)) * 0.1 +
+                    texture(0, uv + vec2(3.0 * w, 0.0)) * 0.05
+                )`
+                )
+                .set("fragColor", "sum");
+
+            const neonBlurV = new TilemapRenderer.ShaderBuilder();
+
+            neonBlurV
+                .declare("uv", "vec2")
+                .declare("h", "float")
+                .declare("sum", "vec4")
+                .set("uv", "fragCoord / uniforms.resolution")
+                .set("h", "1.0 / uniforms.resolution.y")
+                .set("sum",
+                    `(
+            texture(0, uv + vec2(0.0, -3.0 * h)) * 0.05 +
+                    texture(0, uv + vec2(0.0, -2.0 * h)) * 0.1 +
+                    texture(0, uv + vec2(0.0, -1.0 * h)) * 0.2 +
+                    texture(0, uv) * 0.3 +
+                    texture(0, uv + vec2(0.0, 1.0 * h)) * 0.2 +
+                    texture(0, uv + vec2(0.0, 2.0 * h)) * 0.1 +
+                    texture(0, uv + vec2(0.0, 3.0 * h)) * 0.05
+                )`
+                )
+                .set("fragColor", "sum");
+
+            const neonComposite = new TilemapRenderer.ShaderBuilder();
+
+            neonComposite
+                .declare("uv", "vec2")
+                .declare("base", "vec4")
+                .declare("glow", "vec4")
+                .set("uv", "fragCoord / uniforms.resolution")
+                .set("base", "texture(0, uv)")
+                .set("glow", "texture(1, uv)")
+                .set("fragColor", "vec4(base.rgb + glow.rgb * 1.5, 1.0)");
+
+            renderer.registerShader("blurX", neonBlurH);
+            renderer.registerShader("blurY", neonBlurV);
+            renderer.registerShader("neonExtract", neonExtract);
+            renderer.registerShader("neonComposite", neonComposite);
 
             await renderer.init();
             renderer.setClearColor(new TilemapRenderer.Color(0.5, 0.5, 0.5));
-            renderer.setShader("myShader");
+
+
+            renderer.pass = [
+                // downscale to quarter
+                { shader: "default", inputs: [1], output: k },
+
+                // neon glow extraction
+                { shader: "neonExtract", inputs: [k], output: k + 1, uniforms: [{ name: "threshold", value: 0.5 }] },
+
+                // blur
+                { shader: "blurX", inputs: [k + 1], output: k },
+                { shader: "blurY", inputs: [k], output: k + 1 },
+
+                // composite with original full scene
+                { shader: "neonComposite", inputs: [0, k + 1], output: -1 }
+            ];
 
             const draw = () => {
                 requestAnimationFrame(now => {

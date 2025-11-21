@@ -1,9 +1,10 @@
 import { Camera } from "../Camera";
 import { Color } from "../Color";
 import { geometry } from "../geometry";
-import { DYNAMIC_LAYER_MAX_SPRITES, LAYER_LIFETIME, Renderer, RendererBuilderOptions, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
+import { math } from "../math";
+import { defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
-import { ShaderBuilder } from "../ShaderBuilder";
+import { defaultShaderBuilder, ShaderBuilder, ShaderBuilderOutput } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 import { Framebuffer } from "./Framebuffer";
@@ -17,6 +18,7 @@ attribute vec2 aTilePos;
 attribute float aTileAngle;
 attribute vec2 aTileScale;
 attribute vec4 aTileRegion;
+attribute vec4 aMaskColor;
 
 uniform vec2 uViewportDimensions;
 uniform vec2 uCameraPos;
@@ -24,8 +26,11 @@ uniform vec2 uCameraPos;
 uniform vec2 uTilesetDimensions;
 
 varying vec2 uv;
+varying vec4 maskColor;
 
 void main() {
+    maskColor = aMaskColor;
+
     vec2 flippedTexCoord = vec2(aTexCoord.x, 1.0 - aTexCoord.y);
     uv = (vec2(aTileRegion.xy) + flippedTexCoord * vec2(aTileRegion.zw)) / uTilesetDimensions;
 
@@ -55,73 +60,82 @@ void main() {
 }
 `;
 
+const maskFragment = `
+
+precision mediump float;
+
+varying vec2 uv;
+varying vec4 maskColor;
+
+uniform mediump sampler2D uSampler;  
+
+void main() {
+    vec4 texColor = texture2D(uSampler, uv);
+    gl_FragColor = vec4(maskColor.rgb, texColor.a * maskColor.a);
+}
+`;
+
 const fullscreenVertex = `
 
 attribute vec2 aPos;
-attribute vec2 aUv;
-
-varying vec2 uv;
 
 void main() {
-    uv = aUv;
     gl_Position = vec4(aPos, 0.0, 1.0);
 }
 `;
 
-const fullscreenFragment = (mainImageBody = "") => `
+const fullscreenFragment = (input: ShaderBuilderOutput) => `
+#define texture texture2D
+
 precision mediump float;
 
-varying vec2 uv;
+struct Uniforms {
+${input.uniforms.map(line => "    " + line).join("\n")}
+};
 
-uniform sampler2D uSampler;
-uniform vec2 u_resolution;
-uniform float u_time;
+uniform sampler2D uChannel0;
+uniform sampler2D uChannel1;
+uniform sampler2D uChannel2;
+uniform sampler2D uChannel3;
+uniform sampler2D uChannel4;
+uniform sampler2D uChannel5;
+uniform sampler2D uChannel6;
+uniform sampler2D uChannel7;
 
-vec4 mainImage(vec4 inColor, vec2 fragCoord) {
-    vec4 fragColor = inColor;
-${mainImageBody.split("\n").map(line => "    " + line).join("\n")}
-    return fragColor;
+uniform Uniforms uniforms;
+
+void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+${input.mainImage.map(line => "    " + line).join("\n")}
 }
 
 void main() {
-    gl_FragColor = texture2D(uSampler, vec2(uv.x, 1.0 - uv.y));
-    vec2 fragCoord = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y);
-    gl_FragColor = mainImage(gl_FragColor, fragCoord);
+    vec2 fragCoord = vec2(gl_FragCoord.x, gl_FragCoord.y);
+    mainImage(gl_FragColor, fragCoord);
 }
 `;
 
 const builderOptions: RendererBuilderOptions = {
     componentMap: { r: "r", g: "g", b: "b", a: "a" },
-    uniformMap: { "$time": "u_time", "$resolution": "u_resolution" },
-    declareVar: (name, type, mutable = true) => {
+    declareVar: (name, type) => {
         return `${type} ${name};`;
     }
 };
 
-interface AttribLocations {
-    vertexPos: number;
-    texCoord: number;
-    tilePos: number;
-    tileScale: number;
-    tileAngle: number;
-    tileRegion: number;
-}
-
 export class WebglRenderer implements Renderer {
     private canvas: HTMLCanvasElement;
     private gl!: WebGLRenderingContext;
-    private mainProgram!: ShaderProgram;
-    private fullscreenProgram!: ShaderProgram;
+    private shaderProgram!: ShaderProgram;
+    private maskShaderProgram!: ShaderProgram;
     private fullscreenVbo!: WebGLBuffer;
+    private framebuffers: Framebuffer[];
     private vbo!: WebGLBuffer;
     private ebo!: WebGLBuffer;
     private layersMap: Map<SceneLayer, WebglRendererLayer>;
     private texturesMap: Map<string, TextureInfo>;
     private shaderMap: Map<string, { shader?: ShaderProgram, builder: ShaderBuilder }>;
-    private attribLocations!: AttribLocations;
     private clearColor: Color;
-    private framebuffer!: Framebuffer;
-    initialized: boolean;
+    private initialized: boolean;
+    public pass: RenderPassStage[];
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -130,6 +144,12 @@ export class WebglRenderer implements Renderer {
         this.clearColor = new Color(0, 0, 0, 0);
         this.shaderMap = new Map();
         this.initialized = false;
+        this.pass = [defaultPassStage];
+        this.framebuffers = [];
+    }
+
+    public getType(): RendererType {
+        return "webgl";
     }
 
     public getBuilderOptions(): RendererBuilderOptions {
@@ -147,14 +167,8 @@ export class WebglRenderer implements Renderer {
         }
     }
 
-    public addShader(name: string, builder: ShaderBuilder) {
+    public registerShader(name: string, builder: ShaderBuilder) {
         this.shaderMap.set(name, { builder });
-    }
-
-    public setShader(name: string) {
-        const shaderInfo = this.shaderMap.get(name);
-        if (!shaderInfo) throw new Error(`Program not found: ${name}`);
-        this.fullscreenProgram = shaderInfo.shader!;
     }
 
     public setClearColor(color: Color) {
@@ -165,15 +179,21 @@ export class WebglRenderer implements Renderer {
         this.canvas.width = width;
         this.canvas.height = height;
 
-        if(this.initialized) {
-            this.framebuffer.destroy();
-
-            this.framebuffer = new Framebuffer(this.gl, width, height);
+        if (this.initialized) {
+            this.initFramebuffers();
         }
     }
 
     public getCanvas() {
         return this.canvas;
+    }
+
+    private initFramebuffers() {
+        for (let i = 0; i < OFFSCREEN_TEXTURES; ++i) {
+            const n = getOffscreenTextureSizeFactor(i);
+            this.framebuffers[i]?.destroy();
+            this.framebuffers[i] = new Framebuffer(this.gl, this.canvas.width * n, this.canvas.height * n);
+        }
     }
 
     public async init() {
@@ -188,27 +208,16 @@ export class WebglRenderer implements Renderer {
             }
         }
 
-        this.addShader("default", new ShaderBuilder());
+        this.registerShader("default", defaultShaderBuilder);
 
         for (const shaderInfo of this.shaderMap.values()) {
             const mainImageBody = shaderInfo.builder.build(this);
-            
+
             shaderInfo.shader = new ShaderProgram(gl, fullscreenVertex, fullscreenFragment(mainImageBody));
-            
         }
 
-        this.setShader("default");
-
-        this.mainProgram = new ShaderProgram(gl, mainVertex, mainFragment);
-
-        this.attribLocations = {
-            vertexPos: this.mainProgram.getAttrib("aVertexPos"),
-            texCoord: this.mainProgram.getAttrib("aTexCoord"),
-            tilePos: this.mainProgram.getAttrib("aTilePos"),
-            tileScale: this.mainProgram.getAttrib("aTileScale"),
-            tileAngle: this.mainProgram.getAttrib("aTileAngle"),
-            tileRegion: this.mainProgram.getAttrib("aTileRegion")
-        };
+        this.shaderProgram = new ShaderProgram(gl, mainVertex, mainFragment);
+        this.maskShaderProgram = new ShaderProgram(gl, mainVertex, maskFragment);
 
         this.vbo = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
@@ -232,13 +241,33 @@ export class WebglRenderer implements Renderer {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-        this.framebuffer = new Framebuffer(gl, this.canvas.width, this.canvas.height);
+        this.initFramebuffers();
 
         this.fullscreenVbo = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.fullscreenVbo);
         gl.bufferData(gl.ARRAY_BUFFER, geometry.fullscreenQuad, gl.STATIC_DRAW);
 
         this.initialized = true;
+    }
+
+    private renderScene(framebuffer: Framebuffer, shaderProgram: ShaderProgram, camera: Camera, clearColor: Color, layers: WebglRendererLayer[]) {
+        framebuffer.bind();
+
+        this.gl.clearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
+        this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+
+        shaderProgram.use();
+
+        this.gl.uniform2f(shaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
+        this.gl.uniform2f(shaderProgram.getUniform("uCameraPos"), camera.position.x, camera.position.y);
+
+        this.gl.activeTexture(this.gl.TEXTURE0);
+
+        for (let layer of layers) {
+            layer.render(shaderProgram);
+        }
+
+        framebuffer.unbind();
     }
 
     public render(scene: Scene, camera: Camera) {
@@ -255,46 +284,89 @@ export class WebglRenderer implements Renderer {
             layers.push(layer);
         }
 
-        this.framebuffer.bind();
-
-        this.gl.clearColor(this.clearColor.r, this.clearColor.g, this.clearColor.b, this.clearColor.a);
-        this.gl.clear(this.gl.COLOR_BUFFER_BIT);
-
-        this.mainProgram.use();
-
-        this.gl.uniform2f(this.mainProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
-        this.gl.uniform2f(this.mainProgram.getUniform("uCameraPos"), camera.position.x, camera.position.y);
-
-        for (let layer of layers) {
-            layer.render();
-        }
-
-        this.framebuffer.unbind();
-
-        this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-
-        this.fullscreenProgram.use();
+        this.renderScene(this.framebuffers[0], this.shaderProgram, camera, this.clearColor, layers);
+        this.renderScene(this.framebuffers[1], this.maskShaderProgram, camera, maskClearColor, layers);
 
         const time = performance.now() * 0.001;
-        this.gl.uniform1f(this.fullscreenProgram.getUniform("u_time"), time);
-        this.gl.uniform2f(this.fullscreenProgram.getUniform("u_resolution"), this.canvas.width, this.canvas.height);
 
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.fullscreenVbo);
+        for (let i = 0; i < this.pass.length; ++i) {
+            const passStage = this.pass[i];
 
-        const fullscreenAttribs = {
-            pos: this.fullscreenProgram.getAttrib("aPos"),
-            uv: this.fullscreenProgram.getAttrib("aUv")
-        };
+            const shaderInfo = this.shaderMap.get(passStage.shader);
+            if (!shaderInfo) {
+                throw new Error("Unknown shader " + passStage.shader);
+            }
 
-        this.gl.enableVertexAttribArray(fullscreenAttribs.pos);
-        this.gl.vertexAttribPointer(fullscreenAttribs.pos, 2, this.gl.FLOAT, false, 16, 0);
+            const shader = shaderInfo.shader!;
 
-        this.gl.enableVertexAttribArray(fullscreenAttribs.uv);
-        this.gl.vertexAttribPointer(fullscreenAttribs.uv, 2, this.gl.FLOAT, false, 16, 8);
+            let sw = this.canvas.width, sh = this.canvas.height;
+            if (passStage.output !== -1) {
+                const outFbo = this.framebuffers[math.clamp(passStage.output, 0, OFFSCREEN_TEXTURES - 1)];
+                sw = outFbo.width;
+                sh = outFbo.height;
+                outFbo.bind();
+            } else {
+                this.gl.viewport(0, 0, sw, sh);
+            }
 
-        this.gl.bindTexture(this.gl.TEXTURE_2D, this.framebuffer.texture);
+            shader.use();
+            
+            const stageUniforms = [{ name: "time", value: time }, { name: "resolution", value: [sw, sh] }].concat(passStage.uniforms ?? []);
 
-        this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
+            const uniforms = shaderInfo.builder.getUniforms();
+            for (let uniform of uniforms) {
+                const stageUniform = stageUniforms.find(elem => elem.name === uniform.name);
+                if (stageUniform) {
+                    const value = typeof stageUniform.value === "number" ? [stageUniform.value] : stageUniform.value;
+                    const loc = shader.getUniform("uniforms." + uniform.name);
+                    switch (uniform.type) {
+                        case "float":
+                            this.gl.uniform1f(loc, value[0]);
+                            break;
+                        case "vec2":
+                            this.gl.uniform2fv(loc, value);
+                            break;
+                        case "vec3":
+                            this.gl.uniform3fv(loc, value);
+                            break;
+                        case "vec4":
+                            this.gl.uniform4fv(loc, value);
+                            break;
+                    }
+                }
+            }
+
+            for (let c = 0; c < MAX_CHANNELS; c++) {
+                const texIndex = passStage.inputs[c] ?? passStage.inputs[0];
+                const texture = this.framebuffers[math.clamp(texIndex, 0, OFFSCREEN_TEXTURES - 1)].texture;
+
+                this.gl.activeTexture(this.gl.TEXTURE0 + c);
+                this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+
+                const loc = shader.getUniform(`uChannel${c}`);
+                this.gl.uniform1i(loc, c);
+            }
+
+            const fullscreenPosLoc = shader.getAttrib("aPos");
+
+            this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.fullscreenVbo);
+
+            this.gl.enableVertexAttribArray(fullscreenPosLoc);
+            this.gl.vertexAttribPointer(fullscreenPosLoc, 2, this.gl.FLOAT, false, 16, 0);
+
+            this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
+
+            this.gl.disableVertexAttribArray(fullscreenPosLoc);
+
+            for (let c = 0; c < MAX_CHANNELS; c++) {
+                this.gl.activeTexture(this.gl.TEXTURE0 + c);
+                this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+            }
+
+            if (passStage.output !== -1) {
+                this.framebuffers[math.clamp(passStage.output, 0, OFFSCREEN_TEXTURES - 1)].unbind();
+            }
+        }
 
         for (const [sceneLayer, rendererLayer] of this.layersMap) {
             if (rendererLayer.lifetime <= 0) {
@@ -316,14 +388,6 @@ export class WebglRenderer implements Renderer {
 
     public getEBO() {
         return this.ebo;
-    }
-
-    public getShaderProgram() {
-        return this.mainProgram;
-    }
-
-    public getAttribLocations() {
-        return this.attribLocations;
     }
 
     public createTexture(imageData: TexImageSource) {
@@ -399,12 +463,20 @@ class WebglRendererLayer {
         }
     }
 
-    public render() {
+    public render(shaderProgram: ShaderProgram) {
         const gl = this.gl;
 
-        const attribLocations = this.renderer.getAttribLocations();
-
         gl.bindBuffer(gl.ARRAY_BUFFER, this.renderer.getVBO());
+
+        const attribLocations = {
+            vertexPos: shaderProgram.getAttrib("aVertexPos"),
+            texCoord: shaderProgram.getAttrib("aTexCoord"),
+            tilePos: shaderProgram.getAttrib("aTilePos"),
+            tileScale: shaderProgram.getAttrib("aTileScale"),
+            tileAngle: shaderProgram.getAttrib("aTileAngle"),
+            tileRegion: shaderProgram.getAttrib("aTileRegion"),
+            maskColor: shaderProgram.getAttrib("aMaskColor")
+        };
 
         gl.enableVertexAttribArray(attribLocations.vertexPos);
         gl.vertexAttribPointer(attribLocations.vertexPos, 2, gl.FLOAT, false, 16, 0);
@@ -413,7 +485,7 @@ class WebglRendererLayer {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteBuffer);
 
-        const stride = 28;
+        const stride = 44;
 
         gl.enableVertexAttribArray(attribLocations.tilePos);
         gl.vertexAttribPointer(attribLocations.tilePos, 2, gl.FLOAT, false, stride, 0);
@@ -423,6 +495,8 @@ class WebglRendererLayer {
         gl.vertexAttribPointer(attribLocations.tileAngle, 1, gl.FLOAT, false, stride, 16);
         gl.enableVertexAttribArray(attribLocations.tileRegion);
         gl.vertexAttribPointer(attribLocations.tileRegion, 4, gl.UNSIGNED_SHORT, false, stride, 20);
+        gl.enableVertexAttribArray(attribLocations.maskColor);
+        gl.vertexAttribPointer(attribLocations.maskColor, 4, gl.FLOAT, false, stride, 28);
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.renderer.getEBO());
 
@@ -430,10 +504,20 @@ class WebglRendererLayer {
             const texInfo = this.renderer.getTextureInfo(drawCall.texName);
             gl.bindTexture(gl.TEXTURE_2D, texInfo.texture!);
 
-            this.gl.uniform2f(this.renderer.getShaderProgram().getUniform("uTilesetDimensions"), texInfo.tileset.imageWidth, texInfo.tileset.imageHeight);
+            this.gl.uniform2f(shaderProgram.getUniform("uTilesetDimensions"), texInfo.tileset.imageWidth, texInfo.tileset.imageHeight);
 
             gl.drawElements(gl.TRIANGLES, 6 * drawCall.spriteCount, gl.UNSIGNED_SHORT, drawCall.spriteOffset * 6 * 2);
         }
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+
+        gl.disableVertexAttribArray(attribLocations.vertexPos);
+        gl.disableVertexAttribArray(attribLocations.texCoord);
+        gl.disableVertexAttribArray(attribLocations.tilePos);
+        gl.disableVertexAttribArray(attribLocations.tileScale);
+        gl.disableVertexAttribArray(attribLocations.tileAngle);
+        gl.disableVertexAttribArray(attribLocations.tileRegion);
+        gl.disableVertexAttribArray(attribLocations.maskColor);
 
         this.lifetime = LAYER_LIFETIME;
     }

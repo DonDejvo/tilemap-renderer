@@ -2,10 +2,12 @@ export class ShaderProgram {
     private gl: WebGL2RenderingContext | WebGLRenderingContext;
     private program: WebGLProgram;
     private uniforms: Map<string, WebGLUniformLocation | null>;
+    private attribs: Map<string, number>;
 
     constructor(gl: WebGL2RenderingContext | WebGLRenderingContext, vertSource: string, fragSource: string) {
         this.gl = gl;
         this.uniforms = new Map();
+        this.attribs = new Map();
 
         const vertexShader = this.compileShader(gl.VERTEX_SHADER, vertSource);
         const fragmentShader = this.compileShader(gl.FRAGMENT_SHADER, fragSource);
@@ -45,10 +47,6 @@ export class ShaderProgram {
     public getUniform(name: string) {
         if(!this.uniforms.has(name)) {
             const loc = this.gl.getUniformLocation(this.program, name);
-            if(!loc) {
-                console.log("Could not get uniform location:", name);
-            }
-
             this.uniforms.set(name, loc);
         }
 
@@ -56,6 +54,9 @@ export class ShaderProgram {
     }
 
     public getAttrib(name: string) {
-        return this.gl.getAttribLocation(this.program, name);
+        if(!this.attribs.has(name)) {
+            this.attribs.set(name, this.gl.getAttribLocation(this.program, name));
+        }
+        return this.attribs.get(name)!;
     }
 }

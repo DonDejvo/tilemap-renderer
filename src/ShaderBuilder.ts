@@ -1,4 +1,4 @@
-import { Renderer } from "./Renderer";
+import { MAX_CHANNELS, Renderer } from "./Renderer";
 
 export enum ShaderOp {
     DECLARE,
@@ -6,25 +6,47 @@ export enum ShaderOp {
     ADD,
     SUB,
     MUL,
-    DIV
+    DIV,
+    UNIFORM
 }
+
+export interface ShaderBuilderOutput {
+    mainImage: string[];
+    uniforms: string[];
+};
 
 export type VariableType = "float" | "vec2" | "vec3" | "vec4";
 
-export type DeclareOp = [ShaderOp.DECLARE, name: string, type: VariableType, mutable?: boolean];
+const getComponentCountByType = (type: VariableType) => {
+    switch (type) {
+        case "float": return 1;
+        case "vec2": return 2;
+        case "vec3": return 3;
+        case "vec4": return 4;
+    }
+}
+
+export type DeclareOp = [ShaderOp.DECLARE, name: string, type: VariableType];
 export type MathOp = [ShaderOp.ADD | ShaderOp.SUB | ShaderOp.MUL | ShaderOp.DIV | ShaderOp.SET, name: string, expr: string];
 
 export type ShaderOperation = DeclareOp | MathOp;
 
 export class ShaderBuilder {
     private ops: ShaderOperation[];
+    private uniforms: { name: string; type: VariableType; offset: number; }[];
+    private uniformOffset: number;
 
     constructor() {
         this.ops = [];
+        this.uniforms = [];
+        this.uniformOffset = 0;
+
+        this.uniform("resolution", "vec2");
+        this.uniform("time", "float");
     }
 
-    public declare(name: string, type: VariableType, mutable = true) {
-        this.ops.push([ShaderOp.DECLARE, name, type, mutable]);
+    public declare(name: string, type: VariableType) {
+        this.ops.push([ShaderOp.DECLARE, name, type]);
         return this;
     }
 
@@ -53,7 +75,17 @@ export class ShaderBuilder {
         return this;
     }
 
-    public build(renderer: Renderer): string {
+    public uniform(name: string, type: VariableType) {
+        this.uniforms.push({ name, type, offset: this.uniformOffset });
+        this.uniformOffset += getComponentCountByType(type);
+        return this;
+    }
+
+    public getUniforms() {
+        return this.uniforms;
+    }
+
+    public build(renderer: Renderer): ShaderBuilderOutput {
         const lines: string[] = [];
 
         for (const op of this.ops) {
@@ -61,8 +93,8 @@ export class ShaderBuilder {
 
             switch (type) {
                 case ShaderOp.DECLARE: {
-                    const [_, varName, varType, mutable] = op as DeclareOp;
-                    const decl = renderer.getBuilderOptions().declareVar(varName, varType, mutable);
+                    const [_, varName, varType] = op as DeclareOp;
+                    const decl = renderer.getBuilderOptions().declareVar(varName, varType);
                     lines.push(decl);
                     break;
                 }
@@ -72,8 +104,8 @@ export class ShaderBuilder {
                 case ShaderOp.SUB:
                 case ShaderOp.MUL:
                 case ShaderOp.DIV: {
-                    const target = this.replaceVariables(renderer, name);
-                    const expr = this.replaceVariables(renderer, arg as string);
+                    const target = name;
+                    const expr = this.replaceExpression(renderer, arg);
                     const line = `${target} ${this.getOpAssignmentSymbol(type)} ${expr};`;
                     lines.push(this.replaceComponents(renderer, line));
                     break;
@@ -81,7 +113,11 @@ export class ShaderBuilder {
             }
         }
 
-        return lines.join("\n");
+        return {
+            mainImage: lines,
+            uniforms: this.uniforms
+                .map(uniform => renderer.getBuilderOptions().declareVar(uniform.name, uniform.type, true))
+        };
     }
 
     private getOpAssignmentSymbol(op: ShaderOp): string {
@@ -95,6 +131,14 @@ export class ShaderBuilder {
         }
     }
 
+    private replaceExpression(renderer: Renderer, expr: string) {
+        if (renderer.getType() !== "webgpu") {
+            for (let i = 0; i < MAX_CHANNELS; ++i) {
+                expr = expr.replace(new RegExp("texture\\s*\\(\\s*" + i + "\\s*,", "g"), "texture(uChannel" + i + ", ");
+            }
+        }
+        return expr;
+    }
 
     private replaceComponents(renderer: Renderer, expr: string): string {
         const componentMap = renderer.getBuilderOptions().componentMap;
@@ -111,11 +155,9 @@ export class ShaderBuilder {
             return out;
         });
     }
-
-
-    private replaceVariables(renderer: Renderer, expr: string): string {
-        return expr.replace(/\$[A-Za-z0-9_]+/g, (match) => {
-            return renderer.getBuilderOptions().uniformMap[match] || match.slice(1);
-        });
-    }
 }
+
+export const defaultShaderBuilder = new ShaderBuilder()
+    .declare("uv", "vec2")
+    .set("uv", "fragCoord / uniforms.resolution")
+    .add("fragColor", "texture(0, uv)");

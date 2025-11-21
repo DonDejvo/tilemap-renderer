@@ -11,6 +11,13 @@ export class Color {
         this.a = a;
     }
 
+    set(r: number, g: number, b: number, a: number) {
+        this.r = r;
+        this.g = g;
+        this.b = b;
+        this.a = a;
+    }
+
     copy(c: Color) {
         this.r = c.r;
         this.g = c.g;

@@ -17,7 +17,7 @@ export const geometry = (() => {
 
     const createSpritesData = (sprites: Sprite[], instanced: boolean = false) => {
         const count = instanced ? 1 : 4;
-        const stride = 28;
+        const stride = 44;
         const buffer = new ArrayBuffer(sprites.length * count * stride);
         const view = new DataView(buffer);
 
@@ -47,6 +47,11 @@ export const geometry = (() => {
                 view.setUint16(offset + 22, regionY, true);
                 view.setUint16(offset + 24, regionW, true);
                 view.setUint16(offset + 26, regionH, true);
+
+                view.setFloat32(offset + 28, sprite.maskColor.r, true);
+                view.setFloat32(offset + 32, sprite.maskColor.g, true);
+                view.setFloat32(offset + 36, sprite.maskColor.b, true);
+                view.setFloat32(offset + 40, sprite.maskColor.a, true);
 
                 offset += stride;
             }
