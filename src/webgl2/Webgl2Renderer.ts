@@ -20,7 +20,8 @@ layout(location = 3) in vec2 aTileScale;
 layout(location = 4) in float aTileAngle;
 layout(location = 5) in uvec4 aTileRegion;
 
-layout(location=6) in vec4 aMaskColor;
+layout(location = 6) in vec4 aTintColor;
+layout(location = 7) in vec4 aMaskColor;
 
 uniform vec2 uViewportDimensions;
 uniform vec2 uCameraPos;
@@ -28,9 +29,11 @@ uniform vec2 uCameraPos;
 uniform vec2 uTilesetDimensions;
 
 out vec2 uv;
+out vec4 tintColor;
 out vec4 maskColor;
 
 void main() {
+    tintColor = aTintColor;
     maskColor = aMaskColor;
 
     vec2 flippedTexCoord = vec2(aTexCoord.x, 1.0 - aTexCoord.y);
@@ -54,13 +57,14 @@ const mainFragment = `#version 300 es
 precision mediump float;
 
 in vec2 uv;
+in vec4 tintColor;
 
 uniform mediump sampler2D uSampler;  
 
 out vec4 fragColor;
 
 void main() {
-    fragColor = texture(uSampler, uv);
+    fragColor = texture(uSampler, uv) * tintColor;
 }
 `;
 
@@ -137,7 +141,6 @@ export class Webgl2Renderer implements Renderer {
     private maskShaderProgram!: ShaderProgram;
     private framebuffers: Framebuffer[];
     private vbo!: WebGLBuffer;
-    private ebo!: WebGLBuffer;
     private layersMap: Map<SceneLayer, WebglRendererLayer>;
     private texturesMap: Map<string, TextureInfo>;
     private shaderMap: Map<string, { shader?: ShaderProgram, builder: ShaderBuilder }>;
@@ -230,27 +233,10 @@ export class Webgl2Renderer implements Renderer {
 
         this.vbo = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
-        const vertices = new Float32Array(STATIC_LAYER_MAX_SPRITES * 4 * 4);
-        for (let i = 0; i < STATIC_LAYER_MAX_SPRITES; ++i) {
-            vertices.set(geometry.quad, i * 4 * 4);
-        }
-
-        gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-
-        const indexCache = [0, 1, 2, 1, 2, 3];
-        this.ebo = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ebo);
-        const indices = new Uint32Array(STATIC_LAYER_MAX_SPRITES * 6);
-        for (let i = 0; i < STATIC_LAYER_MAX_SPRITES; ++i) {
-            for (let j = 0; j < 6; ++j) {
-                indices[i * 6 + j] = indexCache[j] + 4 * i;
-            }
-        }
-
-        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, geometry.quad, gl.STATIC_DRAW);
 
         gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
 
         this.initialized = true;
     }
@@ -261,12 +247,12 @@ export class Webgl2Renderer implements Renderer {
         this.gl.clearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
         this.gl.clear(this.gl.COLOR_BUFFER_BIT);
 
+        this.gl.activeTexture(this.gl.TEXTURE0);
+
         shaderProgram.use();
 
         this.gl.uniform2f(shaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
         this.gl.uniform2f(shaderProgram.getUniform("uCameraPos"), camera.position.x, camera.position.y);
-
-        this.gl.activeTexture(this.gl.TEXTURE0);
 
         for (let layer of layers) {
             layer.render(shaderProgram);
@@ -278,13 +264,13 @@ export class Webgl2Renderer implements Renderer {
     public render(scene: Scene, camera: Camera) {
         const layers: WebglRendererLayer[] = [];
         for (const sceneLayer of scene.getLayersOrdered()) {
+            let layer: WebglRendererLayer;
             if (!this.layersMap.has(sceneLayer)) {
-                const layer = new WebglRendererLayer(this.gl, this, sceneLayer.isStatic);
-                this.layersMap.set(sceneLayer, layer);
+                this.layersMap.set(sceneLayer, new WebglRendererLayer(this.gl, this, sceneLayer.isStatic));
             }
-            const layer = this.layersMap.get(sceneLayer)!;
+            layer = this.layersMap.get(sceneLayer)!;
             if (layer.needsUpdate) {
-                layer.upload(sceneLayer.getSpritesOrdered());
+                layer.uploadSprites(sceneLayer.getSpritesOrdered());
             }
             layers.push(layer);
         }
@@ -382,10 +368,6 @@ export class Webgl2Renderer implements Renderer {
         return this.vbo;
     }
 
-    public getEBO() {
-        return this.ebo;
-    }
-
     public createTexture(imageData: TexImageSource) {
         const gl = this.gl;
 
@@ -438,14 +420,14 @@ export class Webgl2Renderer implements Renderer {
 
 interface DrawCall {
     texName: string;
-    spriteOffset: number;
-    spriteCount: number;
+    offset: number;
+    count: number;
 }
 
 class WebglRendererLayer {
     private gl: WebGL2RenderingContext;
     private renderer: Webgl2Renderer;
-    private spriteBuffer: WebGLBuffer;
+    private instanceBuffer: WebGLBuffer;
     private vao: WebGLVertexArrayObject;
     isStatic: boolean;
     drawCalls: DrawCall[];
@@ -470,33 +452,25 @@ class WebglRendererLayer {
         gl.enableVertexAttribArray(1);
         gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 8);
 
-        const stride = 44;
+        this.instanceBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
 
-        this.spriteBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, (this.isStatic ? STATIC_LAYER_MAX_SPRITES : DYNAMIC_LAYER_MAX_SPRITES) * 4 * stride, this.isStatic ? gl.STATIC_DRAW : gl.DYNAMIC_DRAW);
+        const stride = geometry.spriteStride;
+        gl.bufferData(gl.ARRAY_BUFFER, (this.isStatic ? STATIC_LAYER_MAX_SPRITES : DYNAMIC_LAYER_MAX_SPRITES) * stride, this.isStatic ? gl.STATIC_DRAW : gl.DYNAMIC_DRAW);
 
-        gl.enableVertexAttribArray(2);
-        gl.vertexAttribPointer(2, 2, gl.FLOAT, false, stride, 0);
-        gl.enableVertexAttribArray(3);
-        gl.vertexAttribPointer(3, 2, gl.FLOAT, false, stride, 8);
-        gl.enableVertexAttribArray(4);
-        gl.vertexAttribPointer(4, 1, gl.FLOAT, false, stride, 16);
-        gl.enableVertexAttribArray(5);
-        gl.vertexAttribIPointer(5, 4, gl.UNSIGNED_SHORT, stride, 20);
-        gl.enableVertexAttribArray(6);
-        gl.vertexAttribPointer(6, 4, gl.FLOAT, false, stride, 28);
-
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, renderer.getEBO());
+        for (let i = 2; i <= 7; ++i) {
+            gl.enableVertexAttribArray(i);
+            gl.vertexAttribDivisor(i, 1);
+        }
 
         gl.bindVertexArray(null);
     }
 
-    public upload(sprites: Sprite[]) {
+    public uploadSprites(sprites: Sprite[]) {
         const gl = this.gl;
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteBuffer);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, geometry.createSpritesData(sprites));
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, geometry.createSpritesData(sprites, true));
 
         if (this.isStatic) {
             this.needsUpdate = false;
@@ -510,13 +484,12 @@ class WebglRendererLayer {
             const texName = sprites[i].tileset.name;
 
             if (!currentCall || texName !== currentCall.texName) {
-                currentCall = { texName, spriteOffset: i, spriteCount: 1 };
+                currentCall = { texName, offset: i, count: 1 };
                 this.drawCalls.push(currentCall);
             } else {
-                currentCall.spriteCount++;
+                currentCall.count++;
             }
         }
-
     }
 
     public render(shaderProgram: ShaderProgram) {
@@ -530,7 +503,19 @@ class WebglRendererLayer {
 
             this.gl.uniform2f(shaderProgram.getUniform("uTilesetDimensions"), texInfo.tileset.imageWidth, texInfo.tileset.imageHeight);
 
-            gl.drawElements(gl.TRIANGLES, 6 * drawCall.spriteCount, gl.UNSIGNED_INT, drawCall.spriteOffset * 6 * 4);
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
+
+            const stride = geometry.spriteStride;
+            const instanceByteOffset = drawCall.offset * stride;
+
+            gl.vertexAttribPointer(2, 2, gl.FLOAT, false, stride, 0 + instanceByteOffset);
+            gl.vertexAttribPointer(3, 2, gl.FLOAT, false, stride, 8 + instanceByteOffset);
+            gl.vertexAttribPointer(4, 1, gl.FLOAT, false, stride, 16 + instanceByteOffset);
+            gl.vertexAttribIPointer(5, 4, gl.UNSIGNED_SHORT, stride, 20 + instanceByteOffset);
+            gl.vertexAttribPointer(6, 4, gl.FLOAT, false, stride, 28 + instanceByteOffset);
+            gl.vertexAttribPointer(7, 4, gl.FLOAT, false, stride, 44 + instanceByteOffset);
+
+            gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, drawCall.count);
         }
 
         gl.bindVertexArray(null);
@@ -539,7 +524,7 @@ class WebglRendererLayer {
     }
 
     public destroy() {
-        this.gl.deleteBuffer(this.spriteBuffer);
+        this.gl.deleteBuffer(this.instanceBuffer);
         this.gl.deleteVertexArray(this.vao);
     }
 }

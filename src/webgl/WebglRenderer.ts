@@ -18,6 +18,7 @@ attribute vec2 aTilePos;
 attribute float aTileAngle;
 attribute vec2 aTileScale;
 attribute vec4 aTileRegion;
+attribute vec4 aTintColor;
 attribute vec4 aMaskColor;
 
 uniform vec2 uViewportDimensions;
@@ -26,9 +27,11 @@ uniform vec2 uCameraPos;
 uniform vec2 uTilesetDimensions;
 
 varying vec2 uv;
+varying vec4 tintColor;
 varying vec4 maskColor;
 
 void main() {
+    tintColor = aTintColor;
     maskColor = aMaskColor;
 
     vec2 flippedTexCoord = vec2(aTexCoord.x, 1.0 - aTexCoord.y);
@@ -52,11 +55,12 @@ const mainFragment = `
 precision mediump float;
 
 varying vec2 uv;
+varying vec4 tintColor;
 
 uniform sampler2D uSampler;  
 
 void main() {
-    gl_FragColor = texture2D(uSampler, uv);
+    gl_FragColor = texture2D(uSampler, uv) * tintColor;
 }
 `;
 
@@ -434,7 +438,7 @@ class WebglRendererLayer {
 
         this.spriteBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, (this.isStatic ? STATIC_LAYER_MAX_SPRITES : DYNAMIC_LAYER_MAX_SPRITES) * 5 * 4 * 4, this.isStatic ? gl.STATIC_DRAW : gl.DYNAMIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, (this.isStatic ? STATIC_LAYER_MAX_SPRITES : DYNAMIC_LAYER_MAX_SPRITES) * geometry.spriteStride * 4, this.isStatic ? gl.STATIC_DRAW : gl.DYNAMIC_DRAW);
     }
 
     public upload(sprites: Sprite[]) {
@@ -475,6 +479,7 @@ class WebglRendererLayer {
             tileScale: shaderProgram.getAttrib("aTileScale"),
             tileAngle: shaderProgram.getAttrib("aTileAngle"),
             tileRegion: shaderProgram.getAttrib("aTileRegion"),
+            tintColor: shaderProgram.getAttrib("aTintColor"),
             maskColor: shaderProgram.getAttrib("aMaskColor")
         };
 
@@ -485,7 +490,7 @@ class WebglRendererLayer {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteBuffer);
 
-        const stride = 44;
+        const stride = geometry.spriteStride;
 
         gl.enableVertexAttribArray(attribLocations.tilePos);
         gl.vertexAttribPointer(attribLocations.tilePos, 2, gl.FLOAT, false, stride, 0);
@@ -495,8 +500,10 @@ class WebglRendererLayer {
         gl.vertexAttribPointer(attribLocations.tileAngle, 1, gl.FLOAT, false, stride, 16);
         gl.enableVertexAttribArray(attribLocations.tileRegion);
         gl.vertexAttribPointer(attribLocations.tileRegion, 4, gl.UNSIGNED_SHORT, false, stride, 20);
+        gl.enableVertexAttribArray(attribLocations.tintColor);
+        gl.vertexAttribPointer(attribLocations.tintColor, 4, gl.FLOAT, false, stride, 28);
         gl.enableVertexAttribArray(attribLocations.maskColor);
-        gl.vertexAttribPointer(attribLocations.maskColor, 4, gl.FLOAT, false, stride, 28);
+        gl.vertexAttribPointer(attribLocations.maskColor, 4, gl.FLOAT, false, stride, 44);
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.renderer.getEBO());
 
@@ -517,6 +524,7 @@ class WebglRendererLayer {
         gl.disableVertexAttribArray(attribLocations.tileScale);
         gl.disableVertexAttribArray(attribLocations.tileAngle);
         gl.disableVertexAttribArray(attribLocations.tileRegion);
+        gl.disableVertexAttribArray(attribLocations.tintColor);
         gl.disableVertexAttribArray(attribLocations.maskColor);
 
         this.lifetime = LAYER_LIFETIME;

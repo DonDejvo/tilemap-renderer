@@ -37,7 +37,8 @@ struct VSInput {
     @location(4) tileAngle: f32,
     @location(5) tileRegion: vec2u,
 
-    @location(6) maskColor: vec4f
+    @location(6) tintColor: vec4f,
+    @location(7) maskColor: vec4f
 }
 
 struct Camera {
@@ -54,13 +55,15 @@ var<uniform> tilesetDimensions: vec2f;
 struct VSOutput {
     @builtin(position) pos: vec4f,
     @location(0) uv: vec2f,
-    @location(1) maskColor: vec4f
+    @location(1) tintColor: vec4f,
+    @location(2) maskColor: vec4f
 }
 
 @vertex
 fn vs_main(input: VSInput) -> VSOutput {
     var out: VSOutput;
 
+    out.tintColor = input.tintColor;
     out.maskColor = input.maskColor;
 
     let x = f32(input.tileRegion.x & 0xFFFFu);
@@ -97,7 +100,7 @@ var spriteTexture: texture_2d<f32>;
 
 @fragment
 fn fs_main(input: VSOutput) -> @location(0) vec4f {
-    return textureSample(spriteTexture, spriteSampler, input.uv);
+    return textureSample(spriteTexture, spriteSampler, input.uv) * input.tintColor;
 }
 `;
 
@@ -438,14 +441,15 @@ export class WebgpuRenderer implements Renderer {
                         ]
                     },
                     {
-                        arrayStride: 44,
+                        arrayStride: geometry.spriteStride,
                         stepMode: "instance",
                         attributes: [
                             { shaderLocation: 2, offset: 0, format: "float32x2" },
                             { shaderLocation: 3, offset: 8, format: "float32x2" },
                             { shaderLocation: 4, offset: 16, format: "float32" },
                             { shaderLocation: 5, offset: 20, format: "uint32x2" },
-                            { shaderLocation: 6, offset: 28, format: "float32x4" }
+                            { shaderLocation: 6, offset: 28, format: "float32x4" },
+                            { shaderLocation: 7, offset: 44, format: "float32x4" }
                         ]
                     }
                 ]
@@ -719,7 +723,7 @@ class WebgpuRendererLayer {
 
         this.instanceBuffer = renderer.getConfig().device.createBuffer({
             label: "Instance Buffer",
-            size: 6 * 4 * (isStatic ? STATIC_LAYER_MAX_SPRITES : DYNAMIC_LAYER_MAX_SPRITES),
+            size: geometry.spriteStride * (isStatic ? STATIC_LAYER_MAX_SPRITES : DYNAMIC_LAYER_MAX_SPRITES),
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
         });
 

@@ -50,6 +50,13 @@ export class Tile {
     }
 }
 
+export interface TilesetRegion {
+    x: number;
+    y: number;
+    width?: number;
+    height?: number;
+}
+
 export class Tileset {
     static cache = new Map<string, Tileset>();
 

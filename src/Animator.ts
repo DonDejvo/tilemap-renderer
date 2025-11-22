@@ -9,6 +9,8 @@ export class Animator {
     private currentFrameIndex: number = 0;
     private frameTimer: number = 0;
 
+    public onEnded?: (anim: TileAnimation) => void;
+
     constructor(sprite: Sprite) {
         this.sprite = sprite;
         this.animation = null;
@@ -56,6 +58,7 @@ export class Animator {
                 this.currentFrameIndex = 0;
             } else {
                 this.currentFrameIndex = this.animation.length - 1;
+                this.onEnded?.(this.animation);
                 this.animation = null;
                 return;
             }

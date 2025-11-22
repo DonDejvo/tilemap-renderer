@@ -87,6 +87,27 @@
             grid-column: 3;
             grid-row: 2;
         }
+
+        .action {
+            position: fixed;
+            bottom: 40px;
+            right: 40px;
+            width: 70px;
+            height: 70px;
+            background: rgba(255, 80, 80, 0.4);
+            border-radius: 50%;
+            border: 3px solid rgba(255, 120, 120, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 22px;
+            z-index: 9999;
+        }
+
+        .action:active {
+            background: rgba(255, 100, 100, 0.7);
+        }
     </style>
 </head>
 
@@ -98,6 +119,7 @@
         <div class="btn left" data-key="a">◀</div>
         <div class="btn down" data-key="s">▼</div>
         <div class="btn right" data-key="d">▶</div>
+        <div class="btn action" data-key="e">●</div>
     </div>
 
     <script type="module">
@@ -113,6 +135,11 @@
                 this.down = false;
                 this.left = false;
                 this.right = false;
+                this.action = false;
+
+                // NEW: edge detection flags
+                this._prevAction = false;
+                this.actionPressed = false;
 
                 const setKey = (key, isDown) => {
                     switch (key.toLowerCase()) {
@@ -120,15 +147,16 @@
                         case "s": this.down = isDown; break;
                         case "a": this.left = isDown; break;
                         case "d": this.right = isDown; break;
+                        case "e": this.action = isDown; break;
                     }
                 };
 
-                addEventListener("keydown", (e) => setKey(e.key, true));
-                addEventListener("keyup", (e) => setKey(e.key, false));
+                addEventListener("keydown", e => setKey(e.key, true));
+                addEventListener("keyup", e => setKey(e.key, false));
 
-                document.addEventListener("touchstart", (e) => e.preventDefault(), { passive: false });
-                document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
-                document.addEventListener("contextmenu", (e) => e.preventDefault());
+                document.addEventListener("touchstart", e => e.preventDefault(), { passive: false });
+                document.addEventListener("touchmove", e => e.preventDefault(), { passive: false });
+                document.addEventListener("contextmenu", e => e.preventDefault());
 
                 const controls = document.getElementById("controls");
                 for (const btn of controls.querySelectorAll(".btn")) {
@@ -143,16 +171,22 @@
                     btn.addEventListener("mouseleave", end);
                 }
             }
+
+            // call this ONCE per frame at beginning of update loop
+            update() {
+                this.actionPressed = this.action && !this._prevAction;
+                this._prevAction = this.action;
+            }
         }
 
+
         class Player {
-            constructor(x, y) {
+            constructor(x, y, emitter) {
                 this.sprite = new TilemapRenderer.Sprite({
                     tileset: TilemapRenderer.Tileset.getByName("BODY_skeleton"),
                     tilesetRegion: { x: 0, y: 0 },
                     isStatic: false
                 });
-                this.sprite.maskColor.set(1, 0, 0, 1);
 
                 this.animator = new TilemapRenderer.Animator(this.sprite);
 
@@ -166,26 +200,43 @@
                 this.sprite.offset.set(-32, -64);
 
                 this.direction = 2; // start as facing down
+                this.isCasting = false;
+                this.emitter = emitter;
             }
 
             update(input, dt) {
                 this.velocity.set(0, 0);
 
-                if (input.up) { this.velocity.y -= 1; this.direction = 0; }
-                if (input.down) { this.velocity.y += 1; this.direction = 2; }
-                if (input.left) { this.velocity.x -= 1; this.direction = 1; }
-                if (input.right) { this.velocity.x += 1; this.direction = 3; }
+                if (!this.isCasting && input.actionPressed) {
+                    this.isCasting = true;
+                    this.animator.play({ x: 0, y: 4 + this.direction }, { repeat: false, restart: true });
+                    this.animator.onEnded = () => {
+                        const look = this.getLookVector();
+                        const px = this.position.x + look.x * 80;
+                        const py = this.position.y + look.y * 80;
+                        this.emitter.emit(px, py, this.sprite.zIndex);
+                        this.isCasting = false;
+                        this.animator.onEnded = null;
+                    };
+                }
 
-                const moving = this.velocity.lenSq() > 0;
+                if (!this.isCasting) {
+                    if (input.up) { this.velocity.y -= 1; this.direction = 0; }
+                    if (input.down) { this.velocity.y += 1; this.direction = 2; }
+                    if (input.left) { this.velocity.x -= 1; this.direction = 1; }
+                    if (input.right) { this.velocity.x += 1; this.direction = 3; }
 
-                if (moving) {
-                    this.velocity.unit().scale(this.speed);
-                    this.position.add(this.velocity.clone().scale(dt));
-                    this.sprite.position.copy(this.position);
+                    const moving = this.velocity.lenSq() > 0;
 
-                    this.animator.play({ x: 1, y: this.direction }, { repeat: true, restart: false }); // walking
-                } else {
-                    this.animator.play({ x: 0, y: this.direction }, { repeat: true, restart: false }); // idle
+                    if (moving) {
+                        this.velocity.unit().scale(this.speed);
+                        this.position.add(this.velocity.clone().scale(dt));
+                        this.sprite.position.copy(this.position);
+
+                        this.animator.play({ x: 1, y: this.direction }, { repeat: true, restart: false }); // walking
+                    } else {
+                        this.animator.play({ x: 0, y: this.direction }, { repeat: true, restart: false }); // idle
+                    }
                 }
 
                 this.animator.update(dt);
@@ -199,6 +250,62 @@
                     case 3: return new TilemapRenderer.Vector(1, 0);
                 }
                 return new TilemapRenderer.Vector(0, 0);
+            }
+        }
+
+        class Particle {
+            constructor(x, y, zIndex, tileset) {
+                this.sprite = new TilemapRenderer.Sprite({
+                    tileset: tileset,
+                    tilesetRegion: { x: 0, y: 0 }, // animated region
+                    isStatic: false,
+                    zIndex
+                });
+                this.sprite.maskColor.set(1, 1, 1, 1);
+
+                this.sprite.position.set(x, y);
+                this.sprite.scale.set(32, 32);
+                this.sprite.offset.set(-16, -48);
+
+                this.animator = new TilemapRenderer.Animator(this.sprite);
+                this.animator.play({ x: 0, y: 0 }, { repeat: false });
+
+                this.onDead = null;
+
+                this.animator.onEnded = () => {
+                    if (this.onDead) this.onDead();
+                };
+            }
+
+            update(dt) {
+                this.animator.update(dt);
+            }
+        }
+
+        class ParticleEmitter {
+            constructor(scene, tileset) {
+                this.scene = scene;
+                this.tileset = tileset;
+                this.particles = [];
+            }
+
+            emit(x, y, zIndex) {
+                const p = new Particle(x, y, zIndex, this.tileset);
+
+                // auto-remove after animation ends
+                p.onDead = () => {
+                    this.scene.removeSprite(p.sprite);
+                    this.particles = this.particles.filter(pp => pp !== p);
+                };
+
+                this.particles.push(p);
+                this.scene.addSprite(p.sprite);
+            }
+
+            update(dt) {
+                for (const p of this.particles) {
+                    p.update(dt);
+                }
             }
         }
 
@@ -218,9 +325,11 @@
             const myTilesetImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/tileset.png");
             const snowyLandsImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/RPGW_SnowyLands_v2.0/MainLev2.0_extruded.png");
             const snowyLandsDecorativeImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/RPGW_SnowyLands_v2.0/decorative.png");
-            const skeletonBodyImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/lpc_entry/png/walkcycle/BODY_skeleton.png");
+            const skeletonBodyImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/lpc_entry/png/BODY_skeleton.png");
+            const FX16Image = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/FX/16.png");
 
             const skeletonBodyTileset = await TilemapRenderer.Tileset.load(assetsUrl + "/tilesets/BODY_skeleton.tsj");
+            const FX16Tileset = await TilemapRenderer.Tileset.load(assetsUrl + "/tilesets/FX_16.tsj");
 
             const exampleMap = await TilemapRenderer.Tilemap.load(assetsUrl + "/tilemaps/Example30x20.tmj", {
                 ["SnowyLands"]: assetsUrl + "/tilesets/SnowyLands.tsj",
@@ -230,6 +339,8 @@
 
             const scene = new TilemapRenderer.Scene();
             let player = null;
+
+            const emitter = new ParticleEmitter(scene, FX16Tileset);
 
             scene.addTilemap(exampleMap, {
                 layers: [
@@ -248,11 +359,12 @@
                             tree.offset.set(-1.5 * layer.tilemap.tileWidth, -4 * layer.tilemap.tileHeight + 4);
                             tree.scale.set(3 * layer.tilemap.tileWidth, 4 * layer.tilemap.tileHeight);
                             tree.position.set(obj.x, obj.y);
+                            tree.tintColor.r = 0;
                             scene.addSprite(tree);
                             break;
 
                         case "player":
-                            player = new Player(obj.x, obj.y);
+                            player = new Player(obj.x, obj.y, emitter);
                             player.sprite.zIndex = zIndex;
                             scene.addSprite(player.sprite);
                             break;
@@ -272,7 +384,7 @@
                 ["SnowyLands_Decorative"]: snowyLandsDecorativeImage
             });
 
-            renderer.addTextures([skeletonBodyTileset], { ["BODY_skeleton"]: skeletonBodyImage });
+            renderer.addTextures([skeletonBodyTileset, FX16Tileset], { ["BODY_skeleton"]: skeletonBodyImage, ["FX_16"]: FX16Image });
 
             const neonExtract = new TilemapRenderer.ShaderBuilder();
 
@@ -342,7 +454,7 @@
                 .set("uv", "fragCoord / uniforms.resolution")
                 .set("base", "texture(0, uv)")
                 .set("glow", "texture(1, uv)")
-                .set("fragColor", "vec4(base.rgb + glow.rgb, 1.0)");
+                .set("fragColor", "vec4(base.rgb - glow.rgb, 1.0)");
 
             renderer.registerShader("blurX", neonBlurH);
             renderer.registerShader("blurY", neonBlurV);
@@ -385,6 +497,8 @@
                         fpsElem.textContent = `${rendererContext.toUpperCase()} - FPS: ${fps}`;
                     }
 
+                    input.update();
+
                     // Update game logic
                     if (player) {
                         player.update(input, dt);
@@ -404,6 +518,8 @@
                     }
 
                     camera.update();
+                    emitter.update(dt);
+
                     renderer.render(scene, camera);
                 });
             }

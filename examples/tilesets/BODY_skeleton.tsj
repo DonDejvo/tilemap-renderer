@@ -1,12 +1,12 @@
 { "columns":9,
- "image":"..\/textures\/lpc_entry\/png\/walkcycle\/BODY_skeleton.png",
- "imageheight":256,
+ "image":"..\/textures\/lpc_entry\/png\/BODY_skeleton.png",
+ "imageheight":512,
  "imagewidth":576,
  "margin":0,
  "name":"BODY_skeleton",
  "spacing":0,
- "tilecount":36,
- "tiledversion":"1.11.2",
+ "tilecount":72,
+ "tiledversion":"2025.11.12",
  "tileheight":64,
  "tiles":[
         {
@@ -152,6 +152,134 @@
                  "tileid":35
                 }],
          "id":28
+        }, 
+        {
+         "animation":[
+                {
+                 "duration":100,
+                 "tileid":36
+                }, 
+                {
+                 "duration":100,
+                 "tileid":37
+                }, 
+                {
+                 "duration":100,
+                 "tileid":38
+                }, 
+                {
+                 "duration":100,
+                 "tileid":39
+                }, 
+                {
+                 "duration":100,
+                 "tileid":40
+                }, 
+                {
+                 "duration":100,
+                 "tileid":41
+                }, 
+                {
+                 "duration":100,
+                 "tileid":42
+                }],
+         "id":36
+        }, 
+        {
+         "animation":[
+                {
+                 "duration":100,
+                 "tileid":45
+                }, 
+                {
+                 "duration":100,
+                 "tileid":46
+                }, 
+                {
+                 "duration":100,
+                 "tileid":47
+                }, 
+                {
+                 "duration":100,
+                 "tileid":48
+                }, 
+                {
+                 "duration":100,
+                 "tileid":49
+                }, 
+                {
+                 "duration":100,
+                 "tileid":50
+                }, 
+                {
+                 "duration":100,
+                 "tileid":51
+                }],
+         "id":45
+        }, 
+        {
+         "animation":[
+                {
+                 "duration":100,
+                 "tileid":54
+                }, 
+                {
+                 "duration":100,
+                 "tileid":55
+                }, 
+                {
+                 "duration":100,
+                 "tileid":56
+                }, 
+                {
+                 "duration":100,
+                 "tileid":57
+                }, 
+                {
+                 "duration":100,
+                 "tileid":58
+                }, 
+                {
+                 "duration":100,
+                 "tileid":59
+                }, 
+                {
+                 "duration":100,
+                 "tileid":60
+                }],
+         "id":54
+        }, 
+        {
+         "animation":[
+                {
+                 "duration":100,
+                 "tileid":63
+                }, 
+                {
+                 "duration":100,
+                 "tileid":64
+                }, 
+                {
+                 "duration":100,
+                 "tileid":65
+                }, 
+                {
+                 "duration":100,
+                 "tileid":66
+                }, 
+                {
+                 "duration":100,
+                 "tileid":67
+                }, 
+                {
+                 "duration":100,
+                 "tileid":68
+                }, 
+                {
+                 "duration":100,
+                 "tileid":69
+                }],
+         "id":63
         }],
  "tilewidth":64,
  "type":"tileset",

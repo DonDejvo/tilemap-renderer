@@ -15,9 +15,11 @@ export const geometry = (() => {
         1, -1, 1, 1,
     ]);
 
+    const spriteStride = 60;
+
     const createSpritesData = (sprites: Sprite[], instanced: boolean = false) => {
         const count = instanced ? 1 : 4;
-        const stride = 44;
+        const stride = spriteStride;
         const buffer = new ArrayBuffer(sprites.length * count * stride);
         const view = new DataView(buffer);
 
@@ -48,10 +50,15 @@ export const geometry = (() => {
                 view.setUint16(offset + 24, regionW, true);
                 view.setUint16(offset + 26, regionH, true);
 
-                view.setFloat32(offset + 28, sprite.maskColor.r, true);
-                view.setFloat32(offset + 32, sprite.maskColor.g, true);
-                view.setFloat32(offset + 36, sprite.maskColor.b, true);
-                view.setFloat32(offset + 40, sprite.maskColor.a, true);
+                view.setFloat32(offset + 28, sprite.tintColor.r, true);
+                view.setFloat32(offset + 32, sprite.tintColor.g, true);
+                view.setFloat32(offset + 36, sprite.tintColor.b, true);
+                view.setFloat32(offset + 40, sprite.tintColor.a, true);
+
+                view.setFloat32(offset + 44, sprite.maskColor.r, true);
+                view.setFloat32(offset + 48, sprite.maskColor.g, true);
+                view.setFloat32(offset + 52, sprite.maskColor.b, true);
+                view.setFloat32(offset + 56, sprite.maskColor.a, true);
 
                 offset += stride;
             }
@@ -60,10 +67,10 @@ export const geometry = (() => {
         return buffer;
     }
 
-
     return {
         quad,
         fullscreenQuad,
+        spriteStride,
         createSpritesData
     }
 })();

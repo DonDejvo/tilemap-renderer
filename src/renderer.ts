@@ -7,8 +7,8 @@ import { WebglRenderer } from "./webgl/WebglRenderer";
 import { Webgl2Renderer } from "./webgl2/Webgl2Renderer";
 import { WebgpuRenderer } from "./webgpu/WebgpuRenderer";
 
-export const STATIC_LAYER_MAX_SPRITES = 100000;
-export const DYNAMIC_LAYER_MAX_SPRITES = 100000;
+export const STATIC_LAYER_MAX_SPRITES = 10000;
+export const DYNAMIC_LAYER_MAX_SPRITES = 10000;
 export const LAYER_LIFETIME = 30;
 export const LAYER_MAX_TEXTURES = 16;
 export const OFFSCREEN_TEXTURES = 12;
@@ -33,7 +33,7 @@ export interface RenderPassStage {
 }
 
 export const defaultPassStage: RenderPassStage = { shader: "default", inputs: [0], output: -1 };
-
+export type BlendMode = "alpha" | "additive" | "multiply" | "screen";
 export type RendererType = "webgl" | "webgl2" | "webgpu";
 
 export interface RendererBuilderOptions {

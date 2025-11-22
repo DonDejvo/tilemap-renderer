@@ -1,4 +1,5 @@
 import { Animator } from "./Animator";
+import { BlendMode } from "./Renderer";
 import { Sprite } from "./Sprite";
 import { ObjectLayer, TileLayer, Tilemap, TilemapObject } from "./Tilemap";
 
@@ -17,20 +18,33 @@ export class Scene {
         this.layers = [];
     }
 
-    public addSprite(sprite: Sprite) {
-        let layer = this.layers.find(layer =>
+    private findLayerBySprite(sprite: Sprite) {
+        return this.layers.find(layer =>
             layer.isStatic === sprite.isStatic &&
             layer.zIndex === sprite.zIndex);
+    }
+
+    public addSprite(sprite: Sprite) {
+        let layer;
+        layer = this.findLayerBySprite(sprite);
         if (!layer) {
-            layer = new SceneLayer({
+            layer = this.createLayer({
                 zIndex: sprite.zIndex,
-                isStatic: sprite.isStatic
+                isStatic: sprite.isStatic,
+                blendMode: sprite.blendMode
             });
-            this.layers.push(layer);
         }
         layer.add(sprite);
         return sprite;
     }
+
+    public removeSprite(sprite: Sprite) {
+        const layer = this.findLayerBySprite(sprite);
+        if (!layer) return;
+
+        layer.remove(sprite);
+    }
+
 
     public addTilemap(tilemap: Tilemap, config: SceneAddTilemapConfig = {}) {
         const layers = tilemap.getLayers();
@@ -76,7 +90,7 @@ export class Scene {
 
                             sprites.push(this.addSprite(s));
 
-                            if(tile.animation) {
+                            if (tile.animation) {
                                 const animator = new Animator(s);
                                 animator.play({ x: tile.x, y: tile.y }, { repeat: true });
                                 animators.push(animator);
@@ -122,22 +136,27 @@ interface SceneLayerParams {
     zIndex: number;
     isStatic: boolean;
     renderOrder?: SceneLayerRenderOrder;
+    blendMode?: BlendMode;
 }
 
 export class SceneLayer {
     zIndex: number;
     isStatic: boolean;
-    renderOrder: SceneLayerRenderOrder;
     private sprites: Sprite[];
+    renderOrder: SceneLayerRenderOrder;
+    blendMode: BlendMode;
 
     constructor(params: SceneLayerParams) {
         this.zIndex = params.zIndex;
         this.isStatic = params.isStatic;
         this.renderOrder = params.renderOrder || "manual";
         this.sprites = [];
+        this.blendMode = params.blendMode || "alpha";
     }
 
     public add(sprite: Sprite) {
+        sprite.blendMode = this.blendMode;
+
         if (this.renderOrder === "manual") {
             let insertIndex = -1;
             for (let i = this.sprites.length - 1; i >= 0; --i) {
@@ -154,6 +173,11 @@ export class SceneLayer {
         } else {
             this.sprites.push(sprite);
         }
+    }
+
+    public remove(sprite: Sprite) {
+        const i = this.sprites.indexOf(sprite);
+        if (i !== -1) this.sprites.splice(i, 1);
     }
 
     public getSpritesOrdered() {
