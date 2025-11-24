@@ -24,4 +24,8 @@ export class Color {
         this.b = c.b;
         this.a = c.a;
     }
+
+    toArray() {
+        return new Float32Array([this.r, this.g, this.b, this.a]);
+    }
 }

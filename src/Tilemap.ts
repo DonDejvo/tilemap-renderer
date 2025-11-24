@@ -1,6 +1,6 @@
 import { assets } from "./assets";
 import { SceneLayerRenderOrder } from "./Scene";
-import { Tileset, TilesetJSON } from "./Tileset";
+import { TilePropertyJSON, Tileset, TilesetJSON } from "./Tileset";
 
 type TilemapTileset = TilesetJSON & { firstgid: number; source?: string; }
 type TilemapLayerType = "tilelayer" | "objectgroup";
@@ -65,11 +65,26 @@ class TileLayer extends Layer {
     }
 }
 
-export interface TilemapObject {
+export class TilemapObject {
     name: string;
     type: string;
     x: number;
     y: number;
+    rotation: number;
+    properties?: TilePropertyJSON[];
+
+    constructor(name: string, type: string, x: number, y: number, rotation?: number, properties?: TilePropertyJSON[]) {
+        this.name = name;
+        this.type = type;
+        this.x = x;
+        this.y = y;
+        this.rotation = rotation || 0;
+        this.properties = properties;
+    }
+
+    public getProperty<T>(name: string): T {
+        return this.properties?.find(prop => prop.name === name)?.value as T;
+    }
 }
 
 class ObjectLayer extends Layer {
@@ -81,7 +96,7 @@ class ObjectLayer extends Layer {
     }
 
     public getObjects() {
-        return this.objects;
+        return this.objects.map(obj => new TilemapObject(obj.name, obj.type, obj.x, obj.y, obj.rotation, obj.properties));
     }
 }
 

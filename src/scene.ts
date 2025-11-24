@@ -1,4 +1,7 @@
 import { Animator } from "./Animator";
+import { Collider } from "./Collider";
+import { Color } from "./Color";
+import { Light } from "./Light";
 import { BlendMode } from "./Renderer";
 import { Sprite } from "./Sprite";
 import { ObjectLayer, TileLayer, Tilemap, TilemapObject } from "./Tilemap";
@@ -13,15 +16,34 @@ interface SceneAddTilemapConfig {
 
 export class Scene {
     private layers: SceneLayer[];
+    public ambientColor: Color;
+    public ambientIntensity: number;
+    private lights: Light[];
+    private colliders: Collider[];
+    public shadowsZIndex: number;
 
     constructor() {
         this.layers = [];
+        this.ambientIntensity = 1.0;
+        this.ambientColor = new Color(1, 1, 1);
+        this.lights = [];
+        this.colliders = [];
+        this.shadowsZIndex = 0;
     }
 
     private findLayerBySprite(sprite: Sprite) {
         return this.layers.find(layer =>
             layer.isStatic === sprite.isStatic &&
             layer.zIndex === sprite.zIndex);
+    }
+
+    public addLight(light: Light) {
+        this.lights.push(light);
+    }
+
+    public removeLight(light: Light) {
+        const i = this.lights.indexOf(light);
+        if (i !== -1) this.lights.splice(i, 1);
     }
 
     public addSprite(sprite: Sprite) {
@@ -127,6 +149,24 @@ export class Scene {
 
     public getLayersOrdered() {
         return this.layers.sort((a, b) => a.zIndex - b.zIndex);
+    }
+
+    public getLights() {
+        return this.lights;
+    }
+
+    public addCollider(collider: Collider) {
+        this.colliders.push(collider);
+        return collider;
+    }
+
+    public removeCollider(collider: Collider) {
+        const i = this.colliders.indexOf(collider);
+        if (i !== -1) this.colliders.splice(i, 1);
+    }
+
+    public getColliders(): Collider[] {
+        return this.colliders;
     }
 }
 

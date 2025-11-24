@@ -12,11 +12,19 @@ export const math = (() => {
     const sat = (value: number): number =>
         clamp(value, 0, 1);
 
+    const degToRad = (deg: number) =>
+        deg / 180 * Math.PI;
+
+    const radToDeg = (rad: number) => 
+        rad / Math.PI * 180;
+
     return {
         clamp,
         lerp,
         unlerp,
-        sat
+        sat,
+        degToRad,
+        radToDeg
     };
 
 })();

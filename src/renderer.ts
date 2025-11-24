@@ -14,6 +14,14 @@ export const LAYER_MAX_TEXTURES = 16;
 export const OFFSCREEN_TEXTURES = 12;
 export const MAX_CHANNELS = 8;
 export const UNIFORMS_MAX_SIZE = 32;
+export const MAX_LIGHTS = 100;
+export const MAX_QUADS = 10000;
+
+export const TEXID_SCENE = 3;
+export const TEXID_MASK = 1;
+export const TEXID_LIGHTMAP = 1;
+
+export const defaultPassStage: RenderPassStage = { shader: "default", inputs: [0], output: -1 };
 
 export const getOffscreenTextureSizeFactor = (idx: number) => {
     return 1 / (1 << Math.max(0, Math.floor((idx - 2) * 0.5)));
@@ -30,10 +38,10 @@ export interface RenderPassStage {
     inputs: number[];
     output: number;
     uniforms?: ({ name: string; value: number } | { name: string; value: number[] })[];
+    clearColor?: Color;
 }
 
-export const defaultPassStage: RenderPassStage = { shader: "default", inputs: [0], output: -1 };
-export type BlendMode = "alpha" | "additive" | "multiply" | "screen";
+export type BlendMode = "none" | "alpha" | "additive" | "multiply" | "screen";
 export type RendererType = "webgl" | "webgl2" | "webgpu";
 
 export interface RendererBuilderOptions {
@@ -52,7 +60,7 @@ export interface Renderer {
     getCanvas: () => HTMLCanvasElement;
     setClearColor: (color: Color) => void;
     getBuilderOptions(): RendererBuilderOptions;
-    registerShader: (name: string, builder: ShaderBuilder) => void;
+    registerShader: (name: string, builder: ShaderBuilder, blendMode?: BlendMode) => void;
     pass: RenderPassStage[];
 }
 

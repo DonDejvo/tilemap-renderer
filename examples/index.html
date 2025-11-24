@@ -127,7 +127,7 @@
 
         const assetsUrl = "";
         const rendererContext = "webgpu";
-        let k = 8;
+        let k = 6;
 
         class KeyboardInput {
             constructor() {
@@ -137,7 +137,6 @@
                 this.right = false;
                 this.action = false;
 
-                // NEW: edge detection flags
                 this._prevAction = false;
                 this.actionPressed = false;
 
@@ -172,7 +171,6 @@
                 }
             }
 
-            // call this ONCE per frame at beginning of update loop
             update() {
                 this.actionPressed = this.action && !this._prevAction;
                 this._prevAction = this.action;
@@ -181,12 +179,15 @@
 
 
         class Player {
-            constructor(x, y, emitter) {
+            constructor(scene, x, y, zIndex, emitter) {
                 this.sprite = new TilemapRenderer.Sprite({
                     tileset: TilemapRenderer.Tileset.getByName("BODY_skeleton"),
                     tilesetRegion: { x: 0, y: 0 },
-                    isStatic: false
+                    isStatic: false,
+                    zIndex
                 });
+                this.sprite.maskColor.set(1, 1, 1, 1);
+                scene.addSprite(this.sprite);
 
                 this.animator = new TilemapRenderer.Animator(this.sprite);
 
@@ -199,9 +200,12 @@
                 this.sprite.scale.set(64, 64);
                 this.sprite.offset.set(-32, -64);
 
-                this.direction = 2; // start as facing down
+                this.direction = 2;
                 this.isCasting = false;
                 this.emitter = emitter;
+
+                this.collider = new TilemapRenderer.colliders.BoxCollider(24, 12);
+                scene.addCollider(this.collider);
             }
 
             update(input, dt) {
@@ -212,9 +216,9 @@
                     this.animator.play({ x: 0, y: 4 + this.direction }, { repeat: false, restart: true });
                     this.animator.onEnded = () => {
                         const look = this.getLookVector();
-                        const px = this.position.x + look.x * 80;
-                        const py = this.position.y + look.y * 80;
-                        this.emitter.emit(px, py, this.sprite.zIndex);
+                        const px = this.position.x + look.x * 16;
+                        const py = this.position.y - 16 + look.y * 16;
+                        this.emitter.emit(px, py, look, this.sprite.zIndex);
                         this.isCasting = false;
                         this.animator.onEnded = null;
                     };
@@ -229,14 +233,16 @@
                     const moving = this.velocity.lenSq() > 0;
 
                     if (moving) {
-                        this.velocity.unit().scale(this.speed);
+                        this.velocity.normalize().scale(this.speed);
                         this.position.add(this.velocity.clone().scale(dt));
-                        this.sprite.position.copy(this.position);
 
                         this.animator.play({ x: 1, y: this.direction }, { repeat: true, restart: false }); // walking
                     } else {
                         this.animator.play({ x: 0, y: this.direction }, { repeat: true, restart: false }); // idle
                     }
+
+                    this.sprite.position.copy(this.position);
+                    this.collider.position.copy(this.position);
                 }
 
                 this.animator.update(dt);
@@ -254,31 +260,38 @@
         }
 
         class Particle {
-            constructor(x, y, zIndex, tileset) {
+            constructor(x, y, direction, zIndex, tileset, light) {
                 this.sprite = new TilemapRenderer.Sprite({
                     tileset: tileset,
-                    tilesetRegion: { x: 0, y: 0 }, // animated region
+                    tilesetRegion: { x: 0, y: 0 },
                     isStatic: false,
                     zIndex
                 });
-                this.sprite.maskColor.set(1, 1, 1, 1);
+                this.light = light;
 
                 this.sprite.position.set(x, y);
-                this.sprite.scale.set(32, 32);
-                this.sprite.offset.set(-16, -48);
+                this.sprite.angle = direction.angle();
+                this.sprite.scale.set(64, 64);
+                this.sprite.offset.set(-32, -32);
+
+                this.direction = direction;
 
                 this.animator = new TilemapRenderer.Animator(this.sprite);
                 this.animator.play({ x: 0, y: 0 }, { repeat: false });
 
                 this.onDead = null;
-
-                this.animator.onEnded = () => {
-                    if (this.onDead) this.onDead();
-                };
+                this.startLifetime = 1.0;
+                this.lifetime = this.startLifetime;
             }
 
             update(dt) {
+                this.sprite.position.add(this.direction.clone().scale(160 * dt));
                 this.animator.update(dt);
+                this.light.position.copy(this.sprite.position.clone().add(this.direction.clone().scale(24)));
+                this.lifetime -= dt;
+                if(this.onDead && this.lifetime <= 0) {
+                    this.onDead();
+                }
             }
         }
 
@@ -289,17 +302,19 @@
                 this.particles = [];
             }
 
-            emit(x, y, zIndex) {
-                const p = new Particle(x, y, zIndex, this.tileset);
-
-                // auto-remove after animation ends
-                p.onDead = () => {
-                    this.scene.removeSprite(p.sprite);
-                    this.particles = this.particles.filter(pp => pp !== p);
-                };
+            emit(x, y, direction, zIndex) {
+                const light = new TilemapRenderer.Light({ radius: 16, color: new TilemapRenderer.Color(1, 0.7, 0.2) })
+                const p = new Particle(x, y, direction, zIndex, this.tileset, light);
 
                 this.particles.push(p);
                 this.scene.addSprite(p.sprite);
+                this.scene.addLight(light);
+
+                p.onDead = () => {
+                    this.scene.removeSprite(p.sprite);
+                    this.scene.removeLight(light);
+                    this.particles = this.particles.filter(pp => pp !== p);
+                };
             }
 
             update(dt) {
@@ -326,7 +341,7 @@
             const snowyLandsImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/RPGW_SnowyLands_v2.0/MainLev2.0_extruded.png");
             const snowyLandsDecorativeImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/RPGW_SnowyLands_v2.0/decorative.png");
             const skeletonBodyImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/lpc_entry/png/BODY_skeleton.png");
-            const FX16Image = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/FX/16.png");
+            const FX16Image = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/FX/579.png");
 
             const skeletonBodyTileset = await TilemapRenderer.Tileset.load(assetsUrl + "/tilesets/BODY_skeleton.tsj");
             const FX16Tileset = await TilemapRenderer.Tileset.load(assetsUrl + "/tilesets/FX_16.tsj");
@@ -338,6 +353,9 @@
             });
 
             const scene = new TilemapRenderer.Scene();
+            scene.ambientIntensity = 0.1;
+            scene.shadowsZIndex = 2;
+
             let player = null;
 
             const emitter = new ParticleEmitter(scene, FX16Tileset);
@@ -359,14 +377,25 @@
                             tree.offset.set(-1.5 * layer.tilemap.tileWidth, -4 * layer.tilemap.tileHeight + 4);
                             tree.scale.set(3 * layer.tilemap.tileWidth, 4 * layer.tilemap.tileHeight);
                             tree.position.set(obj.x, obj.y);
-                            tree.tintColor.r = 0;
                             scene.addSprite(tree);
+                            const treeCollider = new TilemapRenderer.colliders.BoxCollider(2 * layer.tilemap.tileWidth - 12, 0.5 * layer.tilemap.tileWidth);
+                            treeCollider.position.set(obj.x, obj.y);
+                            scene.addCollider(treeCollider);
                             break;
 
                         case "player":
-                            player = new Player(obj.x, obj.y, emitter);
-                            player.sprite.zIndex = zIndex;
-                            scene.addSprite(player.sprite);
+                            player = new Player(scene, obj.x, obj.y, zIndex, emitter);
+                            break;
+
+                        case "light":
+                            const light = new TilemapRenderer.Light({
+                                radius: 240,
+                                cutoff: 0.7,
+                                direction: TilemapRenderer.Vector.fromAngle(TilemapRenderer.math.degToRad(obj.getProperty("angle") || 0))
+                            });
+                         
+                            light.position.set(obj.x, obj.y);
+                            scene.addLight(light);
                             break;
                     }
                 }
@@ -396,54 +425,7 @@
                 .set("uv", "fragCoord / uniforms.resolution")
                 .set("color", "texture(0, uv)")
                 .set("b", "max(color.rgb - vec3(uniforms.threshold), vec3(0.0))")
-                // .set("fragColor", "vec4(b,1.0)");
-                .if("b.r > 0.0")
-                .set("fragColor", "vec4(color.rgb, 1.0)")
-                .else()
-                .set("fragColor", "vec4(vec3(0.0), 1.0)")
-                .endif();
-
-            const neonBlurH = new TilemapRenderer.ShaderBuilder();
-
-            neonBlurH
-                .declare("uv", "vec2")
-                .declare("w", "float")
-                .declare("sum", "vec4")
-                .set("uv", "fragCoord / uniforms.resolution")
-                .set("w", "1.0 / uniforms.resolution.x")
-                .set("sum",
-                    `(
-                    texture(0, uv + vec2(-3.0 * w, 0.0)) * 0.05 +
-                    texture(0, uv + vec2(-2.0 * w, 0.0)) * 0.1 +
-                    texture(0, uv + vec2(-1.0 * w, 0.0)) * 0.2 +
-                    texture(0, uv) * 0.3 +
-                    texture(0, uv + vec2(1.0 * w, 0.0)) * 0.2 +
-                    texture(0, uv + vec2(2.0 * w, 0.0)) * 0.1 +
-                    texture(0, uv + vec2(3.0 * w, 0.0)) * 0.05
-                )`
-                )
-                .set("fragColor", "sum");
-
-            const neonBlurV = new TilemapRenderer.ShaderBuilder();
-
-            neonBlurV
-                .declare("uv", "vec2")
-                .declare("h", "float")
-                .declare("sum", "vec4")
-                .set("uv", "fragCoord / uniforms.resolution")
-                .set("h", "1.0 / uniforms.resolution.y")
-                .set("sum",
-                    `(
-            texture(0, uv + vec2(0.0, -3.0 * h)) * 0.05 +
-                    texture(0, uv + vec2(0.0, -2.0 * h)) * 0.1 +
-                    texture(0, uv + vec2(0.0, -1.0 * h)) * 0.2 +
-                    texture(0, uv) * 0.3 +
-                    texture(0, uv + vec2(0.0, 1.0 * h)) * 0.2 +
-                    texture(0, uv + vec2(0.0, 2.0 * h)) * 0.1 +
-                    texture(0, uv + vec2(0.0, 3.0 * h)) * 0.05
-                )`
-                )
-                .set("fragColor", "sum");
+                .set("fragColor", "vec4(b,1.0)");
 
             const neonComposite = new TilemapRenderer.ShaderBuilder();
 
@@ -454,10 +436,8 @@
                 .set("uv", "fragCoord / uniforms.resolution")
                 .set("base", "texture(0, uv)")
                 .set("glow", "texture(1, uv)")
-                .set("fragColor", "vec4(base.rgb - glow.rgb, 1.0)");
+                .set("fragColor", "vec4(base.rgb + glow.rgb, 1.0)");
 
-            renderer.registerShader("blurX", neonBlurH);
-            renderer.registerShader("blurY", neonBlurV);
             renderer.registerShader("neonExtract", neonExtract);
             renderer.registerShader("neonComposite", neonComposite);
 
@@ -472,8 +452,8 @@
                 { shader: "neonExtract", inputs: [k], output: k + 1, uniforms: [{ name: "threshold", value: 0.5 }] },
 
                 // blur
-                { shader: "blurX", inputs: [k + 1], output: k },
-                { shader: "blurY", inputs: [k], output: k + 1 },
+                { shader: "blurHorizontal", inputs: [k + 1], output: k },
+                { shader: "blurVertical", inputs: [k], output: k + 1 },
 
                 // composite with original full scene
                 { shader: "neonComposite", inputs: [0, k + 1], output: -1 }
@@ -488,7 +468,6 @@
                     dt = now - (lastRAF || now);
                     lastRAF = now;
 
-                    // Update FPS
                     frameCount++;
                     if (now - lastFPSUpdate >= 1) {
                         fps = frameCount;
@@ -499,7 +478,6 @@
 
                     input.update();
 
-                    // Update game logic
                     if (player) {
                         player.update(input, dt);
 
@@ -508,7 +486,6 @@
 
                         targetCameraPos.set(Math.round(targetCameraPos.x), Math.round(targetCameraPos.y));
 
-                        // smooth movement
                         const lerpDistance = TilemapRenderer.Vector.distance(targetCameraPos, camera.position);
                         if (lerpDistance > 5) {
                             camera.position.lerp(targetCameraPos, Math.min(1, 5 * dt));

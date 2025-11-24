@@ -197,3 +197,48 @@ export const defaultShaderBuilder = new ShaderBuilder()
     .declare("uv", "vec2")
     .set("uv", "fragCoord / uniforms.resolution")
     .add("fragColor", "texture(0, uv)");
+
+export const lightShaderBuilder = new ShaderBuilder()
+    .declare("uv", "vec2")
+    .declare("baseColor", "vec4")
+    .set("uv", "fragCoord / uniforms.resolution")
+    .set("baseColor", "texture(0, uv)")
+    .add("fragColor", "vec4(baseColor.rgb * texture(1, uv).rgb, baseColor.a)");
+
+export const blurHorizontalBuilder = new ShaderBuilder()
+    .declare("uv", "vec2")
+    .declare("w", "float")
+    .declare("sum", "vec4")
+    .set("uv", "fragCoord / uniforms.resolution")
+    .set("w", "1.0 / uniforms.resolution.x")
+    .set("sum",
+        `(
+    texture(0, uv + vec2(-3.0 * w, 0.0)) * 0.05 +
+    texture(0, uv + vec2(-2.0 * w, 0.0)) * 0.1 +
+    texture(0, uv + vec2(-1.0 * w, 0.0)) * 0.2 +
+    texture(0, uv) * 0.3 +
+    texture(0, uv + vec2(1.0 * w, 0.0)) * 0.2 +
+    texture(0, uv + vec2(2.0 * w, 0.0)) * 0.1 +
+    texture(0, uv + vec2(3.0 * w, 0.0)) * 0.05
+)`
+    )
+    .set("fragColor", "sum");
+
+export const blurVerticalBuilder = new ShaderBuilder()
+    .declare("uv", "vec2")
+    .declare("h", "float")
+    .declare("sum", "vec4")
+    .set("uv", "fragCoord / uniforms.resolution")
+    .set("h", "1.0 / uniforms.resolution.y")
+    .set("sum",
+        `(
+    texture(0, uv + vec2(0.0, -3.0 * h)) * 0.05 +
+    texture(0, uv + vec2(0.0, -2.0 * h)) * 0.1 +
+    texture(0, uv + vec2(0.0, -1.0 * h)) * 0.2 +
+    texture(0, uv) * 0.3 +
+    texture(0, uv + vec2(0.0, 1.0 * h)) * 0.2 +
+    texture(0, uv + vec2(0.0, 2.0 * h)) * 0.1 +
+    texture(0, uv + vec2(0.0, 3.0 * h)) * 0.05
+)`
+    )
+    .set("fragColor", "sum");

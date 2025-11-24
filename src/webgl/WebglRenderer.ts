@@ -2,9 +2,9 @@ import { Camera } from "../Camera";
 import { Color } from "../Color";
 import { geometry } from "../geometry";
 import { math } from "../math";
-import { defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
+import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
-import { defaultShaderBuilder, ShaderBuilder, ShaderBuilderOutput } from "../ShaderBuilder";
+import { blurHorizontalBuilder, blurVerticalBuilder, defaultShaderBuilder, lightShaderBuilder, ShaderBuilder, ShaderBuilderOutput } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 import { Framebuffer } from "./Framebuffer";
@@ -20,6 +20,7 @@ attribute vec2 aTileScale;
 attribute vec4 aTileRegion;
 attribute vec4 aTintColor;
 attribute vec4 aMaskColor;
+attribute vec2 aTileOffset;
 
 uniform vec2 uViewportDimensions;
 uniform vec2 uCameraPos;
@@ -39,11 +40,12 @@ void main() {
 
     float c = cos(aTileAngle);
     float s = sin(aTileAngle);
+    vec2 offsetPos = aVertexPos * aTileScale + aTileOffset;
     vec2 rotatedPos = vec2(
-        aVertexPos.x * c - aVertexPos.y * s,
-        aVertexPos.x * s + aVertexPos.y * c
+        offsetPos.x * c - offsetPos.y * s,
+        offsetPos.x * s + offsetPos.y * c
     );
-    vec2 worldPos = rotatedPos * aTileScale + aTilePos;
+    vec2 worldPos = rotatedPos + aTilePos;
     vec2 pixelPos = worldPos - uCameraPos;
     vec2 clipPos = vec2(pixelPos.x / uViewportDimensions.x, 1.0 - pixelPos.y / uViewportDimensions.y) * 2.0 - 1.0;
     gl_Position = vec4(clipPos, 0.0, 1.0);
@@ -136,10 +138,11 @@ export class WebglRenderer implements Renderer {
     private ebo!: WebGLBuffer;
     private layersMap: Map<SceneLayer, WebglRendererLayer>;
     private texturesMap: Map<string, TextureInfo>;
-    private shaderMap: Map<string, { shader?: ShaderProgram, builder: ShaderBuilder }>;
+    private shaderMap: Map<string, { shader?: ShaderProgram, builder: ShaderBuilder, blendMode: BlendMode }>;
     private clearColor: Color;
     private initialized: boolean;
     public pass: RenderPassStage[];
+    private shaderCache: Map<ShaderBuilder, ShaderProgram>;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -150,6 +153,7 @@ export class WebglRenderer implements Renderer {
         this.initialized = false;
         this.pass = [defaultPassStage];
         this.framebuffers = [];
+        this.shaderCache = new Map();
     }
 
     public getType(): RendererType {
@@ -171,8 +175,8 @@ export class WebglRenderer implements Renderer {
         }
     }
 
-    public registerShader(name: string, builder: ShaderBuilder) {
-        this.shaderMap.set(name, { builder });
+    public registerShader(name: string, builder: ShaderBuilder, blendMode: BlendMode = "none") {
+        this.shaderMap.set(name, { builder, blendMode });
     }
 
     public setClearColor(color: Color) {
@@ -213,11 +217,18 @@ export class WebglRenderer implements Renderer {
         }
 
         this.registerShader("default", defaultShaderBuilder);
+        this.registerShader("default_additive", defaultShaderBuilder, "additive");
+        this.registerShader("light", lightShaderBuilder);
+        this.registerShader("blurHorizontal", blurHorizontalBuilder);
+        this.registerShader("blurVertical", blurVerticalBuilder);
 
         for (const shaderInfo of this.shaderMap.values()) {
-            const mainImageBody = shaderInfo.builder.build(this);
-
-            shaderInfo.shader = new ShaderProgram(gl, fullscreenVertex, fullscreenFragment(mainImageBody));
+            if (!this.shaderCache.has(shaderInfo.builder)) {
+                const mainImageBody = shaderInfo.builder.build(this);
+                const shader = new ShaderProgram(gl, fullscreenVertex, fullscreenFragment(mainImageBody));
+                this.shaderCache.set(shaderInfo.builder, shader);
+            }
+            shaderInfo.shader = this.shaderCache.get(shaderInfo.builder)!;
         }
 
         this.shaderProgram = new ShaderProgram(gl, mainVertex, mainFragment);
@@ -314,7 +325,7 @@ export class WebglRenderer implements Renderer {
             }
 
             shader.use();
-            
+
             const stageUniforms = [{ name: "time", value: time }, { name: "resolution", value: [sw, sh] }].concat(passStage.uniforms ?? []);
 
             const uniforms = shaderInfo.builder.getUniforms();
@@ -480,7 +491,8 @@ class WebglRendererLayer {
             tileAngle: shaderProgram.getAttrib("aTileAngle"),
             tileRegion: shaderProgram.getAttrib("aTileRegion"),
             tintColor: shaderProgram.getAttrib("aTintColor"),
-            maskColor: shaderProgram.getAttrib("aMaskColor")
+            maskColor: shaderProgram.getAttrib("aMaskColor"),
+            tileOffset: shaderProgram.getAttrib("aTileOffset"),
         };
 
         gl.enableVertexAttribArray(attribLocations.vertexPos);
@@ -504,6 +516,8 @@ class WebglRendererLayer {
         gl.vertexAttribPointer(attribLocations.tintColor, 4, gl.FLOAT, false, stride, 28);
         gl.enableVertexAttribArray(attribLocations.maskColor);
         gl.vertexAttribPointer(attribLocations.maskColor, 4, gl.FLOAT, false, stride, 44);
+        gl.enableVertexAttribArray(attribLocations.tileOffset);
+        gl.vertexAttribPointer(attribLocations.tileOffset, 2, gl.FLOAT, false, stride, 60);
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.renderer.getEBO());
 

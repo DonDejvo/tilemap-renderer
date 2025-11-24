@@ -76,7 +76,7 @@ export class Vector {
         return this.x * this.x + this.y * this.y;
     }
 
-    unit() {
+    normalize() {
         const len = this.len();
         if (len > 0) this.div(len);
         return this;
@@ -84,7 +84,7 @@ export class Vector {
 
     project(v: Vector) {
         const vLen = v.lenSq();
-        if (vLen > 0) return this.scale(0);
+        if (vLen === 0) return this.scale(0);
         const d = Vector.dot(this, v);
         return this.copy(v).scale(d / vLen);
     }
@@ -109,10 +109,12 @@ export class Vector {
         return this;
     }
 
-    fromAngle(angle: number, length: number = 1) {
-        this.x = Math.cos(angle) * length;
-        this.y = Math.sin(angle) * length;
-        return this;
+    static fromAngle(angle: number, length: number = 1) {
+        const v = new Vector(
+            -Math.sin(angle) * length,
+            Math.cos(angle) * length
+        );
+        return v;
     }
 
     lerp(v: Vector, t: number) {

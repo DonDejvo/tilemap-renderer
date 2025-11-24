@@ -1,6 +1,6 @@
 import { assets } from "./assets";
 
-type TilePropertyJSON = { name: string; value: boolean | number | string; };
+export type TilePropertyJSON = { name: string; value: boolean | number | string; };
 
 export interface TileAnimationFrameJSON {
     duration: number; // in ms
@@ -45,8 +45,8 @@ export class Tile {
         this.animation = tileData?.animation;
     }
 
-    public getProperty(name: string) {
-        return this.properties?.find(prop => prop.name === name) ?? null;
+    public getProperty<T>(name: string): T {
+        return this.properties?.find(prop => prop.name === name)?.value as T;
     }
 }
 
