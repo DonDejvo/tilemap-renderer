@@ -1,0 +1,1 @@
+import{_ as t,c as e,o as a}from"./chunks/framework.DjZYZnxp.js";const d=JSON.parse('{"title":"","description":"","frontmatter":{},"headers":[],"relativePath":"lighting.md","filePath":"lighting.md"}'),n={name:"lighting.md"};function i(r,o,s,c,l,p){return a(),e("div")}const g=t(n,[["render",i]]);export{d as __pageData,g as default};

@@ -1,0 +1,1 @@
+import{_ as e,c as a,o as t}from"./chunks/framework.DjZYZnxp.js";const i=JSON.parse('{"title":"","description":"","frontmatter":{},"headers":[],"relativePath":"camera.md","filePath":"camera.md"}'),r={name:"camera.md"};function c(o,s,n,m,p,_){return t(),a("div")}const f=e(r,[["render",c]]);export{i as __pageData,f as default};
