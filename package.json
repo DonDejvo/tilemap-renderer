@@ -1,27 +1,43 @@
 {
   "name": "tilemap-renderer",
   "version": "1.0.0",
-  "description": "web based tilemap renderer with webgl2 and webgpu implementation variants",
-  "main": "index.js",
+  "description": "web based tilemap renderer with WebGL/WebGL2/WebGPU variants",
+  "type": "module",
+  "main": "./build/tilemap-renderer.min.js",
+  "module": "./build/tilemap-renderer.module.min.js",
+  "exports": {
+    "import": "./build/tilemap-renderer.module.min.js",
+    "require": "./build/tilemap-renderer.min.js"
+  },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build"
+    "build": "tsc && vite build",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs",
+    "docs:deploy": "npm run docs:build && gh-pages -d docs/.vitepress/dist"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/DonDejvo/tilemap-renderer.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
+  "keywords": [
+    "tilemap",
+    "webgl",
+    "webgpu",
+    "renderer",
+    "2d",
+    "graphics"
+  ],
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/DonDejvo/tilemap-renderer/issues"
   },
-  "homepage": "https://github.com/DonDejvo/tilemap-renderer#readme",
+  "homepage": "https://DonDejvo.github.io/tilemap-renderer/",
   "devDependencies": {
     "@webgpu/types": "^0.1.66",
     "typescript": "^5.9.3",
-    "vite": "^7.2.1"
+    "vite": "^7.2.1",
+    "vitepress": "^1.6.4"
   }
 }

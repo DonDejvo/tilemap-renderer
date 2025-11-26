@@ -1,4 +1,3 @@
-import { AABB } from "./AABB";
 import { Animator } from "./Animator";
 import { assets } from "./assets";
 import { Camera } from "./Camera";
@@ -15,4 +14,4 @@ import { Tilemap } from "./Tilemap";
 import { Tileset } from "./Tileset";
 import { Vector, LinearSplineVector } from "./Vector";
 
-export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, LinearSpline, LinearSplineVector, Animator, ShaderBuilder, Light, AABB, colliders, assets, matrix, math, createRenderer };
+export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, LinearSpline, LinearSplineVector, Animator, ShaderBuilder, Light, colliders, assets, matrix, math, createRenderer };

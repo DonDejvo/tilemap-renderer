@@ -7,15 +7,15 @@ import { WebglRenderer } from "./webgl/WebglRenderer";
 import { Webgl2Renderer } from "./webgl2/Webgl2Renderer";
 import { WebgpuRenderer } from "./webgpu/WebgpuRenderer";
 
-export const STATIC_LAYER_MAX_SPRITES = 10000;
-export const DYNAMIC_LAYER_MAX_SPRITES = 10000;
+export const STATIC_LAYER_MAX_SPRITES = 100000;
+export const DYNAMIC_LAYER_MAX_SPRITES = 50000;
 export const LAYER_LIFETIME = 30;
 export const LAYER_MAX_TEXTURES = 16;
 export const OFFSCREEN_TEXTURES = 12;
 export const MAX_CHANNELS = 8;
-export const UNIFORMS_MAX_SIZE = 32;
-export const MAX_LIGHTS = 100;
-export const MAX_QUADS = 10000;
+export const UNIFORMS_MAX_SIZE = 64;
+export const MAX_LIGHTS = 1000;
+export const SHADOW_MAX_VERTICES = 3 * 8 * 32;
 
 export const TEXID_SCENE = 3;
 export const TEXID_MASK = 1;
@@ -51,16 +51,24 @@ export interface RendererBuilderOptions {
 
 export const maskClearColor = new Color(0, 0, 0, 1);
 
+export interface ImageInfo {
+    name: string;
+    image: TexImageSource;
+    width: number;
+    height: number;
+}
+
 export interface Renderer {
     getType(): RendererType;
     addTextures(tilesets: Tileset[], images: Record<string, TexImageSource>): void;
+    addImageTextures(images: ImageInfo[]): void;
     init(): Promise<void>;
-    render: (scene: Scene, camera: Camera) => void;
-    setSize: (width: number, height: number) => void;
-    getCanvas: () => HTMLCanvasElement;
-    setClearColor: (color: Color) => void;
+    render(scene: Scene, camera: Camera): void;
+    setSize(width: number, height: number): void;
+    getCanvas(): HTMLCanvasElement;
+    setClearColor(color: Color): void;
     getBuilderOptions(): RendererBuilderOptions;
-    registerShader: (name: string, builder: ShaderBuilder, blendMode?: BlendMode) => void;
+    registerShader(name: string, builder: ShaderBuilder, blendMode?: BlendMode): void;
     pass: RenderPassStage[];
 }
 

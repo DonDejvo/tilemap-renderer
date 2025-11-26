@@ -1,10 +1,12 @@
 import { Animator } from "./Animator";
 import { Collider } from "./Collider";
 import { Color } from "./Color";
+import { Bounds } from "./common";
 import { Light } from "./Light";
-import { BlendMode } from "./Renderer";
+import { SpatialHashGrid, SpatialHashGridClient, SpatialHashGridParams } from "./SpatialHashGrid";
 import { Sprite } from "./Sprite";
 import { ObjectLayer, TileLayer, Tilemap, TilemapObject } from "./Tilemap";
+import { Vector } from "./Vector";
 
 interface SceneAddTilemapConfig {
     layers?: {
@@ -14,21 +16,33 @@ interface SceneAddTilemapConfig {
     onObject?: (scene: Scene, obj: TilemapObject, layer: ObjectLayer, zIndex: number) => void;
 }
 
+interface SceneParams {
+    spatialHashGridParams?: SpatialHashGridParams;
+    shadowsZIndex?: number;
+    ambientIntensity?: number;
+    ambientColor?: Color;
+}
+
 export class Scene {
     private layers: SceneLayer[];
     public ambientColor: Color;
     public ambientIntensity: number;
     private lights: Light[];
-    private colliders: Collider[];
+    private colliders: { collider: Collider, hashGridClient: SpatialHashGridClient<Collider> }[];
     public shadowsZIndex: number;
+    private collidersHashGrid: SpatialHashGrid<Collider>;
 
-    constructor() {
+    constructor(params: SceneParams) {
         this.layers = [];
-        this.ambientIntensity = 1.0;
-        this.ambientColor = new Color(1, 1, 1);
+        this.ambientIntensity = params.ambientIntensity || 1.0;
+        this.ambientColor = params.ambientColor || new Color(1, 1, 1);
         this.lights = [];
         this.colliders = [];
-        this.shadowsZIndex = 0;
+        this.shadowsZIndex = params.shadowsZIndex || 0;
+        this.collidersHashGrid = new SpatialHashGrid(params.spatialHashGridParams || {
+            bounds: { min: new Vector(-1000, -1000), max: new Vector(1000, 1000) },
+            dimensions: [20, 20]
+        })
     }
 
     private findLayerBySprite(sprite: Sprite) {
@@ -52,8 +66,7 @@ export class Scene {
         if (!layer) {
             layer = this.createLayer({
                 zIndex: sprite.zIndex,
-                isStatic: sprite.isStatic,
-                blendMode: sprite.blendMode
+                isStatic: sprite.isStatic
             });
         }
         layer.add(sprite);
@@ -66,7 +79,6 @@ export class Scene {
 
         layer.remove(sprite);
     }
-
 
     public addTilemap(tilemap: Tilemap, config: SceneAddTilemapConfig = {}) {
         const layers = tilemap.getLayers();
@@ -156,17 +168,40 @@ export class Scene {
     }
 
     public addCollider(collider: Collider) {
-        this.colliders.push(collider);
+        this.colliders.push({
+            collider,
+            hashGridClient: this.collidersHashGrid.createClient(collider, collider.getBounds())
+        });
         return collider;
     }
 
     public removeCollider(collider: Collider) {
-        const i = this.colliders.indexOf(collider);
-        if (i !== -1) this.colliders.splice(i, 1);
+        const i = this.colliders.findIndex(colliderInfo => colliderInfo.collider === collider);
+        if (i !== -1) {
+            this.collidersHashGrid.removeClient(this.colliders[i].hashGridClient);
+            this.colliders.splice(i, 1);
+        }
     }
 
-    public getColliders(): Collider[] {
-        return this.colliders;
+    public getColliders(bounds: Bounds): Collider[] {
+        return this.collidersHashGrid.findNearby(bounds).map(client => client.parent);
+    }
+
+    public update() {
+        for (let colliderInfo of this.colliders) {
+            colliderInfo.hashGridClient.bounds = colliderInfo.collider.getBounds();
+            this.collidersHashGrid.updateClient(colliderInfo.hashGridClient);
+        }
+    }
+
+    public getInfo() {
+        return {
+            lights: this.lights.length,
+            colliders: this.colliders.length,
+            sprites: this.layers.reduce((spritesCount, layer) => spritesCount + layer.sprites.length, 0),
+            staticSprites: this.layers.reduce((spritesCount, layer) => spritesCount + layer.sprites.filter(sprite => sprite.isStatic).length, 0),
+            layers: this.layers.length
+        };
     }
 }
 
@@ -176,27 +211,22 @@ interface SceneLayerParams {
     zIndex: number;
     isStatic: boolean;
     renderOrder?: SceneLayerRenderOrder;
-    blendMode?: BlendMode;
 }
 
 export class SceneLayer {
     zIndex: number;
     isStatic: boolean;
-    private sprites: Sprite[];
+    sprites: Sprite[];
     renderOrder: SceneLayerRenderOrder;
-    blendMode: BlendMode;
 
     constructor(params: SceneLayerParams) {
         this.zIndex = params.zIndex;
         this.isStatic = params.isStatic;
         this.renderOrder = params.renderOrder || "manual";
         this.sprites = [];
-        this.blendMode = params.blendMode || "alpha";
     }
 
     public add(sprite: Sprite) {
-        sprite.blendMode = this.blendMode;
-
         if (this.renderOrder === "manual") {
             let insertIndex = -1;
             for (let i = this.sprites.length - 1; i >= 0; --i) {

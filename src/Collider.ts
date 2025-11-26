@@ -1,46 +1,54 @@
-import { AABB } from "./AABB";
+import { Bounds } from "./common";
 import { Vector } from "./Vector";
 
 export type ColliderType = "circle" | "polygon";
 
 export abstract class Collider {
     position: Vector;
+
     constructor() {
         this.position = new Vector();
     }
-    abstract getBounds(): AABB;
+
+    abstract getBounds(): Bounds;
+
     abstract getType(): ColliderType; 
 }
 
 export class CircleCollider extends Collider {
-    getType(): ColliderType {
-        return "circle";
-    }
     radius: number;
+
     constructor(radius: number) {
         super();
         this.radius = radius;
     }
-    getBounds(): AABB {
-        return new AABB(
-            this.position.x - this.radius,
-            this.position.y - this.radius,
-            this.radius * 2,
-            this.radius * 2
-        );
+
+    getType(): ColliderType {
+        return "circle";
+    }
+
+    getBounds(): Bounds {
+        const vec = new Vector(this.radius, this.radius);
+        return {
+            min: this.position.clone().sub(vec),
+            max: this.position.clone().add(vec)
+        }
     }
 }
 
 export class PolygonCollider extends Collider {
-    getType(): ColliderType {
-        return "polygon";
-    }
     points: Vector[];
+
     constructor(points: Vector[]) {
         super();
         this.points = points;
     }
-    getBounds(): AABB {
+
+    getType(): ColliderType {
+        return "polygon";
+    }
+    
+    getBounds(): Bounds {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         for (const p of this.points) {
             const x = p.x + this.position.x;
@@ -50,7 +58,10 @@ export class PolygonCollider extends Collider {
             if (x > maxX) maxX = x;
             if (y > maxY) maxY = y;
         }
-        return new AABB(minX, minY, maxX - minX, maxY - minY);
+        return {
+            min: new Vector(minX, minY),
+            max: new Vector(maxX, maxY)
+        }
     }
 }
 

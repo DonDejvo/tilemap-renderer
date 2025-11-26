@@ -1,14 +1,23 @@
 import { Camera } from "../Camera";
 import { Color } from "../Color";
+import { overlaps } from "../common";
 import { geometry } from "../geometry";
 import { math } from "../math";
-import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, STATIC_LAYER_MAX_SPRITES, TextureInfo } from "../Renderer";
+import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, ImageInfo, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
 import { blurHorizontalBuilder, blurVerticalBuilder, defaultShaderBuilder, lightShaderBuilder, ShaderBuilder, ShaderBuilderOutput } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 import { Framebuffer } from "./Framebuffer";
 import { ShaderProgram } from "./ShaderProgram";
+
+const worldToClipVertex = `
+vec4 worldToClip(vec2 worldPos, vec2 cameraPos, vec2 viewport) {
+    vec2 pixelPos = worldPos - cameraPos;
+    vec2 clipPos = vec2(pixelPos.x / viewport.x, 1.0 - pixelPos.y / viewport.y) * 2.0 - 1.0;
+    return vec4(clipPos, 0.0, 1.0);
+}
+`;
 
 const mainVertex = `
 
@@ -31,6 +40,8 @@ varying vec2 uv;
 varying vec4 tintColor;
 varying vec4 maskColor;
 
+${worldToClipVertex}
+
 void main() {
     tintColor = aTintColor;
     maskColor = aMaskColor;
@@ -46,9 +57,8 @@ void main() {
         offsetPos.x * s + offsetPos.y * c
     );
     vec2 worldPos = rotatedPos + aTilePos;
-    vec2 pixelPos = worldPos - uCameraPos;
-    vec2 clipPos = vec2(pixelPos.x / uViewportDimensions.x, 1.0 - pixelPos.y / uViewportDimensions.y) * 2.0 - 1.0;
-    gl_Position = vec4(clipPos, 0.0, 1.0);
+
+    gl_Position = worldToClip(worldPos, uCameraPos, uViewportDimensions);
 }
 `;
 
@@ -78,6 +88,80 @@ uniform mediump sampler2D uSampler;
 void main() {
     vec4 texColor = texture2D(uSampler, uv);
     gl_FragColor = vec4(maskColor.rgb, texColor.a * maskColor.a);
+}
+`;
+
+const lightVertex = `
+precision mediump float;
+
+attribute vec2 aVertexPos;
+
+uniform vec2 uLightCenter;
+uniform float uLightRadius;
+
+uniform vec2 uCameraPos;
+uniform vec2 uViewportDimensions;
+
+varying vec2 worldPos;
+
+${worldToClipVertex}
+
+void main() {
+    worldPos = uLightCenter + (aVertexPos - 0.5) * 2.0 * uLightRadius;
+
+    gl_Position = worldToClip(worldPos, uCameraPos, uViewportDimensions);
+}
+`;
+
+const lightFragment = `
+
+precision mediump float;
+
+varying vec2 worldPos;
+
+uniform vec2 uLightCenter;
+uniform float uLightRadius;
+uniform vec3 uLightColor;
+uniform float uLightIntensity;
+uniform vec2 uLightDir;
+uniform float uLightCutoff;
+
+void main() {
+    vec2 toPixel = worldPos - uLightCenter;
+    float dist = length(toPixel);
+
+    float attenuation = clamp(1.0 - pow(dist / uLightRadius, 2.0), 0.0, 1.0);
+
+    float spotFactor = 1.0;
+    if (uLightCutoff > 0.0) {
+        float cosAngle = dot(normalize(uLightDir), normalize(toPixel));
+        spotFactor = clamp((cosAngle - uLightCutoff) / (1.0 - uLightCutoff), 0.0, 1.0);
+    }
+
+    gl_FragColor = vec4(uLightColor * uLightIntensity * attenuation * spotFactor, 1.0);
+}
+`;
+
+const shadowVertex = `
+attribute vec2 aPos;
+
+uniform vec2 uCameraPos;
+uniform vec2 uViewportDimensions;
+
+${worldToClipVertex}
+
+void main() {
+    gl_Position = worldToClip(aPos, uCameraPos, uViewportDimensions);
+}
+`;
+
+const shadowFragment = `
+precision mediump float;
+
+uniform vec2 uLightPos;
+
+void main() {
+    gl_FragColor = vec4(vec3(0.0), 1.0);
 }
 `;
 
@@ -132,6 +216,8 @@ export class WebglRenderer implements Renderer {
     private gl!: WebGLRenderingContext;
     private shaderProgram!: ShaderProgram;
     private maskShaderProgram!: ShaderProgram;
+    private lightShaderProgram!: ShaderProgram;
+    private shadowShaderProgram!: ShaderProgram;
     private fullscreenVbo!: WebGLBuffer;
     private framebuffers: Framebuffer[];
     private vbo!: WebGLBuffer;
@@ -142,7 +228,9 @@ export class WebglRenderer implements Renderer {
     private clearColor: Color;
     private initialized: boolean;
     public pass: RenderPassStage[];
+    private shadowsVbo!: WebGLBuffer;
     private shaderCache: Map<ShaderBuilder, ShaderProgram>;
+    private time: number;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -154,6 +242,7 @@ export class WebglRenderer implements Renderer {
         this.pass = [defaultPassStage];
         this.framebuffers = [];
         this.shaderCache = new Map();
+        this.time = 0;
     }
 
     public getType(): RendererType {
@@ -172,6 +261,24 @@ export class WebglRenderer implements Renderer {
                     image: images[tileset.name]
                 });
             }
+        }
+    }
+
+    public addImageTextures(images: ImageInfo[]): void {
+        for (let info of images) {
+            const tileset = new Tileset({
+                name: info.name,
+                tilecount: 1,
+                columns: 1,
+                tilewidth: info.width,
+                tileheight: info.height,
+                imagewidth: info.width,
+                imageheight: info.height
+            });
+            this.texturesMap.set(info.name, {
+                tileset,
+                image: info.image
+            })
         }
     }
 
@@ -204,6 +311,21 @@ export class WebglRenderer implements Renderer {
         }
     }
 
+    private blend(blendMode: BlendMode) {
+        switch (blendMode) {
+            case "alpha":
+                this.gl.enable(this.gl.BLEND);
+                this.gl.blendFunc(this.gl.SRC_ALPHA, this.gl.ONE_MINUS_SRC_ALPHA);
+                break;
+            case "additive":
+                this.gl.enable(this.gl.BLEND);
+                this.gl.blendFunc(this.gl.ONE, this.gl.ONE);
+                break;
+            default:
+                this.gl.disable(this.gl.BLEND);
+        }
+    }
+
     public async init() {
         const gl = this.canvas.getContext("webgl");
         if (!gl) throw new Error("WebGL not supported");
@@ -233,6 +355,8 @@ export class WebglRenderer implements Renderer {
 
         this.shaderProgram = new ShaderProgram(gl, mainVertex, mainFragment);
         this.maskShaderProgram = new ShaderProgram(gl, mainVertex, maskFragment);
+        this.lightShaderProgram = new ShaderProgram(gl, lightVertex, lightFragment);
+        this.shadowShaderProgram = new ShaderProgram(gl, shadowVertex, shadowFragment);
 
         this.vbo = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
@@ -253,30 +377,35 @@ export class WebglRenderer implements Renderer {
         }
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
 
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
         this.initFramebuffers();
 
         this.fullscreenVbo = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.fullscreenVbo);
         gl.bufferData(gl.ARRAY_BUFFER, geometry.fullscreenQuad, gl.STATIC_DRAW);
 
+        this.shadowsVbo = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowsVbo);
+        gl.bufferData(gl.ARRAY_BUFFER, MAX_LIGHTS * SHADOW_MAX_VERTICES * 8, gl.DYNAMIC_DRAW);
+
         this.initialized = true;
     }
 
-    private renderScene(framebuffer: Framebuffer, shaderProgram: ShaderProgram, camera: Camera, clearColor: Color, layers: WebglRendererLayer[]) {
+    private renderScene(framebuffer: Framebuffer, shaderProgram: ShaderProgram, camera: Camera, clearColor: Color | null, layers: WebglRendererLayer[]) {
         framebuffer.bind();
 
-        this.gl.clearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
-        this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+        this.blend("alpha");
+
+        if (clearColor) {
+            this.gl.clearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
+            this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+        }
+
+        this.gl.activeTexture(this.gl.TEXTURE0);
 
         shaderProgram.use();
 
         this.gl.uniform2f(shaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
         this.gl.uniform2f(shaderProgram.getUniform("uCameraPos"), camera.position.x, camera.position.y);
-
-        this.gl.activeTexture(this.gl.TEXTURE0);
 
         for (let layer of layers) {
             layer.render(shaderProgram);
@@ -285,102 +414,229 @@ export class WebglRenderer implements Renderer {
         framebuffer.unbind();
     }
 
-    public render(scene: Scene, camera: Camera) {
-        const layers: WebglRendererLayer[] = [];
-        for (const sceneLayer of scene.getLayersOrdered()) {
-            if (!this.layersMap.has(sceneLayer)) {
-                const layer = new WebglRendererLayer(this.gl, this, sceneLayer.isStatic);
-                this.layersMap.set(sceneLayer, layer);
-            }
-            const layer = this.layersMap.get(sceneLayer)!;
-            if (layer.needsUpdate) {
-                layer.upload(sceneLayer.getSpritesOrdered());
-            }
-            layers.push(layer);
+    private renderLights(scene: Scene, camera: Camera) {
+        const cameraBounds = camera.getBounds();
+        const sceneLights = scene.getLights().filter(light => {
+            return overlaps(cameraBounds, light.getBounds());
+        });
+
+        const shadowVertices = new Float32Array(sceneLights.length * SHADOW_MAX_VERTICES * 2);
+        const shadowsDrawCalls: { offset: number; count: number; }[] = [];
+        let offset = 0;
+        for (let light of sceneLights) {
+            const sceneColliders = scene.getColliders(light.getBounds());
+            const newOffset = geometry.createShadowsGeometry(shadowVertices, light, sceneColliders, offset);
+            shadowsDrawCalls.push({ count: (newOffset - offset) / 2, offset: offset / 2 });
+            offset = newOffset;
         }
 
-        this.renderScene(this.framebuffers[0], this.shaderProgram, camera, this.clearColor, layers);
-        this.renderScene(this.framebuffers[1], this.maskShaderProgram, camera, maskClearColor, layers);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shadowsVbo);
 
-        const time = performance.now() * 0.001;
+        this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, shadowVertices);
 
-        for (let i = 0; i < this.pass.length; ++i) {
-            const passStage = this.pass[i];
+        this.framebuffers[TEXID_LIGHTMAP].bind();
+        this.gl.clearColor(
+            scene.ambientColor.r * scene.ambientIntensity,
+            scene.ambientColor.g * scene.ambientIntensity,
+            scene.ambientColor.b * scene.ambientIntensity,
+            1.0
+        );
+        this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+        this.framebuffers[TEXID_LIGHTMAP].unbind();
 
-            const shaderInfo = this.shaderMap.get(passStage.shader);
-            if (!shaderInfo) {
-                throw new Error("Unknown shader " + passStage.shader);
-            }
+        const lightPosLoc = this.lightShaderProgram.getAttrib("aVertexPos");
+        const shadowPosLoc = this.shadowShaderProgram.getAttrib("aPos");
 
-            const shader = shaderInfo.shader!;
+        for (let i = 0; i < sceneLights.length; ++i) {
+            const light = sceneLights[i];
 
-            let sw = this.canvas.width, sh = this.canvas.height;
-            if (passStage.output !== -1) {
-                const outFbo = this.framebuffers[math.clamp(passStage.output, 0, OFFSCREEN_TEXTURES - 1)];
-                sw = outFbo.width;
-                sh = outFbo.height;
-                outFbo.bind();
-            } else {
-                this.gl.viewport(0, 0, sw, sh);
-            }
+            this.framebuffers[TEXID_LIGHTMAP + 1].bind();
 
-            shader.use();
+            this.blend("none");
 
-            const stageUniforms = [{ name: "time", value: time }, { name: "resolution", value: [sw, sh] }].concat(passStage.uniforms ?? []);
+            this.gl.clearColor(0, 0, 0, 1);
+            this.gl.clear(this.gl.COLOR_BUFFER_BIT);
 
-            const uniforms = shaderInfo.builder.getUniforms();
-            for (let uniform of uniforms) {
-                const stageUniform = stageUniforms.find(elem => elem.name === uniform.name);
-                if (stageUniform) {
-                    const value = typeof stageUniform.value === "number" ? [stageUniform.value] : stageUniform.value;
-                    const loc = shader.getUniform("uniforms." + uniform.name);
-                    switch (uniform.type) {
-                        case "float":
-                            this.gl.uniform1f(loc, value[0]);
-                            break;
-                        case "vec2":
-                            this.gl.uniform2fv(loc, value);
-                            break;
-                        case "vec3":
-                            this.gl.uniform3fv(loc, value);
-                            break;
-                        case "vec4":
-                            this.gl.uniform4fv(loc, value);
-                            break;
-                    }
-                }
-            }
+            this.lightShaderProgram.use();
 
-            for (let c = 0; c < MAX_CHANNELS; c++) {
-                const texIndex = passStage.inputs[c] ?? passStage.inputs[0];
-                const texture = this.framebuffers[math.clamp(texIndex, 0, OFFSCREEN_TEXTURES - 1)].texture;
+            this.gl.uniform2f(this.lightShaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
+            this.gl.uniform2f(this.lightShaderProgram.getUniform("uCameraPos"), camera.position.x, camera.position.y);
 
-                this.gl.activeTexture(this.gl.TEXTURE0 + c);
-                this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+            this.gl.uniform2f(this.lightShaderProgram.getUniform("uLightCenter"), light.position.x, light.position.y);
+            this.gl.uniform1f(this.lightShaderProgram.getUniform("uLightRadius"), light.radius);
+            this.gl.uniform3f(this.lightShaderProgram.getUniform("uLightColor"), light.color.r, light.color.g, light.color.b);
+            this.gl.uniform1f(this.lightShaderProgram.getUniform("uLightIntensity"), light.intensity);
+            this.gl.uniform2f(this.lightShaderProgram.getUniform("uLightDir"), light.direction.x, light.direction.y);
+            this.gl.uniform1f(this.lightShaderProgram.getUniform("uLightCutoff"), light.cutoff);
 
-                const loc = shader.getUniform(`uChannel${c}`);
-                this.gl.uniform1i(loc, c);
-            }
-
-            const fullscreenPosLoc = shader.getAttrib("aPos");
-
-            this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.fullscreenVbo);
-
-            this.gl.enableVertexAttribArray(fullscreenPosLoc);
-            this.gl.vertexAttribPointer(fullscreenPosLoc, 2, this.gl.FLOAT, false, 16, 0);
+            this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vbo);
+            this.gl.enableVertexAttribArray(lightPosLoc);
+            this.gl.vertexAttribPointer(lightPosLoc, 2, this.gl.FLOAT, false, 16, 0);
 
             this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
 
-            this.gl.disableVertexAttribArray(fullscreenPosLoc);
+            this.gl.disableVertexAttribArray(lightPosLoc);
 
-            for (let c = 0; c < MAX_CHANNELS; c++) {
-                this.gl.activeTexture(this.gl.TEXTURE0 + c);
-                this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+            const shadowDrawCall = shadowsDrawCalls[i];
+
+            if (shadowDrawCall.count !== 0) {
+                this.shadowShaderProgram.use();
+
+                this.gl.uniform2f(this.shadowShaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
+                this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uCameraPos"), camera.position.toArray());
+
+                this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uLightPos"), light.position.toArray());
+
+                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shadowsVbo);
+                this.gl.enableVertexAttribArray(shadowPosLoc);
+                this.gl.vertexAttribPointer(shadowPosLoc, 2, this.gl.FLOAT, false, 8, 0);
+
+                this.gl.drawArrays(this.gl.TRIANGLES, shadowDrawCall.offset, shadowDrawCall.count);
+
+                this.gl.disableVertexAttribArray(shadowPosLoc);
             }
 
-            if (passStage.output !== -1) {
-                this.framebuffers[math.clamp(passStage.output, 0, OFFSCREEN_TEXTURES - 1)].unbind();
+            this.framebuffers[TEXID_LIGHTMAP + 1].unbind();
+
+            this.renderFullscreenPass({ shader: "blurHorizontal", inputs: [TEXID_LIGHTMAP + 1], output: 4 });
+            this.renderFullscreenPass({ shader: "blurVertical", inputs: [4], output: 5 });
+            this.renderFullscreenPass({ shader: "default_additive", inputs: [5], output: TEXID_LIGHTMAP });
+        }
+    }
+
+    private renderFullscreenPass(passStage: RenderPassStage) {
+        const shaderInfo = this.shaderMap.get(passStage.shader);
+        if (!shaderInfo) {
+            throw new Error("Unknown shader " + passStage.shader);
+        }
+
+        if (passStage.clearColor) {
+            this.gl.clearColor(this.clearColor.r, this.clearColor.g, this.clearColor.b, this.clearColor.a);
+            this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+        }
+
+        const shader = shaderInfo.shader!;
+
+        let sw = this.canvas.width, sh = this.canvas.height;
+        if (passStage.output !== -1) {
+            const outFbo = this.framebuffers[math.clamp(passStage.output, 0, OFFSCREEN_TEXTURES - 1)];
+            sw = outFbo.width;
+            sh = outFbo.height;
+            outFbo.bind();
+        } else {
+            this.gl.viewport(0, 0, sw, sh);
+        }
+
+        this.blend(shaderInfo.blendMode);
+
+        shader.use();
+
+        const stageUniforms = [{ name: "time", value: this.time }, { name: "resolution", value: [sw, sh] }].concat(passStage.uniforms ?? []);
+
+        const uniforms = shaderInfo.builder.getUniforms();
+        for (let uniform of uniforms) {
+            const stageUniform = stageUniforms.find(elem => elem.name === uniform.name);
+            if (stageUniform) {
+                const value = typeof stageUniform.value === "number" ? [stageUniform.value] : stageUniform.value;
+                const loc = shader.getUniform("uniforms." + uniform.name);
+                switch (uniform.type) {
+                    case "float":
+                        this.gl.uniform1f(loc, value[0]);
+                        break;
+                    case "vec2":
+                        this.gl.uniform2fv(loc, value);
+                        break;
+                    case "vec3":
+                        this.gl.uniform3fv(loc, value);
+                        break;
+                    case "vec4":
+                        this.gl.uniform4fv(loc, value);
+                        break;
+                }
             }
+        }
+
+        for (let c = 0; c < MAX_CHANNELS; c++) {
+            const texIndex = passStage.inputs[c] ?? passStage.inputs[0];
+            const texture = this.framebuffers[math.clamp(texIndex, 0, OFFSCREEN_TEXTURES - 1)].texture;
+
+            this.gl.activeTexture(this.gl.TEXTURE0 + c);
+            this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+
+            const loc = shader.getUniform(`uChannel${c}`);
+            this.gl.uniform1i(loc, c);
+        }
+
+        const fullscreenPosLoc = shader.getAttrib("aPos");
+
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.fullscreenVbo);
+
+        this.gl.enableVertexAttribArray(fullscreenPosLoc);
+        this.gl.vertexAttribPointer(fullscreenPosLoc, 2, this.gl.FLOAT, false, 16, 0);
+
+        this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
+
+        this.gl.disableVertexAttribArray(fullscreenPosLoc);
+
+        for (let c = 0; c < MAX_CHANNELS; c++) {
+            this.gl.activeTexture(this.gl.TEXTURE0 + c);
+            this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+        }
+
+        if (passStage.output !== -1) {
+            this.framebuffers[math.clamp(passStage.output, 0, OFFSCREEN_TEXTURES - 1)].unbind();
+        }
+    }
+
+    public render(scene: Scene, camera: Camera) {
+        if(!this.initialized) {
+            throw new Error("Renderer is not initialized");
+        }
+
+        const cameraBounds = camera.getBounds();
+        this.time = performance.now() * 0.001;
+
+        const layers: WebglRendererLayer[] = [];
+        const layersUnderShadows: WebglRendererLayer[] = [];
+        const layersAboveShadows: WebglRendererLayer[] = [];
+        for (const sceneLayer of scene.getLayersOrdered()) {
+            let layer: WebglRendererLayer;
+            if (!this.layersMap.has(sceneLayer)) {
+                this.layersMap.set(sceneLayer, new WebglRendererLayer(this.gl, this, sceneLayer.isStatic));
+            }
+            layer = this.layersMap.get(sceneLayer)!;
+            if (layer.needsUpdate) {
+                let sprites = sceneLayer.getSpritesOrdered();
+                if (!layer.isStatic) {
+                    sprites = sprites.filter(sprite => overlaps(cameraBounds, sprite.getBounds()))
+                }
+                layer.uploadSprites(sceneLayer.getSpritesOrdered());
+            }
+            layers.push(layer);
+            if (sceneLayer.zIndex <= scene.shadowsZIndex) {
+                layersUnderShadows.push(layer);
+            } else {
+                layersAboveShadows.push(layer);
+            }
+        }
+
+        this.renderScene(this.framebuffers[0], this.shaderProgram, camera, this.clearColor, layers);
+
+        this.renderFullscreenPass({ shader: "default", inputs: [0], output: -1 });
+
+        this.renderLights(scene, camera);
+
+        this.renderScene(this.framebuffers[TEXID_SCENE], this.shaderProgram, camera, this.clearColor, layersUnderShadows);
+
+        this.renderFullscreenPass({ shader: "light", inputs: [TEXID_SCENE, TEXID_LIGHTMAP], output: 0 });
+
+        this.renderScene(this.framebuffers[0], this.shaderProgram, camera, null, layersAboveShadows);
+
+        this.renderScene(this.framebuffers[TEXID_MASK], this.maskShaderProgram, camera, maskClearColor, layers);
+
+        for (let i = 0; i < this.pass.length; ++i) {
+            const passStage = this.pass[i];
+            this.renderFullscreenPass(passStage);
         }
 
         for (const [sceneLayer, rendererLayer] of this.layersMap) {
@@ -452,11 +708,11 @@ class WebglRendererLayer {
         gl.bufferData(gl.ARRAY_BUFFER, (this.isStatic ? STATIC_LAYER_MAX_SPRITES : DYNAMIC_LAYER_MAX_SPRITES) * geometry.spriteStride * 4, this.isStatic ? gl.STATIC_DRAW : gl.DYNAMIC_DRAW);
     }
 
-    public upload(sprites: Sprite[]) {
+    public uploadSprites(sprites: Sprite[]) {
         const gl = this.gl;
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteBuffer);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, geometry.createSpritesData(sprites));
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, geometry.createSpritesData(sprites, false));
 
         if (this.isStatic) {
             this.needsUpdate = false;

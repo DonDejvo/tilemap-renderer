@@ -1,8 +1,9 @@
 import { Camera } from "../Camera";
 import { Color } from "../Color";
+import { overlaps } from "../common";
 import { geometry } from "../geometry";
 import { math } from "../math";
-import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo } from "../Renderer";
+import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, ImageInfo, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
 import { ShaderBuilderOutput, defaultShaderBuilder, ShaderBuilder, lightShaderBuilder, blurHorizontalBuilder, blurVerticalBuilder } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
@@ -279,6 +280,24 @@ export class Webgl2Renderer implements Renderer {
         }
     }
 
+    public addImageTextures(images: ImageInfo[]): void {
+        for (let info of images) {
+            const tileset = new Tileset({
+                name: info.name,
+                tilecount: 1,
+                columns: 1,
+                tilewidth: info.width,
+                tileheight: info.height,
+                imagewidth: info.width,
+                imageheight: info.height
+            });
+            this.texturesMap.set(info.name, {
+                tileset,
+                image: info.image
+            })
+        }
+    }
+
     public registerShader(name: string, builder: ShaderBuilder, blendMode: BlendMode = "none") {
         this.shaderMap.set(name, { builder, blendMode });
     }
@@ -372,7 +391,7 @@ export class Webgl2Renderer implements Renderer {
 
         this.shadowsVbo = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowsVbo);
-        gl.bufferData(gl.ARRAY_BUFFER, 30000 * 4, gl.DYNAMIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, MAX_LIGHTS * SHADOW_MAX_VERTICES * 8, gl.DYNAMIC_DRAW);
 
         this.shadowsVao = gl.createVertexArray();
         gl.bindVertexArray(this.shadowsVao);
@@ -386,7 +405,7 @@ export class Webgl2Renderer implements Renderer {
         this.initialized = true;
     }
 
-    private renderScene(framebuffer: Framebuffer, shaderProgram: ShaderProgram, camera: Camera, clearColor: Color | undefined, layers: WebglRendererLayer[]) {
+    private renderScene(framebuffer: Framebuffer, shaderProgram: ShaderProgram, camera: Camera, clearColor: Color | null, layers: WebglRendererLayer[]) {
         framebuffer.bind();
 
         this.blend("alpha");
@@ -411,14 +430,24 @@ export class Webgl2Renderer implements Renderer {
     }
 
     private renderLights(scene: Scene, camera: Camera) {
+        const cameraBounds = camera.getBounds();
+        const sceneLights = scene.getLights().filter(light => {
+            return overlaps(cameraBounds, light.getBounds());
+        });
 
-        const sceneLights = scene.getLights();
-        const sceneColliders = scene.getColliders();
-
-        const shadowsGeometry = geometry.createShadowsGeometry(sceneLights, sceneColliders);
+        const shadowVertices = new Float32Array(sceneLights.length * SHADOW_MAX_VERTICES * 2);
+        const shadowsDrawCalls: { offset: number; count: number; }[] = [];
+        let offset = 0;
+        for (let light of sceneLights) {
+            const sceneColliders = scene.getColliders(light.getBounds());
+            const newOffset = geometry.createShadowsGeometry(shadowVertices, light, sceneColliders, offset);
+            shadowsDrawCalls.push({ count: (newOffset - offset) / 2, offset: offset / 2 });
+            offset = newOffset;
+        }
 
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shadowsVbo);
-        this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, shadowsGeometry.vertices);
+
+        this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, shadowVertices, 0, offset);
 
         this.framebuffers[TEXID_LIGHTMAP].bind();
         this.gl.clearColor(
@@ -456,18 +485,20 @@ export class Webgl2Renderer implements Renderer {
             this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
             this.gl.bindVertexArray(null);
 
-            const shadowDrawCall = shadowsGeometry.drawCalls[i];
+            const shadowDrawCall = shadowsDrawCalls[i];
 
-            this.shadowShaderProgram.use();
+            if (shadowDrawCall.count !== 0) {
+                this.shadowShaderProgram.use();
 
-            this.gl.uniform2f(this.shadowShaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
-            this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uCameraPos"), camera.position.toArray());
+                this.gl.uniform2f(this.shadowShaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
+                this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uCameraPos"), camera.position.toArray());
 
-            this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uLightPos"), light.position.toArray());
+                this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uLightPos"), light.position.toArray());
 
-            this.gl.bindVertexArray(this.shadowsVao);
-            this.gl.drawArrays(this.gl.TRIANGLES, shadowDrawCall.offset, shadowDrawCall.count);
-            this.gl.bindVertexArray(null);
+                this.gl.bindVertexArray(this.shadowsVao);
+                this.gl.drawArrays(this.gl.TRIANGLES, shadowDrawCall.offset, shadowDrawCall.count);
+                this.gl.bindVertexArray(null);
+            }
 
             this.framebuffers[TEXID_LIGHTMAP + 1].unbind();
 
@@ -553,6 +584,11 @@ export class Webgl2Renderer implements Renderer {
     }
 
     public render(scene: Scene, camera: Camera) {
+        if(!this.initialized) {
+            throw new Error("Renderer is not initialized");
+        }
+
+        const cameraBounds = camera.getBounds();
         this.time = performance.now() * 0.001;
 
         const layers: WebglRendererLayer[] = [];
@@ -565,6 +601,10 @@ export class Webgl2Renderer implements Renderer {
             }
             layer = this.layersMap.get(sceneLayer)!;
             if (layer.needsUpdate) {
+                let sprites = sceneLayer.getSpritesOrdered();
+                if(!layer.isStatic) {
+                    sprites = sprites.filter(sprite => overlaps(cameraBounds, sprite.getBounds()))
+                }
                 layer.uploadSprites(sceneLayer.getSpritesOrdered());
             }
             layers.push(layer);
@@ -581,7 +621,7 @@ export class Webgl2Renderer implements Renderer {
 
         this.renderFullscreenPass({ shader: "light", inputs: [TEXID_SCENE, TEXID_LIGHTMAP], output: 0 });
 
-        this.renderScene(this.framebuffers[0], this.shaderProgram, camera, undefined, layersAboveShadows);
+        this.renderScene(this.framebuffers[0], this.shaderProgram, camera, null, layersAboveShadows);
 
         this.renderScene(this.framebuffers[TEXID_MASK], this.maskShaderProgram, camera, maskClearColor, layers);
 

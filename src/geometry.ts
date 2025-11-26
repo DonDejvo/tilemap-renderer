@@ -91,7 +91,7 @@ export const geometry = (() => {
                 offset += 64;
             }
         }
-        
+
         return data;
     }
 
@@ -138,15 +138,13 @@ export const geometry = (() => {
             const edgeDir = p1.clone().sub(p0).normalize();
 
             const normal = new Vector(-edgeDir.y, edgeDir.x);
-            if (Vector.dot(normal, toLight) < 0) normal.scale(-1);
-
             if (Vector.dot(normal, toLight) <= 0) continue;
 
             const dir0 = p0.clone().sub(light.position).normalize();
             const dir1 = p1.clone().sub(light.position).normalize();
 
-            const p2 = p0.clone().add(dir0.scale(shadowLength));
-            const p3 = p1.clone().add(dir1.scale(shadowLength));
+            const p2 = p0.clone().add(dir0.scale(shadowLength * 100));
+            const p3 = p1.clone().add(dir1.scale(shadowLength * 100));
 
             vertices.push(
                 p0.x, p0.y,
@@ -163,30 +161,21 @@ export const geometry = (() => {
     };
 
 
-    const createShadowsGeometry = (lights: Light[], colliders: Collider[]) => {
-        const vertices: number[] = [];
-        const drawCalls: { count: number; offset: number; }[] = []
-
-        for (let light of lights) {
-            let vertexOffset = vertices.length / 2;
-
-            for (let collider of colliders) {
-                switch (collider.getType()) {
-                    case "circle":
-                        vertices.push(...createCircleShadow(light, collider as CircleCollider));
-                        break;
-                    case "polygon":
-                        vertices.push(...createPolygonShadow(light, collider as PolygonCollider));
-                        break;
-                }
+    const createShadowsGeometry = (out: Float32Array, light: Light, colliders: Collider[], offset: number = 0) => {
+        for (let collider of colliders) {
+            let vertices: number[] = [];
+            switch (collider.getType()) {
+                case "circle":
+                    vertices = createCircleShadow(light, collider as CircleCollider);
+                    break;
+                case "polygon":
+                    vertices = createPolygonShadow(light, collider as PolygonCollider);
+                    break;
             }
-
-            drawCalls.push({ count: vertices.length / 2 - vertexOffset, offset: vertexOffset });
+            out.set(vertices, offset);
+            offset += vertices.length;
         }
-        return {
-            drawCalls,
-            vertices: new Float32Array(vertices)
-        };
+        return offset;
     }
 
     return {

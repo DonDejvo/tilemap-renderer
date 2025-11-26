@@ -1,5 +1,5 @@
 import { Color } from "./Color";
-import { BlendMode } from "./Renderer";
+import { Bounds } from "./common";
 import { Tileset, TilesetRegion } from "./Tileset";
 import { Vector } from "./Vector";
 
@@ -9,7 +9,6 @@ interface SpriteParams {
     zIndex?: number;
     isStatic?: boolean;
     angle?: number;
-    blendMode?: BlendMode;
 }
 
 export class Sprite {
@@ -23,7 +22,6 @@ export class Sprite {
     angle: number;
     tintColor: Color;
     maskColor: Color;
-    blendMode: BlendMode;
 
     constructor(params: SpriteParams) {
         this.zIndex = params.zIndex || 0;
@@ -36,7 +34,6 @@ export class Sprite {
         this.angle = params.angle || 0;
         this.tintColor = new Color(1, 1, 1, 1);
         this.maskColor = new Color(0, 0, 0, 1);
-        this.blendMode = params.blendMode || "alpha";
     }
 
     public setTilesetRegion(x: number, y: number, width: number = 1, height: number = 1) {
@@ -48,5 +45,16 @@ export class Sprite {
 
     public getTile() {
         return this.tileset.getTile(this.tilesetRegion.x, this.tilesetRegion.y)!;
+    }
+
+    public getBounds(): Bounds {
+        const radius = Math.max(Math.abs(this.scale.x), Math.abs(this.scale.y));
+        const vec = new Vector(radius, radius);
+        const min = this.position.clone().add(this.offset).sub(vec);
+        const max = min.clone().add(vec).add(vec);
+        return {
+            min,
+            max
+        }
     }
 }
