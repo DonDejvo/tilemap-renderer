@@ -5,7 +5,7 @@ export default defineConfig({
     description: '2D Tilemap Renderer with WebGL/WebGPU support',
 
     // Important for GitHub Pages deployment under a subpath
-    base: '/Tilemap-Renderer/',
+    base: '/tilemap-renderer/',
 
     themeConfig: {
         nav: [

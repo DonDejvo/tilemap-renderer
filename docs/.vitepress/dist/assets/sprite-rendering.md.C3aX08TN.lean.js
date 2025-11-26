@@ -1,0 +1,1 @@
+import{_ as e,c as r,o as t}from"./chunks/framework.DHBf-BIq.js";const m=JSON.parse('{"title":"","description":"","frontmatter":{},"headers":[],"relativePath":"sprite-rendering.md","filePath":"sprite-rendering.md"}'),n={name:"sprite-rendering.md"};function a(s,i,o,c,p,d){return t(),r("div")}const f=e(n,[["render",a]]);export{m as __pageData,f as default};
