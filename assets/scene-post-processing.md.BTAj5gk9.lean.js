@@ -1,0 +1,1 @@
+import{_ as e,c as s,o as t}from"./chunks/framework.DHBf-BIq.js";const m=JSON.parse('{"title":"","description":"","frontmatter":{},"headers":[],"relativePath":"scene-post-processing.md","filePath":"scene-post-processing.md"}'),o={name:"scene-post-processing.md"};function c(n,r,a,p,i,_){return t(),s("div")}const f=e(o,[["render",c]]);export{m as __pageData,f as default};

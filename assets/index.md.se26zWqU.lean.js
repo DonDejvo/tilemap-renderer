@@ -1,1 +1,0 @@
-import{_ as r,c as a,o as t,ae as n}from"./chunks/framework.DjZYZnxp.js";const g=JSON.parse('{"title":"Tilemap Renderer","description":"","frontmatter":{},"headers":[],"relativePath":"index.md","filePath":"index.md"}'),o={name:"index.md"};function i(s,e,d,l,h,c){return t(),a("div",null,[...e[0]||(e[0]=[n("",17)])])}const m=r(o,[["render",i]]);export{g as __pageData,m as default};
