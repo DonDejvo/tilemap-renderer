@@ -1,73 +1,75 @@
-# tilemap-renderer
-web based tilemap renderer with WebGL, WebGL2 and WebGPU implementation variants
+# Tilemap Renderer
 
-# Tutorial
+**Tilemap Renderer** is a high-performance, modular, and easy-to-use 2D rendering engine for JavaScript.  
+It supports WebGL, WebGL2, and WebGPU, offering one of the fastest and most flexible sprite rendering pipelines available for modern web applications.
 
-Load tilesets:
+---
 
-```js
-const tileset = new TilemapRenderer.Tileset({
-    name: "MyTileset",
-    imagewidth: 64,
-    imageheight: 64,
-    columns: 2,
-    tilecount: 4,
-    tilewidth: 32,
-    tileheight: 32
-});
+## Documentation
 
-const tilesetImage = await TilemapRenderer.assets.loadImage("url_path_to_image");
+Full documentation, guides, and examples:
+
+**https://dondejvo.github.io/Tilemap-Renderer**
+
+All setup instructions and API details are available there.
+
+---
+
+## Features
+
+- Fast tilemap and sprite rendering  
+- Modular architecture — use only what you need  
+- Color, blending, and shader support  
+- Camera system with transforms  
+- Texture atlases and tilesets  
+- Vector shape rendering  
+- Post-processing pipeline  
+- Lighting system  
+- Supports WebGL, WebGL2, and WebGPU  
+
+---
+
+## Installation
+
+### CDN (UMD)
+```html
+<script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@1.6.1/build/tilemap-renderer.min.js"></script>
 ```
 
-Create camera:
+---
 
+### ES Modules
 ```js
-const camera = new TilemapRenderer.Camera(viewportWidth, viewportHeight);
+import { createRenderer } from "https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@1.6.1/build/tilemap-renderer.module.min.js";
 ```
 
-You can later update projection:
+---
 
+## Quick Example
 ```js
-camera.updateProjection(viewportWidth, viewportHeight);
-```
+const { createRenderer, Scene, Camera, Color } = TilemapRenderer;
 
-Create scene:
+const renderer = createRenderer("webgl2");
+renderer.setSize(360, 480);
+renderer.setClearColor(new Color(0, 0, 1, 1)); // blue background
 
-```js
-const scene = new TilemapRenderer.Scene();
-
-const sprite = new TilemapRenderer.Sprite({
-    tileset,
-    tilesetRegion: { x: 0, y: 0 },
-    /* optional */
-    // zIndex: 0,
-    // isStatic: false
-});
-
-// Coordinates start from left bottom corner
-sprite.position.set(16, 8);
-
-sprite.scale.set(32, 32);
-
-scene.addSprite(s);
-```
-
-Finally create renderer:
-
-```js
-const renderer = TilemapRenderer.createRenderer(type /* webgl | webgl2 | webgpu */);
-
-renderer.addTextures([tileset], { ["MyTileset"]: tilesetImage });
-
-await renderer.init();
-
-renderer.setSize(width, height);
-renderer.setClearColor(new TilemapRenderer.Color(r, g, b, a));
-
-// Place its canvas into DOM
 document.body.appendChild(renderer.getCanvas());
 
-// Render
-camera.update();
+const camera = new Camera(360, 480);
+const scene = new Scene();
+
 renderer.render(scene, camera);
 ```
+
+## Contributing
+
+Contributions, bug reports, and suggestions are welcome.  
+Feel free to open an issue or submit a pull request.
+
+---
+
+## License
+
+MIT License © 2025 dondejvo
+
+

@@ -32,7 +32,7 @@ export class Scene {
     public shadowsZIndex: number;
     private collidersHashGrid: SpatialHashGrid<Collider>;
 
-    constructor(params: SceneParams) {
+    constructor(params: SceneParams = {}) {
         this.layers = [];
         this.ambientIntensity = params.ambientIntensity || 1.0;
         this.ambientColor = params.ambientColor || new Color(1, 1, 1);
