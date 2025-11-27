@@ -9,7 +9,7 @@ It supports WebGL, WebGL2, and WebGPU, offering one of the fastest and most flex
 
 Full documentation, guides, and examples:
 
-**https://dondejvo.github.io/Tilemap-Renderer**
+**https://dondejvo.github.io/tilemap-renderer**
 
 All setup instructions and API details are available there.
 
