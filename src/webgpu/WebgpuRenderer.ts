@@ -3,7 +3,7 @@ import { Color } from "../Color";
 import { overlaps } from "../common";
 import { geometry } from "../geometry";
 import { math } from "../math";
-import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, ImageInfo, LAYER_LIFETIME, LAYER_MAX_TEXTURES, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo, UNIFORMS_MAX_SIZE } from "../Renderer";
+import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, LAYER_MAX_TEXTURES, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo, UNIFORMS_MAX_SIZE } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
 import { blurHorizontalBuilder, blurVerticalBuilder, defaultShaderBuilder, lightShaderBuilder, ShaderBuilder, ShaderBuilderOutput } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
@@ -355,6 +355,7 @@ export class WebgpuRenderer implements Renderer {
         lightBlurVertical: RenderPassStage;
         lightAdditive: RenderPassStage;
     };
+    private resizeRequested: boolean;
 
     constructor(canvas: HTMLCanvasElement) {
         this.layersMap = new Map();
@@ -374,6 +375,7 @@ export class WebgpuRenderer implements Renderer {
             lightBlurVertical: { shader: "blurVertical", inputs: [4], output: 5 },
             lightAdditive: { shader: "default_additive", inputs: [5], output: TEXID_LIGHTMAP }
         };
+        this.resizeRequested = false;
     }
 
     public getType(): RendererType {
@@ -395,24 +397,6 @@ export class WebgpuRenderer implements Renderer {
         }
     }
 
-    public addImageTextures(images: ImageInfo[]): void {
-        for (let info of images) {
-            const tileset = new Tileset({
-                name: info.name,
-                tilecount: 1,
-                columns: 1,
-                tilewidth: info.width,
-                tileheight: info.height,
-                imagewidth: info.width,
-                imageheight: info.height
-            });
-            this.texturesMap.set(info.name, {
-                tileset,
-                image: info.image
-            })
-        }
-    }
-
     public registerShader(name: string, builder: ShaderBuilder, blendMode: BlendMode = "none") {
         this.shaderMap.set(name, { builder, blendMode });
     }
@@ -426,7 +410,7 @@ export class WebgpuRenderer implements Renderer {
         this.canvas.height = height;
 
         if (this.initialized) {
-            this.initOffscreenTextures(OFFSCREEN_TEXTURES);
+            this.resizeRequested = true;
         }
     }
 
@@ -434,10 +418,10 @@ export class WebgpuRenderer implements Renderer {
         return this.canvas;
     }
 
-    private initOffscreenTextures(count: number) {
-        for (let i = 0; i < count; ++i) {
+    private initOffscreenTextures() {
+        for (let i = 0; i < OFFSCREEN_TEXTURES; ++i) {
             this.offscreenTextures[i]?.destroy();
-            const n = getOffscreenTextureSizeFactor(i)
+            const n = getOffscreenTextureSizeFactor(i);
             this.offscreenTextures[i] = this.cfg.device.createTexture({
                 size: { width: this.canvas.width * n, height: this.canvas.height * n, depthOrArrayLayers: 1 },
                 format: this.cfg.format,
@@ -445,6 +429,9 @@ export class WebgpuRenderer implements Renderer {
                     GPUTextureUsage.TEXTURE_BINDING,
                 label: "offscreen texture " + i
             });
+        }
+        for(let [passStage, info] of this.renderPassUniformMap) {
+            info.textureBindGroup = this.renderPassCreateTextureBindGroup(passStage);
         }
     }
 
@@ -497,7 +484,7 @@ export class WebgpuRenderer implements Renderer {
             }
         }
 
-        this.initOffscreenTextures(OFFSCREEN_TEXTURES);
+        this.initOffscreenTextures();
 
         this.sampler = device.createSampler({
             magFilter: "nearest",
@@ -608,11 +595,11 @@ export class WebgpuRenderer implements Renderer {
             primitive: { topology: "triangle-strip" }
         });
 
-            this.lightUniformBindGroup = this.cfg.device.createBindGroup({
-                label: "Light uniform bind group",
-                layout: this.lightPipeline.getBindGroupLayout(1),
-                entries: [{ binding: 0, resource: { buffer: this.lightUniformBuffer, size: geometry.lightStride } }]
-            });
+        this.lightUniformBindGroup = this.cfg.device.createBindGroup({
+            label: "Light uniform bind group",
+            layout: this.lightPipeline.getBindGroupLayout(1),
+            entries: [{ binding: 0, resource: { buffer: this.lightUniformBuffer, size: geometry.lightStride } }]
+        });
 
         const shadowPipelineLayot = this.cfg.device.createPipelineLayout({
             bindGroupLayouts: [this.cameraBGL]
@@ -745,7 +732,7 @@ export class WebgpuRenderer implements Renderer {
         const sceneLights = scene.getLights().filter(light => {
             return overlaps(cameraBounds, light.getBounds());
         });
-        
+
         const shadowVertices = new Float32Array(sceneLights.length * SHADOW_MAX_VERTICES * 2);
         const shadowsDrawCalls: { offset: number; count: number; }[] = [];
         let offset = 0;
@@ -815,6 +802,34 @@ export class WebgpuRenderer implements Renderer {
         }
     }
 
+    private renderPassCreateTextureBindGroup(passStage: RenderPassStage) {
+        const shaderInfo = this.shaderMap.get(passStage.shader);
+        if (!shaderInfo) {
+            throw new Error("Unknown shader " + passStage.shader);
+        }
+
+        const entries: GPUBindGroupEntry[] = [
+            { binding: 0, resource: this.fullscreenSampler }
+        ];
+        for (let i = 0; i < MAX_CHANNELS; i++) {
+            const texIndex = passStage.inputs[i] ?? passStage.inputs[0];
+
+            const texture = this.offscreenTextures[math.clamp(texIndex, 0, OFFSCREEN_TEXTURES - 1)];
+
+            entries.push({
+                binding: i + 1,
+                resource: texture.createView()
+            });
+        }
+        const textureBindGroup = this.cfg.device.createBindGroup({
+            label: passStage.shader + " texture bind group",
+            layout: shaderInfo.pipeline!.getBindGroupLayout(1),
+            entries
+        });
+
+        return textureBindGroup;
+    }
+
     private renderFullscreenPass(encoder: GPUCommandEncoder, passStage: RenderPassStage) {
         const shaderInfo = this.shaderMap.get(passStage.shader);
         if (!shaderInfo) {
@@ -846,29 +861,12 @@ export class WebgpuRenderer implements Renderer {
                 layout: shaderInfo.pipeline!.getBindGroupLayout(0),
                 entries: [{ binding: 0, resource: { buffer: ubo } }]
             });
-            const entries: GPUBindGroupEntry[] = [
-                { binding: 0, resource: this.fullscreenSampler }
-            ];
+            const textureBindGroup = this.renderPassCreateTextureBindGroup(passStage);
 
-            for (let i = 0; i < MAX_CHANNELS; i++) {
-                const texIndex = passStage.inputs[i] ?? passStage.inputs[0];
-
-                const texture = this.offscreenTextures[math.clamp(texIndex, 0, OFFSCREEN_TEXTURES - 1)];
-
-                entries.push({
-                    binding: i + 1,
-                    resource: texture.createView()
-                });
-            }
-            const textureBindGroup = this.cfg.device.createBindGroup({
-                label: passStage.shader + " texture bind group",
-                layout: shaderInfo.pipeline!.getBindGroupLayout(1),
-                entries
-            });
             this.renderPassUniformMap.set(passStage, { ubo, uniformBindGroup, textureBindGroup });
         }
-        const uniformsInfo = this.renderPassUniformMap.get(passStage)!;
 
+        const uniformsInfo = this.renderPassUniformMap.get(passStage)!;
         this.cfg.device.queue.writeBuffer(uniformsInfo.ubo, 0, uniformData);
 
         const fullscreenPass = encoder.beginRenderPass({
@@ -890,8 +888,13 @@ export class WebgpuRenderer implements Renderer {
     }
 
     public render(scene: Scene, camera: Camera) {
-        if(!this.initialized) {
+        if (!this.initialized) {
             throw new Error("Renderer is not initialized");
+        }
+
+        if (this.resizeRequested) {
+            this.initOffscreenTextures();
+            this.resizeRequested = false;
         }
 
         const cameraBounds = camera.getBounds();
@@ -908,7 +911,7 @@ export class WebgpuRenderer implements Renderer {
             const layer = this.layersMap.get(sceneLayer)!;
             if (layer.needsUpdate) {
                 let sprites = sceneLayer.getSpritesOrdered();
-                if(!layer.isStatic) {
+                if (!layer.isStatic) {
                     sprites = sprites.filter(sprite => overlaps(cameraBounds, sprite.getBounds()))
                 }
                 layer.uploadSprites(sprites);

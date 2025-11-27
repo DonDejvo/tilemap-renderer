@@ -51,17 +51,9 @@ export interface RendererBuilderOptions {
 
 export const maskClearColor = new Color(0, 0, 0, 1);
 
-export interface ImageInfo {
-    name: string;
-    image: TexImageSource;
-    width: number;
-    height: number;
-}
-
 export interface Renderer {
     getType(): RendererType;
     addTextures(tilesets: Tileset[], images: Record<string, TexImageSource>): void;
-    addImageTextures(images: ImageInfo[]): void;
     init(): Promise<void>;
     render(scene: Scene, camera: Camera): void;
     setSize(width: number, height: number): void;

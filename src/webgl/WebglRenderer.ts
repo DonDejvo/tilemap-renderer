@@ -3,7 +3,7 @@ import { Color } from "../Color";
 import { overlaps } from "../common";
 import { geometry } from "../geometry";
 import { math } from "../math";
-import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, ImageInfo, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo } from "../Renderer";
+import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
 import { blurHorizontalBuilder, blurVerticalBuilder, defaultShaderBuilder, lightShaderBuilder, ShaderBuilder, ShaderBuilderOutput } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
@@ -231,6 +231,7 @@ export class WebglRenderer implements Renderer {
     private shadowsVbo!: WebGLBuffer;
     private shaderCache: Map<ShaderBuilder, ShaderProgram>;
     private time: number;
+    private resizeRequested: boolean;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -243,6 +244,7 @@ export class WebglRenderer implements Renderer {
         this.framebuffers = [];
         this.shaderCache = new Map();
         this.time = 0;
+        this.resizeRequested = false;
     }
 
     public getType(): RendererType {
@@ -264,24 +266,6 @@ export class WebglRenderer implements Renderer {
         }
     }
 
-    public addImageTextures(images: ImageInfo[]): void {
-        for (let info of images) {
-            const tileset = new Tileset({
-                name: info.name,
-                tilecount: 1,
-                columns: 1,
-                tilewidth: info.width,
-                tileheight: info.height,
-                imagewidth: info.width,
-                imageheight: info.height
-            });
-            this.texturesMap.set(info.name, {
-                tileset,
-                image: info.image
-            })
-        }
-    }
-
     public registerShader(name: string, builder: ShaderBuilder, blendMode: BlendMode = "none") {
         this.shaderMap.set(name, { builder, blendMode });
     }
@@ -295,7 +279,7 @@ export class WebglRenderer implements Renderer {
         this.canvas.height = height;
 
         if (this.initialized) {
-            this.initFramebuffers();
+            this.resizeRequested = true;
         }
     }
 
@@ -589,8 +573,13 @@ export class WebglRenderer implements Renderer {
     }
 
     public render(scene: Scene, camera: Camera) {
-        if(!this.initialized) {
+        if (!this.initialized) {
             throw new Error("Renderer is not initialized");
+        }
+
+        if(this.resizeRequested) {
+            this.initFramebuffers();
+            this.resizeRequested = false;
         }
 
         const cameraBounds = camera.getBounds();

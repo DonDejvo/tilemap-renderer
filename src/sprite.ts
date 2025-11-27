@@ -5,7 +5,7 @@ import { Vector } from "./Vector";
 
 interface SpriteParams {
     tileset: Tileset;
-    tilesetRegion: TilesetRegion;
+    tilesetRegion?: TilesetRegion;
     zIndex?: number;
     isStatic?: boolean;
     angle?: number;
@@ -26,11 +26,14 @@ export class Sprite {
     constructor(params: SpriteParams) {
         this.zIndex = params.zIndex || 0;
         this.tileset = params.tileset;
-        this.tilesetRegion = params.tilesetRegion;
+        this.tilesetRegion = params.tilesetRegion || { x: 0, y: 0 };
         this.isStatic = params.isStatic || false;
         this.position = new Vector();
         this.offset = new Vector();
-        this.scale = new Vector(1, 1);
+        this.scale = new Vector(
+            this.tileset.tileWidth * (this.tilesetRegion.width || 1), 
+            this.tileset.tileHeight * (this.tilesetRegion.height || 1)
+        );
         this.angle = params.angle || 0;
         this.tintColor = new Color(1, 1, 1, 1);
         this.maskColor = new Color(0, 0, 0, 1);

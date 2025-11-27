@@ -195,11 +195,14 @@ export class Scene {
     }
 
     public getInfo() {
+        const spritesCount = this.layers.reduce((spritesCount, layer) => spritesCount + layer.sprites.length, 0);
+        const staticSpritesCount = this.layers.reduce((spritesCount, layer) => spritesCount + layer.sprites.filter(sprite => sprite.isStatic).length, 0);
         return {
             lights: this.lights.length,
             colliders: this.colliders.length,
-            sprites: this.layers.reduce((spritesCount, layer) => spritesCount + layer.sprites.length, 0),
-            staticSprites: this.layers.reduce((spritesCount, layer) => spritesCount + layer.sprites.filter(sprite => sprite.isStatic).length, 0),
+            sprites: spritesCount,
+            staticSprites: staticSpritesCount,
+            dynamicSprites: spritesCount - staticSpritesCount,
             layers: this.layers.length
         };
     }

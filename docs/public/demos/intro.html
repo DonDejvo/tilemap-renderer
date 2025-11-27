@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tilemap Renderer Intro</title>
+    <style>
+        html, body {
+            margin: 0;
+            height: 100%;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@1.6.1/build/tilemap-renderer.min.js"></script>
+    <script>
+        const { createRenderer, Camera, Scene, Color } = TilemapRenderer;
+
+        const main = async () => {
+            // Create renderer
+            const renderer = createRenderer("webgl2");
+            renderer.setClearColor(new Color(0, 0, 1, 1)); // blue background
+            document.body.appendChild(renderer.getCanvas());
+
+            // Create camera and scene
+            const camera = new Camera(0, 0);
+            const scene = new Scene();
+
+            const canvas = renderer.getCanvas();
+
+            const observer = new ResizeObserver(entries => {
+                for (const entry of entries) {
+                    const width = entry.contentBoxSize[0].inlineSize;
+                    const height = entry.contentBoxSize[0].blockSize;
+
+                    renderer.setSize(width, height);
+                    camera.vw = width;
+                    camera.vh = height;
+                }
+                renderer.render(scene, camera);
+            });
+
+            // Initialize renderer
+            await renderer.init();
+
+            observer.observe(canvas);
+        }
+
+        main();
+    </script>
+</body>
+
+</html>

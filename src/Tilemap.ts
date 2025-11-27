@@ -160,7 +160,11 @@ export class Tilemap {
     }
 
     public getTilesetByName(name: string) {
-        return this.tilesets.find((tileset) => tileset.tileset.name === name)?.tileset || null;
+        const info = this.tilesets.find((tileset) => tileset.tileset.name === name);
+        if(!info) {
+            throw new Error("Tilemap doesn't include tileset \"" + name + "\"");
+        }
+        return info.tileset;
     }
 
     public getLayers() {

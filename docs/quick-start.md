@@ -16,19 +16,19 @@ You can include TilemapRenderer via a **CDN script**. Specify a **version** to e
     const { createRenderer, Camera, Scene, Color } = TilemapRenderer;
 
     const main = async () => {
-        let w = 360, h = 480;
+        let w = 300, h = 150;
 
         // Create renderer
         const renderer = createRenderer("webgpu");
         renderer.setSize(w, h);
-        renderer.setClearColor(new Color(0, 0, 1, 1)); // Blue background
+        renderer.setClearColor(new Color(0, 0, 1, 1)); // blue background
         document.body.appendChild(renderer.getCanvas());
 
         // Create camera and scene
         const camera = new Camera(w, h);
         const scene = new Scene();
 
-        // Init renderer
+        // Initialize renderer
         await renderer.init();
 
         // Render the scene
@@ -52,6 +52,8 @@ For modern projects with bundlers like Vite, you can import TilemapRenderer as a
 
 ---
 
-You can see a working live demo of the UMD build below. The demo renders an empty scene with a blue background:
+You can see a working live demo below. The demo renders an empty scene with a blue background:
 
-<iframe src="umd-demo.html" width="100%" height="500" style="border:1px solid #ddd;"></iframe>
+<iframe src="demos/intro.html" width="300" height="150" style="border:1px solid #ddd;"></iframe>
+
+<a href="demos/intro.html" target="_blank">click here to open in separate window</a>

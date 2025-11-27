@@ -8,7 +8,7 @@ export const assets = (() => {
                 resolve(img);
             };
             img.onerror = () => {
-                reject();
+                reject("Failed to load image: " + url);
             };
         });
     };
@@ -20,7 +20,7 @@ export const assets = (() => {
 
             return data;
         } catch {
-            throw new Error(`Failed to load: ${url}`);
+            throw new Error(`Failed to load json: ${url}`);
         }
     };
 

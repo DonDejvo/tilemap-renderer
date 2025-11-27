@@ -6,17 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Topdown Demo</title>
     <style>
+        html,
         body {
             margin: 0;
-            background-color: #000;
-            overflow: hidden;
+            height: 100%;
         }
 
         canvas {
-            position: absolute;
-            left: 0;
-            top: 0;
             display: block;
+            width: 100%;
+            height: 100%;
         }
 
         #fps {
@@ -126,7 +125,7 @@
         import * as TilemapRenderer from "../src/TilemapRenderer.ts";
 
         const assetsUrl = "";
-        const rendererContext = "webgl";
+        const rendererContext = "webgpu";
         let k = 6;
 
         class KeyboardInput {
@@ -179,9 +178,9 @@
 
 
         class Player {
-            constructor(scene, x, y, zIndex, emitter) {
+            constructor(scene, x, y, zIndex, emitter, tileset) {
                 this.sprite = new TilemapRenderer.Sprite({
-                    tileset: TilemapRenderer.Tileset.getByName("BODY_skeleton"),
+                    tileset,
                     tilesetRegion: { x: 0, y: 0 },
                     isStatic: false,
                     zIndex
@@ -197,7 +196,7 @@
                 this.speed = 80;
 
                 this.sprite.position.copy(this.position);
-                this.sprite.scale.set(64, 64);
+                // this.sprite.scale.set(64, 64);
                 this.sprite.offset.set(-32, -64);
 
                 this.direction = 2;
@@ -271,7 +270,7 @@
 
                 this.sprite.position.set(x, y);
                 this.sprite.angle = direction.angle();
-                this.sprite.scale.set(64, 64);
+                // this.sprite.scale.set(64, 64);
                 this.sprite.offset.set(-32, -32);
 
                 this.direction = direction;
@@ -372,13 +371,13 @@
                         case "tree_lg":
                             for (let i = 0; i < 1; ++i) {
                                 const tree = new TilemapRenderer.Sprite({
-                                    tileset: TilemapRenderer.Tileset.getByName("SnowyLands_Decorative"),
+                                    tileset: exampleMap.getTilesetByName("SnowyLands_Decorative"),
                                     tilesetRegion: { x: 3, y: 20, width: 3, height: 4 },
                                     zIndex,
                                     isStatic: false
                                 });
                                 tree.offset.set(-1.5 * layer.tilemap.tileWidth, -4 * layer.tilemap.tileHeight + 4);
-                                tree.scale.set(3 * layer.tilemap.tileWidth, 4 * layer.tilemap.tileHeight);
+                                // tree.scale.set(3 * layer.tilemap.tileWidth, 4 * layer.tilemap.tileHeight);
                                 tree.position.set(obj.x, obj.y);
                                 scene.addSprite(tree);
                                 const treeCollider = new TilemapRenderer.colliders.BoxCollider(2 * layer.tilemap.tileWidth - 12, 0.5 * layer.tilemap.tileWidth);
@@ -388,7 +387,7 @@
                             break;
 
                         case "player":
-                            player = new Player(scene, obj.x, obj.y, zIndex, emitter);
+                            player = new Player(scene, obj.x, obj.y, zIndex, emitter, skeletonBodyTileset);
                             break;
 
                         case "light":
@@ -418,7 +417,6 @@
             document.body.appendChild(renderer.getCanvas());
 
             camera.updateProjection(w, h);
-
             renderer.setSize(w, h);
 
             renderer.addTextures(exampleMap.getTilesets(), {
@@ -457,6 +455,19 @@
 
             await renderer.init();
             renderer.setClearColor(new TilemapRenderer.Color(0.5, 0.5, 0.5));
+
+            const observer = new ResizeObserver(entries => {
+                for (const entry of entries) {
+                    const width = w = entry.contentBoxSize[0].inlineSize;
+                    const height = h = entry.contentBoxSize[0].blockSize;
+
+                    renderer.setSize(width, height);
+                    camera.vw = width;
+                    camera.vh = height;
+                }
+            });
+
+            observer.observe(renderer.getCanvas());
 
             renderer.pass = [
                 // downscale to quarter

@@ -98,8 +98,18 @@ export class Tileset {
         return this.cache.get(url)!;
     }
 
-    public static getByName(name: string) {
-        return this.cache.values().find(tileset => tileset.name === name) || null;
+    public static fromImage(name: string, image: HTMLImageElement) {
+        const w = image.width;
+        const h = image.height;
+        return new Tileset({
+            tilewidth: w,
+            tileheight: h,
+            imagewidth: w,
+            imageheight: h,
+            tilecount: 1,
+            columns: 1,
+            name
+        });
     }
 
     public getTile(x: number, y: number) {
