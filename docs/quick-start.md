@@ -11,7 +11,7 @@ You can include TilemapRenderer via a **CDN script**. Specify a **version** to e
 
 ```html
 <!-- UMD build from CDN -->
-<script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@1.6.1/build/tilemap-renderer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@latest/build/tilemap-renderer.min.js"></script>
 <script>
     const { createRenderer, Camera, Scene, Color } = TilemapRenderer;
 
@@ -45,14 +45,14 @@ For modern projects with bundlers like Vite, you can import TilemapRenderer as a
 
 ```html
 <script type="module">
-    import { createRenderer, Camera, Scene, Color } from "https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@1.6.1/build/tilemap-renderer.module.min.js";
+    import { createRenderer, Camera, Scene, Color } from "https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@latest/build/tilemap-renderer.module.min.js";
     // The rest of the code is the same as the UMD example above.
 </script>
 ```
 
----
+## Live Demo
 
-You can see a working live demo below. The demo renders an empty scene with a blue background:
+The demo bellow renders an empty scene with a blue background:
 
 <iframe src="demos/intro.html" width="300" height="150" style="border:1px solid #ddd;"></iframe>
 

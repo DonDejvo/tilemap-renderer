@@ -3,13 +3,12 @@ import { Bounds } from "./common";
 import { Tileset, TilesetRegion } from "./Tileset";
 import { Vector } from "./Vector";
 
-interface SpriteParams {
-    tileset: Tileset;
-    tilesetRegion?: TilesetRegion;
-    zIndex?: number;
-    isStatic?: boolean;
-    angle?: number;
-}
+    interface SpriteParams {
+        tileset: Tileset;
+        tilesetRegion?: TilesetRegion;
+        zIndex?: number;
+        isStatic?: boolean;
+    }
 
 export class Sprite {
     zIndex: number;
@@ -34,7 +33,7 @@ export class Sprite {
             this.tileset.tileWidth * (this.tilesetRegion.width || 1), 
             this.tileset.tileHeight * (this.tilesetRegion.height || 1)
         );
-        this.angle = params.angle || 0;
+        this.angle = 0;
         this.tintColor = new Color(1, 1, 1, 1);
         this.maskColor = new Color(0, 0, 0, 1);
     }
