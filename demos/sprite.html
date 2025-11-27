@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tilemap Renderer Intro</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            height: 100%;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@1.7.0/build/tilemap-renderer.min.js"></script>
+    <script>
+        const { createRenderer, Camera, Scene, Color, Sprite, Tileset, assets } = TilemapRenderer;
+
+        const main = async () => {
+            const playerImage = await assets.loadImage("../images/white_square.png");
+
+            // Create renderer
+            const renderer = createRenderer("webgl2");
+            renderer.setClearColor(new Color(1, 1, 1, 1)); // White background
+
+            // Create camera and scene
+            const camera = new Camera(0, 0);
+            const scene = new Scene();
+
+            const tileset = Tileset.fromImage("WhiteSquare", playerImage);
+
+            const colors = [
+                new Color(1, 0, 0), // Red
+                new Color(0, 1, 0), // Green
+                new Color(0, 0, 1) // Blue
+            ]
+
+            for (let i = 0; i < 3; ++i) {
+                const sprite = new Sprite({
+                    tileset,
+                    zIndex: 3 - i
+                });
+
+                sprite.position.set(100, 100);
+                sprite.scale.scale(i + 1);
+                // Offseting by negative half of scale sets sprite rotation origin at the center
+                sprite.offset.copy(sprite.scale.clone().scale(-0.5));
+                sprite.angle = i * Math.PI / 8;
+                sprite.tintColor = colors[i];
+
+                scene.addSprite(sprite);
+            }
+
+            const canvas = renderer.getCanvas();
+
+            document.body.appendChild(canvas);
+
+            const observer = new ResizeObserver(entries => {
+                for (const entry of entries) {
+                    const width = entry.contentBoxSize[0].inlineSize;
+                    const height = entry.contentBoxSize[0].blockSize;
+
+                    renderer.setSize(width, height);
+                    camera.vw = width;
+                    camera.vh = height;
+                }
+                renderer.render(scene, camera);
+            });
+
+            // Add textures (must be done before calling init!)
+            renderer.addTextures([tileset], { ["WhiteSquare"]: playerImage });
+
+            // Initialize renderer
+            await renderer.init();
+
+            observer.observe(canvas);
+        }
+
+        main();
+    </script>
+</body>
+
+</html>
