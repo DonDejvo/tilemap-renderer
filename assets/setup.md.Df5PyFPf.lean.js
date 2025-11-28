@@ -1,0 +1,1 @@
+import{_ as i,c as a,o as n,ae as e}from"./chunks/framework.DHBf-BIq.js";const g=JSON.parse('{"title":"Quick Start","description":"","frontmatter":{},"headers":[],"relativePath":"setup.md","filePath":"setup.md"}'),t={name:"setup.md"};function h(l,s,p,k,r,d){return n(),a("div",null,[...s[0]||(s[0]=[e("",13)])])}const o=i(t,[["render",h]]);export{g as __pageData,o as default};

@@ -1,0 +1,1 @@
+import{_ as t,c as a,o,ae as r}from"./chunks/framework.DHBf-BIq.js";const p=JSON.parse('{"title":"Camera","description":"","frontmatter":{},"headers":[],"relativePath":"camera.md","filePath":"camera.md"}'),i={name:"camera.md"};function s(n,e,h,c,l,d){return o(),a("div",null,[...e[0]||(e[0]=[r("",15)])])}const g=t(i,[["render",s]]);export{p as __pageData,g as default};

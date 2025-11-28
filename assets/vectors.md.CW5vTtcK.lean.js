@@ -1,0 +1,1 @@
+import{_ as a,c as o,o as t,ae as r}from"./chunks/framework.DHBf-BIq.js";const p=JSON.parse('{"title":"Vectors","description":"","frontmatter":{},"headers":[],"relativePath":"vectors.md","filePath":"vectors.md"}'),n={name:"vectors.md"};function c(i,e,s,d,h,l){return t(),o("div",null,[...e[0]||(e[0]=[r("",66)])])}const v=a(n,[["render",c]]);export{p as __pageData,v as default};
