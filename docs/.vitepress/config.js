@@ -4,7 +4,6 @@ export default defineConfig({
     title: 'Tilemap Renderer',
     description: '2D Tilemap Renderer with WebGL/WebGPU support',
 
-    // Important for GitHub Pages deployment under a subpath
     base: '/tilemap-renderer/',
 
     themeConfig: {
@@ -16,7 +15,7 @@ export default defineConfig({
                 text: 'Getting Started',
                 collapsible: true,
                 items: [
-                    { text: 'Quick Start', link: '/quick-start' }
+                    { text: 'Setup', link: '/setup' }
                 ]
             },
             {
