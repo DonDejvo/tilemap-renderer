@@ -91,7 +91,7 @@ fn vs_main(input: VSInput) -> VSOutput {
 
     let c = cos(input.tileAngle);
     let s = sin(input.tileAngle);
-    let offsetPos = input.vertexPos * input.tileScale + input.tileOffset;
+    let offsetPos = (input.vertexPos * abs(input.tileScale) + input.tileOffset) * sign(input.tileScale);
     let rotatedPos = vec2f(
         offsetPos.x * c - offsetPos.y * s,
         offsetPos.x * s + offsetPos.y * c

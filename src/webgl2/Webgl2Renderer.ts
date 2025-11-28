@@ -54,7 +54,7 @@ void main() {
 
     float c = cos(aTileAngle);
     float s = sin(aTileAngle);
-    vec2 offsetPos = aVertexPos * aTileScale + aTileOffset;
+    vec2 offsetPos = (aVertexPos * abs(aTileScale) + aTileOffset) * sign(aTileScale);
     vec2 rotatedPos = vec2(
         offsetPos.x * c - offsetPos.y * s,
         offsetPos.x * s + offsetPos.y * c

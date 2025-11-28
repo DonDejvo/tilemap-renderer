@@ -66,18 +66,18 @@ In the snippet below, `tilesetRegion: { x: 1, y: 1 }` selects the tile at second
 const { createRenderer, Camera, Scene, Color, Sprite, Tileset, assets } = TilemapRenderer;
 
 const main = async () => {
-    const w = 300;
-    const h = 150;
+    const width = 300;
+    const height = 400;
 
     const playerImage = await assets.loadImage("../images/player.png");
 
     // Create renderer
     const renderer = createRenderer("webgl2");
-    renderer.setSize(w, h);
-    renderer.setClearColor(new Color(1, 1, 1, 1)); // White background
+    renderer.setSize(width, height);
+    renderer.setClearColor(new Color(0, 0, 0, 1));
 
     // Create camera and scene
-    const camera = new Camera(w, h);
+    const camera = new Camera(width, height);
     const scene = new Scene();
 
     // Create tileset
@@ -119,6 +119,6 @@ main();
 
 The demo below renders a sprite from a tileset:
 
-<iframe src="demos/tileset.html" width="300" height="150" style="border:1px solid #ddd;"></iframe>
+<iframe src="demos/tileset.html" width="100%" height="400" style="border:1px solid #ddd;"></iframe>
 
 <a href="demos/tileset.html" target="_blank">click here to open in separate window</a>

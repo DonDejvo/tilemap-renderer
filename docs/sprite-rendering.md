@@ -94,7 +94,7 @@ const { createRenderer, Camera, Scene, Color, Sprite, Tileset, assets } = Tilema
 
 const main = async () => {
     const width = 300;
-    const height = 150;
+    const height = 400;
 
     // Load image
     const image = await assets.loadImage("../images/white_square.png");
@@ -102,7 +102,7 @@ const main = async () => {
     // Create renderer
     const renderer = createRenderer("webgl2");
     renderer.setSize(width, height);
-    renderer.setClearColor(new Color(1, 1, 1, 1)); // White background
+    renderer.setClearColor(new Color(0, 0, 0, 1)); // White background
 
     // Create camera and scene
     const camera = new Camera(width, height);
@@ -156,6 +156,6 @@ main();
 
 The demo below renders several sprites demonstrating sprite properties and layering:
 
-<iframe src="demos/sprite.html" width="300" height="150" style="border:1px solid #ddd;"></iframe>
+<iframe src="demos/sprite.html" width="100%" height="400" style="border:1px solid #ddd;"></iframe>
 
 <a href="demos/sprite.html" target="_blank">click here to open in separate window</a>

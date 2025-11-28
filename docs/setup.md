@@ -16,16 +16,17 @@ You can include TilemapRenderer via a **CDN script**. Specify a **version** to e
     const { createRenderer, Camera, Scene, Color } = TilemapRenderer;
 
     const main = async () => {
-        let w = 300, h = 150;
+        const width = 300;
+        const height = 400;
 
         // Create renderer
         const renderer = createRenderer("webgpu");
-        renderer.setSize(w, h);
+        renderer.setSize(width, height);
         renderer.setClearColor(new Color(0, 0, 1, 1)); // blue background
         document.body.appendChild(renderer.getCanvas());
 
         // Create camera and scene
-        const camera = new Camera(w, h);
+        const camera = new Camera(width, height);
         const scene = new Scene();
 
         // Initialize renderer
