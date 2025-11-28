@@ -71,6 +71,8 @@ interface TilemapObjectJSON {
     type: string;
     x: number;
     y: number;
+    width?: number;
+    height?: number;
     rotation?: number;
     properties?: TilePropertyJSON[];
 }
@@ -80,16 +82,20 @@ export class TilemapObject {
     type: string;
     x: number;
     y: number;
+    width: number;
+    height: number;
     rotation: number;
     properties?: TilePropertyJSON[];
 
-    constructor(name: string, type: string, x: number, y: number, rotation: number, properties?: TilePropertyJSON[]) {
-        this.name = name;
-        this.type = type;
-        this.x = x;
-        this.y = y;
-        this.rotation = rotation;
-        this.properties = properties;
+    constructor(json: TilemapObjectJSON) {
+        this.name = json.name;
+        this.type = json.type;
+        this.x = json.x;
+        this.y = json.y;
+        this.width = json.width || 0;
+        this.height = json.height || 0;
+        this.rotation = math.degToRad(json.rotation || 0);
+        this.properties = json.properties;
     }
 
     public getProperty<T>(name: string): T {
@@ -106,7 +112,7 @@ class ObjectLayer extends Layer {
     }
 
     public getObjects() {
-        return this.objects.map(obj => new TilemapObject(obj.name, obj.type, obj.x, obj.y, math.degToRad(obj.rotation || 0), obj.properties));
+        return this.objects.map(obj => new TilemapObject(obj));
     }
 }
 

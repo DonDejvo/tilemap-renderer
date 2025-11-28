@@ -15,7 +15,7 @@ interface SceneAddTilemapConfig {
     }[];
     tileWidth?: number;
     tileHeight?: number;
-    onObject?: (obj: TilemapObject, x: number, y: number, zIndex: number, scene: Scene, layer: ObjectLayer) => void;
+    onObject?: (obj: TilemapObject, x: number, y: number, w: number, h: number, zIndex: number, scene: Scene, layer: ObjectLayer) => void;
 }
 
 interface SceneParams {
@@ -144,7 +144,9 @@ export class Scene {
                         for (const obj of objects) {
                             const x = obj.x * tileWidth / tilemap.tileWidth;
                             const y = obj.y * tileHeight / tilemap.tileHeight;
-                            config.onObject(obj, x, y, zIndex, this, layer as ObjectLayer);
+                            const w = obj.width * tileWidth / tilemap.tileWidth;
+                            const h = tileHeight / tilemap.tileHeight
+                            config.onObject(obj, x, y, w, h, zIndex, this, layer as ObjectLayer);
                         }
                     }
                     break;

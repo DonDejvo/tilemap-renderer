@@ -378,7 +378,7 @@
                     { name: "Decorative", zIndex: 1 },
                     { name: "Entities", zIndex: 1 },
                 ],
-                onObject: (obj, x, y, zIndex, scene, layer) => {
+                onObject: (obj, x, y, w, h, zIndex, scene, layer) => {
                     switch (obj.name) {
                         case "tree_lg":
                             for (let i = 0; i < 1; ++i) {
