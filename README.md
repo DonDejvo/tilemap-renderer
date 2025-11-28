@@ -33,14 +33,14 @@ All setup instructions and API details are available there.
 
 ### CDN (UMD)
 ```html
-<script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@1.6.1/build/tilemap-renderer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@latest/build/tilemap-renderer.min.js"></script>
 ```
 
 ---
 
 ### ES Modules
 ```js
-import { createRenderer } from "https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@1.6.1/build/tilemap-renderer.module.min.js";
+import { createRenderer } from "https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@latest/build/tilemap-renderer.module.min.js";
 ```
 
 ---
