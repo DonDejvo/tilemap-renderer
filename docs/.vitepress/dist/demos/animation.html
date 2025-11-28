@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tilemap Renderer Intro</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            height: 100%;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@1.7.0/build/tilemap-renderer.min.js"></script>
+    <script>
+        const { createRenderer, Camera, Scene, Color, Sprite, Tileset, Animator, assets } = TilemapRenderer;
+
+        const main = async () => {
+            const playerImage = await assets.loadImage("../images/player.png");
+
+            // Create renderer
+            const renderer = createRenderer("webgl2");
+            renderer.setClearColor(new Color(1, 1, 1, 1)); // White background
+
+            // Create camera and scene
+            const camera = new Camera(0, 0);
+            const scene = new Scene();
+
+            const tileset = new Tileset({
+                name: "Player",
+                imagewidth: 80,
+                imageheight: 32,
+                columns: 5,
+                tilecount: 10,
+                tilewidth: 16,
+                tileheight: 16,
+                tiles: [
+                    {
+                        id: 0,
+                        animation: [
+                            { tileid: 0, duration: 160 }, 
+                            { tileid: 1, duration: 160 },
+                            { tileid: 2, duration: 160 },
+                            { tileid: 1, duration: 160 }
+                        ]
+                    }
+                ]
+            });
+
+            const sprite = new Sprite({
+                tileset
+            });
+            sprite.position.set(50, 50);
+            sprite.scale.scale(2);
+            scene.addSprite(sprite);
+
+            const animator = new Animator(sprite);
+            animator.play({ x: 0, y: 0 }, { repeat: true });
+
+            const canvas = renderer.getCanvas();
+
+            document.body.appendChild(canvas);
+
+            const observer = new ResizeObserver(entries => {
+                for (const entry of entries) {
+                    const width = entry.contentBoxSize[0].inlineSize;
+                    const height = entry.contentBoxSize[0].blockSize;
+
+                    renderer.setSize(width, height);
+                    camera.vw = width;
+                    camera.vh = height;
+                }
+            });
+
+            // Add textures (must be done before calling init!)
+            renderer.addTextures([tileset], { ["Player"]: playerImage });
+
+            // Initialize renderer
+            await renderer.init();
+
+            observer.observe(canvas);
+
+            let dt = 0;
+            let prevTime = 0;
+
+            const loop = () => {
+                requestAnimationFrame(t => {
+                    loop();
+
+                    t *= 0.001;
+                    dt = t - (prevTime || t);
+                    prevTime = t;
+
+                    animator.update(dt);
+
+                    renderer.render(scene, camera);
+                });
+            }
+
+            loop();
+        }
+
+        main();
+    </script>
+</body>
+
+</html>

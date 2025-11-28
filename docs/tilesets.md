@@ -117,7 +117,7 @@ main();
 
 ## Live Demo
 
-The demo below renders sprites from a tileset:
+The demo below renders a sprite from a tileset:
 
 <iframe src="demos/tileset.html" width="300" height="150" style="border:1px solid #ddd;"></iframe>
 

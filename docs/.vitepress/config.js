@@ -32,6 +32,7 @@ export default defineConfig({
                 collapsible: true,
                 items: [
                     { text: 'Tilesets', link: '/tilesets' },
+                    { text: 'Tile Animations', link: '/tile-animations' },
                     { text: 'Tilemaps', link: '/tilemaps' }
                 ]
             },
