@@ -13,7 +13,9 @@ interface SceneAddTilemapConfig {
         name: string;
         zIndex?: number;
     }[];
-    onObject?: (scene: Scene, obj: TilemapObject, layer: ObjectLayer, zIndex: number) => void;
+    tileWidth?: number;
+    tileHeight?: number;
+    onObject?: (obj: TilemapObject, x: number, y: number, zIndex: number, scene: Scene, layer: ObjectLayer) => void;
 }
 
 interface SceneParams {
@@ -83,6 +85,9 @@ export class Scene {
     public addTilemap(tilemap: Tilemap, config: SceneAddTilemapConfig = {}) {
         const layers = tilemap.getLayers();
 
+        const tileWidth = config.tileWidth || tilemap.tileWidth;
+        const tileHeight = config.tileHeight || tilemap.tileHeight;
+
         let zIndex = 0;
 
         const sprites = [];
@@ -119,8 +124,8 @@ export class Scene {
                                 tilesetRegion: { x: tile.x, y: tile.y }
                             });
 
-                            s.position.set((j + layer.x) * tilemap.tileWidth, (i + layer.y) * tilemap.tileHeight);
-                            s.scale.set(tilemap.tileWidth, tilemap.tileHeight);
+                            s.position.set((j + layer.x) * tileWidth, (i + layer.y) * tileHeight);
+                            s.scale.set(tileWidth, tileHeight);
 
                             sprites.push(this.addSprite(s));
 
@@ -137,7 +142,9 @@ export class Scene {
                     if (config.onObject) {
                         const objects = (layer as ObjectLayer).getObjects();
                         for (const obj of objects) {
-                            config.onObject(this, obj, layer as ObjectLayer, zIndex);
+                            const x = obj.x * tileWidth / tilemap.tileWidth;
+                            const y = obj.y * tileHeight / tilemap.tileHeight;
+                            config.onObject(obj, x, y, zIndex, this, layer as ObjectLayer);
                         }
                     }
                     break;
@@ -189,6 +196,8 @@ export class Scene {
 
     public update() {
         for (let colliderInfo of this.colliders) {
+            if(colliderInfo.collider.isStatic) continue;
+
             colliderInfo.hashGridClient.bounds = colliderInfo.collider.getBounds();
             this.collidersHashGrid.updateClient(colliderInfo.hashGridClient);
         }

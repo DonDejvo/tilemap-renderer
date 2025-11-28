@@ -30,6 +30,18 @@
             border-radius: 4px;
         }
 
+         #sceneinfo {
+            position: fixed;
+            right: 10px;
+            top: 10px;
+            color: white;
+            font: 14px monospace;
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
         .controls {
             position: fixed;
             bottom: 20px;
@@ -112,6 +124,7 @@
 
 <body>
     <div id="fps">FPS: 0</div>
+    <div id="sceneinfo"></div>
 
     <div class="controls" id="controls">
         <div class="btn up" data-key="w">▲</div>
@@ -196,7 +209,6 @@
                 this.speed = 80;
 
                 this.sprite.position.copy(this.position);
-                // this.sprite.scale.set(64, 64);
                 this.sprite.offset.set(-32, -64);
 
                 this.direction = 2;
@@ -204,6 +216,7 @@
                 this.emitter = emitter;
 
                 this.collider = new TilemapRenderer.colliders.BoxCollider(24, 12);
+                this.collider.offset.set(-12, -6);
                 scene.addCollider(this.collider);
             }
 
@@ -270,7 +283,6 @@
 
                 this.sprite.position.set(x, y);
                 this.sprite.angle = direction.angle();
-                // this.sprite.scale.set(64, 64);
                 this.sprite.offset.set(-32, -32);
 
                 this.direction = direction;
@@ -366,7 +378,7 @@
                     { name: "Decorative", zIndex: 1 },
                     { name: "Entities", zIndex: 1 },
                 ],
-                onObject: (scene, obj, layer, zIndex) => {
+                onObject: (obj, x, y, zIndex, scene, layer) => {
                     switch (obj.name) {
                         case "tree_lg":
                             for (let i = 0; i < 1; ++i) {
@@ -377,17 +389,18 @@
                                     isStatic: false
                                 });
                                 tree.offset.set(-1.5 * layer.tilemap.tileWidth, -4 * layer.tilemap.tileHeight + 4);
-                                // tree.scale.set(3 * layer.tilemap.tileWidth, 4 * layer.tilemap.tileHeight);
-                                tree.position.set(obj.x, obj.y);
+                                tree.position.set(x, y);
                                 scene.addSprite(tree);
                                 const treeCollider = new TilemapRenderer.colliders.BoxCollider(2 * layer.tilemap.tileWidth - 12, 0.5 * layer.tilemap.tileWidth);
                                 treeCollider.position.copy(tree.position);
+                                treeCollider.offset.set(treeCollider.width * -0.5, treeCollider.height * -0.5);
+                                treeCollider.isStatic = true;
                                 scene.addCollider(treeCollider);
                             }
                             break;
 
                         case "player":
-                            player = new Player(scene, obj.x, obj.y, zIndex, emitter, skeletonBodyTileset);
+                            player = new Player(scene, x, y, zIndex, emitter, skeletonBodyTileset);
                             break;
 
                         case "light":
@@ -405,13 +418,6 @@
                     }
                 }
             });
-
-            const light = new TilemapRenderer.Light({
-                radius: 240
-            });
-            scene.addLight(light);
-
-            console.log(scene.getInfo());
 
             const renderer = TilemapRenderer.createRenderer(rendererContext);
             document.body.appendChild(renderer.getCanvas());
@@ -500,6 +506,8 @@
                         lastFPSUpdate = now;
                         fpsElem.textContent = `${rendererContext.toUpperCase()} - FPS: ${fps}`;
                     }
+
+                    sceneinfo.innerText = Object.entries(scene.getInfo()).map(([key, val]) => `${key}: ${val}`).join("\n");
 
                     input.update();
 

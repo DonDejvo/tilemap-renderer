@@ -28,26 +28,3 @@ export const math = (() => {
     };
 
 })();
-
-export class LinearSpline {
-    points: number[];
-
-    constructor(points: number[] = []) {
-        this.points = points;
-    }
-
-    addPoint(value: number) {
-        this.points.push(value);
-    }
-
-    getValue(t: number): number {
-        const n = this.points.length;
-        if (n === 0) return 0;
-        if (t <= 0) return this.points[0];
-        if (t >= n - 1) return this.points[n - 1];
-
-        const i = Math.floor(t);
-        const tLocal = t - i;
-        return math.lerp(this.points[i], this.points[i + 1], tLocal);
-    }
-}

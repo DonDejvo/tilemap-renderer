@@ -96,11 +96,12 @@ export const geometry = (() => {
     }
 
     const createCircleShadow = (light: Light, collider: CircleCollider): number[] => {
-        const dir = collider.position.clone().sub(light.position).normalize();
+        const center = collider.getCenter();
+        const dir = center.sub(light.position).normalize();
         const tangent = new Vector(-dir.y, dir.x).scale(collider.radius);
 
-        const p1 = collider.position.clone().sub(tangent);
-        const p2 = collider.position.clone().add(tangent);
+        const p1 = center.clone().sub(tangent);
+        const p2 = center.clone().add(tangent);
 
         const dir1 = p1.clone().sub(light.position).normalize();
         const dir2 = p2.clone().sub(light.position).normalize();
@@ -127,7 +128,7 @@ export const geometry = (() => {
         const vertices: number[] = [];
         const shadowLength = light.radius;
 
-        const worldPoints = collider.points.map(p => p.clone().add(collider.position));
+        const worldPoints = collider.getWorldPoints();
 
         for (let i = 0; i < worldPoints.length; i++) {
             const p0 = worldPoints[i];

@@ -1,4 +1,5 @@
 import { assets } from "./assets";
+import { math } from "./math";
 import { SceneLayerRenderOrder } from "./Scene";
 import { TilePropertyJSON, Tileset, TilesetJSON } from "./Tileset";
 
@@ -65,6 +66,15 @@ class TileLayer extends Layer {
     }
 }
 
+interface TilemapObjectJSON {
+    name: string;
+    type: string;
+    x: number;
+    y: number;
+    rotation?: number;
+    properties?: TilePropertyJSON[];
+}
+
 export class TilemapObject {
     name: string;
     type: string;
@@ -73,12 +83,12 @@ export class TilemapObject {
     rotation: number;
     properties?: TilePropertyJSON[];
 
-    constructor(name: string, type: string, x: number, y: number, rotation?: number, properties?: TilePropertyJSON[]) {
+    constructor(name: string, type: string, x: number, y: number, rotation: number, properties?: TilePropertyJSON[]) {
         this.name = name;
         this.type = type;
         this.x = x;
         this.y = y;
-        this.rotation = rotation || 0;
+        this.rotation = rotation;
         this.properties = properties;
     }
 
@@ -88,7 +98,7 @@ export class TilemapObject {
 }
 
 class ObjectLayer extends Layer {
-    private objects: TilemapObject[];
+    private objects: TilemapObjectJSON[];
 
     constructor(json: TilemapLayerJSON) {
         super(json);
@@ -96,7 +106,7 @@ class ObjectLayer extends Layer {
     }
 
     public getObjects() {
-        return this.objects.map(obj => new TilemapObject(obj.name, obj.type, obj.x, obj.y, obj.rotation, obj.properties));
+        return this.objects.map(obj => new TilemapObject(obj.name, obj.type, obj.x, obj.y, math.degToRad(obj.rotation || 0), obj.properties));
     }
 }
 

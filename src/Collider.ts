@@ -5,14 +5,24 @@ export type ColliderType = "circle" | "polygon";
 
 export abstract class Collider {
     position: Vector;
+    offset: Vector;
+    angle: number;
+    isStatic: boolean;
 
     constructor() {
         this.position = new Vector();
+        this.offset = new Vector();
+        this.angle = 0;
+        this.isStatic = false;
+    }
+
+    getCenter() {
+        return this.position.clone().add(this.offset);   
     }
 
     abstract getBounds(): Bounds;
 
-    abstract getType(): ColliderType; 
+    abstract getType(): ColliderType;
 }
 
 export class CircleCollider extends Collider {
@@ -28,12 +38,15 @@ export class CircleCollider extends Collider {
     }
 
     getBounds(): Bounds {
-        const vec = new Vector(this.radius, this.radius);
+        const center = this.getCenter();
+        const r = this.radius;
+
         return {
-            min: this.position.clone().sub(vec),
-            max: this.position.clone().add(vec)
-        }
+            min: center.clone().sub(new Vector(r, r)),
+            max: center.clone().add(new Vector(r, r))
+        };
     }
+
 }
 
 export class PolygonCollider extends Collider {
@@ -47,22 +60,33 @@ export class PolygonCollider extends Collider {
     getType(): ColliderType {
         return "polygon";
     }
-    
+
+    getWorldPoints() {
+        return this.points.map(p => p.clone()
+            .add(this.offset)
+            .rot(-this.angle)
+            .add(this.position));
+    }
+
     getBounds(): Bounds {
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const p of this.points) {
-            const x = p.x + this.position.x;
-            const y = p.y + this.position.y;
-            if (x < minX) minX = x;
-            if (y < minY) minY = y;
-            if (x > maxX) maxX = x;
-            if (y > maxY) maxY = y;
+        let minX = Infinity, minY = Infinity;
+        let maxX = -Infinity, maxY = -Infinity;
+
+        const worldPoints = this.getWorldPoints();
+        for (const transformed of worldPoints) {
+
+            if (transformed.x < minX) minX = transformed.x;
+            if (transformed.y < minY) minY = transformed.y;
+            if (transformed.x > maxX) maxX = transformed.x;
+            if (transformed.y > maxY) maxY = transformed.y;
         }
+
         return {
             min: new Vector(minX, minY),
             max: new Vector(maxX, maxY)
-        }
+        };
     }
+
 }
 
 export class BoxCollider extends PolygonCollider {
@@ -70,13 +94,11 @@ export class BoxCollider extends PolygonCollider {
     height: number;
 
     constructor(width: number, height: number) {
-        const hw = width * 0.5;
-        const hh = height * 0.5;
         const points = [
-            new Vector(-hw, -hh),
-            new Vector(hw, -hh),
-            new Vector(hw, hh),
-            new Vector(-hw, hh)
+            new Vector(0, 0),
+            new Vector(width, 0),
+            new Vector(width, height),
+            new Vector(0, height)
         ];
         super(points);
         this.width = width;
