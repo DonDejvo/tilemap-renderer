@@ -1,7 +1,7 @@
 import { Camera } from "./Camera";
 import { Color } from "./Color";
 import { Scene } from "./Scene";
-import { ShaderBuilder, VariableType } from "./ShaderBuilder";
+import { FunctionArg, ShaderBuilder, VariableType } from "./ShaderBuilder";
 import { Tileset } from "./Tileset";
 import { WebglRenderer } from "./webgl/WebglRenderer";
 import { Webgl2Renderer } from "./webgl2/Webgl2Renderer";
@@ -46,6 +46,8 @@ export type RendererType = "webgl" | "webgl2" | "webgpu";
 
 export interface RendererBuilderOptions {
     componentMap: Record<string, string>;
+    replaceType: (type: VariableType) => string;
+    declareFn: (name: string, type: VariableType | null, ...args: FunctionArg[]) => string;
     declareVar: (name: string, type: VariableType, isUniform?: boolean) => string;
 }
 

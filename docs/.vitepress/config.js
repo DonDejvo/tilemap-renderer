@@ -40,8 +40,8 @@ export default defineConfig({
                 text: 'Advanced Effects',
                 collapsible: true,
                 items: [
-                    { text: 'Scene Post Processing', link: '/scene-post-processing' },
-                    { text: 'Lighting', link: '/lighting' }
+                    { text: 'Lighting', link: '/lighting' },
+                    { text: 'Scene Post Processing', link: '/scene-post-processing' }
                 ]
             }
         ]

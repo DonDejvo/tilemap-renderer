@@ -208,21 +208,25 @@ uniform sampler2D uChannel7;
 
 uniform Uniforms uniforms;
 
-out vec4 fragColor;
+out vec4 glFragColor;
 
-void mainImage(out vec4 fragColor, in vec2 fragCoord) {
-${input.mainImage.map(line => "    " + line).join("\n")}
-}
+${input.functions.join("\n\n")}
 
 void main() {
     vec2 fragCoord = gl_FragCoord.xy;
-    mainImage(fragColor, fragCoord);
+    glFragColor = mainImage(fragCoord);
 }
 `;
 
 const builderOptions: RendererBuilderOptions = {
     componentMap: { r: "r", g: "g", b: "b", a: "a" },
-    declareVar: (name, type) => {
+    replaceType(type) {
+        return type;
+    },
+    declareFn(name, returnType, ...args) {
+        return `${returnType === null ? "void" : returnType} ${name}(${args.map(arg => `${arg[1]} ${arg[0]}`).join(", ")})`;
+    },
+    declareVar(name, type) {
         return `${type} ${name};`;
     }
 };
@@ -581,8 +585,6 @@ export class Webgl2Renderer implements Renderer {
         this.time = performance.now() * 0.001;
 
         const layers: WebglRendererLayer[] = [];
-        const layersUnderShadows: WebglRendererLayer[] = [];
-        const layersAboveShadows: WebglRendererLayer[] = [];
         for (const sceneLayer of scene.getLayersOrdered()) {
             let layer: WebglRendererLayer;
             if (!this.layersMap.has(sceneLayer)) {
@@ -597,20 +599,13 @@ export class Webgl2Renderer implements Renderer {
                 layer.uploadSprites(sceneLayer.getSpritesOrdered());
             }
             layers.push(layer);
-            if (sceneLayer.zIndex <= scene.shadowsZIndex) {
-                layersUnderShadows.push(layer);
-            } else {
-                layersAboveShadows.push(layer);
-            }
         }
 
         this.renderLights(scene, camera);
 
-        this.renderScene(this.framebuffers[TEXID_SCENE], this.shaderProgram, camera, this.clearColor, layersUnderShadows);
+        this.renderScene(this.framebuffers[TEXID_SCENE], this.shaderProgram, camera, this.clearColor, layers);
 
         this.renderFullscreenPass({ shader: "light", inputs: [TEXID_SCENE, TEXID_LIGHTMAP], output: 0 });
-
-        this.renderScene(this.framebuffers[0], this.shaderProgram, camera, null, layersAboveShadows);
 
         this.renderScene(this.framebuffers[TEXID_MASK], this.maskShaderProgram, camera, maskClearColor, layers);
 

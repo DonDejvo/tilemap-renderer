@@ -19,8 +19,7 @@ interface SceneAddTilemapConfig {
 }
 
 interface SceneParams {
-    spatialHashGridParams?: SpatialHashGridParams;
-    shadowsZIndex?: number;
+    collidersHashGrid?: SpatialHashGridParams;
     ambientIntensity?: number;
     ambientColor?: Color;
 }
@@ -31,7 +30,6 @@ export class Scene {
     public ambientIntensity: number;
     private lights: Light[];
     private colliders: { collider: Collider, hashGridClient: SpatialHashGridClient<Collider> }[];
-    public shadowsZIndex: number;
     private collidersHashGrid: SpatialHashGrid<Collider>;
 
     constructor(params: SceneParams = {}) {
@@ -40,11 +38,10 @@ export class Scene {
         this.ambientColor = params.ambientColor || new Color(1, 1, 1);
         this.lights = [];
         this.colliders = [];
-        this.shadowsZIndex = params.shadowsZIndex || 0;
-        this.collidersHashGrid = new SpatialHashGrid(params.spatialHashGridParams || {
+        this.collidersHashGrid = new SpatialHashGrid(params.collidersHashGrid || {
             bounds: { min: new Vector(-1000, -1000), max: new Vector(1000, 1000) },
             dimensions: [20, 20]
-        })
+        });
     }
 
     private findLayerBySprite(sprite: Sprite) {
@@ -145,7 +142,7 @@ export class Scene {
                             const x = obj.x * tileWidth / tilemap.tileWidth;
                             const y = obj.y * tileHeight / tilemap.tileHeight;
                             const w = obj.width * tileWidth / tilemap.tileWidth;
-                            const h = tileHeight / tilemap.tileHeight
+                            const h = obj.height * tileHeight / tilemap.tileHeight
                             config.onObject(obj, x, y, w, h, zIndex, this, layer as ObjectLayer);
                         }
                     }
@@ -193,7 +190,7 @@ export class Scene {
     }
 
     public getColliders(bounds: Bounds): Collider[] {
-        return this.collidersHashGrid.findNearby(bounds).map(client => client.parent);
+        return this.colliders.map(c => c.collider);// return this.collidersHashGrid.findNearby(bounds).map(client => client.parent);
     }
 
     public update() {

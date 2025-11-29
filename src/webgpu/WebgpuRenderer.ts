@@ -293,11 +293,7 @@ fn texture(ch: i32, uv: vec2f) -> vec4f {
     }
 }
 
-fn mainImage(fragCoord: vec2f) -> vec4f {
-    var fragColor: vec4f;
-${input.mainImage.map(line => "    " + line).join("\n")}
-    return fragColor;
-}
+${input.functions.join("\n\n")}
 
 @fragment
 fn fs_main(input: VSOutput) -> @location(0) vec4f {
@@ -314,8 +310,14 @@ interface FullscreenShaderInfo {
 
 const builderOptions: RendererBuilderOptions = {
     componentMap: { r: "x", g: "y", b: "z", a: "w" },
-    declareVar: (name, type, isUniform = false) => {
-        const s = `${name}: ${type === "float" ? "f32" : type + "f"}`;
+    replaceType(type) { 
+        return `${type === "float" ? "f32" : type + "<f32>"}`;
+    },
+    declareFn(name, returnType, ...args) {
+        return `fn ${name}(${args.map(arg => `${arg[0]}: ${this.replaceType(arg[1])}`).join(", ")}) ${returnType !== null ? "-> " + this.replaceType(returnType) : ""}`;
+    },
+    declareVar(name, type, isUniform = false) {
+        const s = `${name}: ${this.replaceType(type)}`;
         return isUniform ? s : `var ${s};`;
     }
 };
@@ -901,8 +903,6 @@ export class WebgpuRenderer implements Renderer {
         this.time = performance.now() * 0.001;
 
         const layers: WebgpuRendererLayer[] = [];
-        const layersUnderShadows: WebgpuRendererLayer[] = [];
-        const layersAboveShadows: WebgpuRendererLayer[] = [];
         for (const sceneLayer of scene.getLayersOrdered()) {
             if (!this.layersMap.has(sceneLayer)) {
                 const layer = new WebgpuRendererLayer(this, sceneLayer.isStatic);
@@ -917,11 +917,6 @@ export class WebgpuRenderer implements Renderer {
                 layer.uploadSprites(sprites);
             }
             layers.push(layer);
-            if (sceneLayer.zIndex <= scene.shadowsZIndex) {
-                layersUnderShadows.push(layer);
-            } else {
-                layersAboveShadows.push(layer);
-            }
         }
 
         this.cfg.device.queue.writeBuffer(
@@ -937,11 +932,9 @@ export class WebgpuRenderer implements Renderer {
 
         this.renderLights(encoder, scene, camera);
 
-        this.renderScene(encoder, this.pipeline, this.offscreenTextures[TEXID_SCENE], this.clearColor, layersUnderShadows);
+        this.renderScene(encoder, this.pipeline, this.offscreenTextures[TEXID_SCENE], this.clearColor, layers);
 
         this.renderFullscreenPass(encoder, this.fullscreenPassStages.mainLight);
-
-        this.renderScene(encoder, this.pipeline, this.offscreenTextures[0], null, layersAboveShadows);
 
         this.renderScene(encoder, this.maskPipeline, this.offscreenTextures[TEXID_MASK], maskClearColor, layers);
 

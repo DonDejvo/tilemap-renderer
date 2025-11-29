@@ -30,7 +30,7 @@
             border-radius: 4px;
         }
 
-         #sceneinfo {
+        #sceneinfo {
             position: fixed;
             right: 10px;
             top: 10px;
@@ -136,6 +136,8 @@
 
     <script type="module">
         import * as TilemapRenderer from "../src/TilemapRenderer.ts";
+
+        TilemapRenderer.ShaderBuilder.DEBUG = true;
 
         const assetsUrl = "";
         const rendererContext = "webgpu";
@@ -367,7 +369,6 @@
                 bounds: [new TilemapRenderer.Vector(0, 0), new TilemapRenderer.Vector(1000, 1000)]
             });
             scene.ambientIntensity = 0.1;
-            scene.shadowsZIndex = 2;
 
             let player = null;
 
@@ -437,9 +438,10 @@
 
             neonExtract
                 .uniform("threshold", "float")
-                .declare("uv", "vec2")
-                .declare("color", "vec4")
-                .declare("b", "vec3")
+                .mainImage()
+                .declareVar("uv", "vec2")
+                .declareVar("color", "vec4")
+                .declareVar("b", "vec3")
                 .set("uv", "fragCoord / uniforms.resolution")
                 .set("color", "texture(0, uv)")
                 .set("b", "max(color.rgb - vec3(uniforms.threshold), vec3(0.0))")
@@ -448,9 +450,10 @@
             const neonComposite = new TilemapRenderer.ShaderBuilder();
 
             neonComposite
-                .declare("uv", "vec2")
-                .declare("base", "vec4")
-                .declare("glow", "vec4")
+                .mainImage()
+                .declareVar("uv", "vec2")
+                .declareVar("base", "vec4")
+                .declareVar("glow", "vec4")
                 .set("uv", "fragCoord / uniforms.resolution")
                 .set("base", "texture(0, uv)")
                 .set("glow", "texture(1, uv)")
