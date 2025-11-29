@@ -5,7 +5,7 @@
  "margin":1,
  "name":"environment",
  "spacing":2,
- "tilecount":378,
+ "tilecount":304,
  "tiledversion":"2025.11.12",
  "tileheight":16,
  "tiles":[
@@ -72,6 +72,22 @@
                  "tileid":32
                 }],
          "id":28
+        }, 
+        {
+         "animation":[
+                {
+                 "duration":160,
+                 "tileid":143
+                }, 
+                {
+                 "duration":160,
+                 "tileid":144
+                }, 
+                {
+                 "duration":160,
+                 "tileid":145
+                }],
+         "id":143
         }],
  "tilewidth":16,
  "type":"tileset",
