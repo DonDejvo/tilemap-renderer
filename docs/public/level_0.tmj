@@ -96,7 +96,7 @@
                  "visible":true,
                  "width":0,
                  "x":96,
-                 "y":240
+                 "y":224
                 }, 
                 {
                  "height":0,
@@ -145,17 +145,6 @@
          "id":7,
          "name":"colliders",
          "objects":[
-                {
-                 "height":8,
-                 "id":6,
-                 "name":"collider",
-                 "rotation":0,
-                 "type":"",
-                 "visible":true,
-                 "width":160,
-                 "x":0,
-                 "y":144
-                }, 
                 {
                  "height":16,
                  "id":7,
@@ -210,6 +199,39 @@
                  "width":16,
                  "x":272,
                  "y":112
+                }, 
+                {
+                 "height":48,
+                 "id":12,
+                 "name":"collider",
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":16,
+                 "x":128,
+                 "y":224
+                }, 
+                {
+                 "height":48,
+                 "id":13,
+                 "name":"collider",
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":16,
+                 "x":48,
+                 "y":224
+                }, 
+                {
+                 "height":16,
+                 "id":14,
+                 "name":"collider",
+                 "rotation":0,
+                 "type":"",
+                 "visible":true,
+                 "width":64,
+                 "x":64,
+                 "y":256
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -218,7 +240,7 @@
          "y":0
         }],
  "nextlayerid":8,
- "nextobjectid":12,
+ "nextobjectid":15,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"2025.11.12",

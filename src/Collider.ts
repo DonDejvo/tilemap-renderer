@@ -8,12 +8,14 @@ export abstract class Collider {
     offset: Vector;
     angle: number;
     isStatic: boolean;
+    castsShadows: boolean;
 
     constructor() {
         this.position = new Vector();
         this.offset = new Vector();
         this.angle = 0;
         this.isStatic = false;
+        this.castsShadows = true;
     }
 
     getCenter() {

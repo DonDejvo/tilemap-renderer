@@ -163,7 +163,7 @@ export const geometry = (() => {
 
 
     const createShadowsGeometry = (out: Float32Array, light: Light, colliders: Collider[], offset: number = 0) => {
-        for (let collider of colliders) {
+        for (let collider of colliders.filter(collider => collider.castsShadows)) {
             let vertices: number[] = [];
             switch (collider.getType()) {
                 case "circle":
