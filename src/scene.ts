@@ -20,8 +20,6 @@ interface SceneAddTilemapConfig {
 
 interface SceneParams {
     collidersHashGrid?: SpatialHashGridParams;
-    ambientIntensity?: number;
-    ambientColor?: Color;
 }
 
 export class Scene {
@@ -34,8 +32,8 @@ export class Scene {
 
     constructor(params: SceneParams = {}) {
         this.layers = [];
-        this.ambientIntensity = params.ambientIntensity || 1.0;
-        this.ambientColor = params.ambientColor || new Color(1, 1, 1);
+        this.ambientIntensity = 1.0;
+        this.ambientColor = new Color(1, 1, 1);
         this.lights = [];
         this.colliders = [];
         this.collidersHashGrid = new SpatialHashGrid(params.collidersHashGrid || {
