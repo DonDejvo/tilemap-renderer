@@ -22,7 +22,7 @@ All setup instructions and API details are available there.
 - Color, blending, and shader support  
 - Camera system with transforms  
 - Texture atlases and tilesets  
-- Vector shape rendering  
+- Tile animations
 - Post-processing pipeline  
 - Lighting system  
 - Supports WebGL, WebGL2, and WebGPU  
