@@ -188,7 +188,7 @@ export class Scene {
     }
 
     public getColliders(bounds: Bounds): Collider[] {
-        return this.colliders.map(c => c.collider);// return this.collidersHashGrid.findNearby(bounds).map(client => client.parent);
+        return return this.collidersHashGrid.findNearby(bounds).map(client => client.parent);
     }
 
     public update() {
