@@ -4,6 +4,12 @@ export class Color {
     b: number;
     a: number;
 
+    static WHITE = new Color(1, 1, 1);
+    static BLACK = new Color(0, 0, 0);
+    static RED = new Color(1, 0, 0);
+    static GREEN = new Color(0, 1, 0);
+    static BLUE = new Color(0, 0, 1);
+
     constructor(r: number, g: number, b: number, a: number = 1) {
         this.r = r;
         this.g = g;
@@ -16,6 +22,10 @@ export class Color {
         this.g = g;
         this.b = b;
         this.a = a;
+    }
+
+    clone() {
+        return new Color(this.r, this.g, this.b, this.a);
     }
 
     copy(c: Color) {

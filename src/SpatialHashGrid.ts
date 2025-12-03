@@ -94,6 +94,28 @@ export class SpatialHashGrid<T> {
         }
     }
 
+    public getInfo() {
+        const numRows = this.dimensions[1];
+        const numCols = this.dimensions[0];
+        const totalCells = numRows * numCols;
+        if (totalCells === 0) {
+            return { totalClients: 0, min: 0, max: 0, average: 0 };
+        }
+        let totalNodes = 0;
+        let minNodes = Number.MAX_VALUE;
+        let maxNodes = Number.MIN_VALUE;
+        for (let i = 0; i < numRows; ++i) {
+            for (let j = 0; j < numCols; ++j) {
+                const size = this.cells[i][j].size;
+                totalNodes += size;
+                minNodes = Math.min(minNodes, size);
+                maxNodes = Math.max(maxNodes, size);
+            }
+        }
+        const avgNodes = totalNodes / totalCells;
+        return { totalCells, totalNodes, minNodes, maxNodes, avgNodes };
+    }
+
     private insert(client: SpatialHashGridClient<T>): void {
         const min = this.getCellIndices(client.bounds.min);
         const max = this.getCellIndices(client.bounds.max);

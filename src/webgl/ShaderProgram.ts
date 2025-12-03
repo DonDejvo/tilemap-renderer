@@ -1,3 +1,17 @@
+export const worldToClipVertex = `
+vec4 worldToClip(vec2 worldPos, vec2 cameraPos, vec2 viewport) {
+    vec2 pixelPos = worldPos - cameraPos;
+    vec2 clipPos = vec2(pixelPos.x / viewport.x, 1.0 - pixelPos.y / viewport.y) * 2.0 - 1.0;
+    return vec4(clipPos, 0.0, 1.0);
+}
+`;
+
+class ShaderError extends Error {
+    constructor(message: string) {
+        super("Shader Error: " + message);
+    }
+}
+
 export class ShaderProgram {
     private gl: WebGL2RenderingContext | WebGLRenderingContext;
     private program: WebGLProgram;
@@ -18,8 +32,8 @@ export class ShaderProgram {
         gl.attachShader(this.program, fragmentShader);
 
         gl.linkProgram(this.program);
-        if(!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-            throw new Error(gl.getProgramInfoLog(this.program) ?? "Could not link program");
+        if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
+            throw new ShaderError(gl.getProgramInfoLog(this.program) ?? "Failed to link program");
         }
 
         gl.deleteShader(vertexShader);
@@ -28,13 +42,13 @@ export class ShaderProgram {
 
     private compileShader(type: number, source: string) {
         const shader = this.gl.createShader(type);
-        if(!shader) throw new Error("Could not create shader");
+        if (!shader) throw new ShaderError("Failed to create shader");
 
         this.gl.shaderSource(shader, source);
         this.gl.compileShader(shader);
 
-        if(!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
-            throw new Error(this.gl.getShaderInfoLog(shader) ?? "Could not compile shader");
+        if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
+            throw new ShaderError(this.gl.getShaderInfoLog(shader) ?? "Failed to compile shader");
         }
 
         return shader;
@@ -45,7 +59,7 @@ export class ShaderProgram {
     }
 
     public getUniform(name: string) {
-        if(!this.uniforms.has(name)) {
+        if (!this.uniforms.has(name)) {
             const loc = this.gl.getUniformLocation(this.program, name);
             this.uniforms.set(name, loc);
         }
@@ -54,7 +68,7 @@ export class ShaderProgram {
     }
 
     public getAttrib(name: string) {
-        if(!this.attribs.has(name)) {
+        if (!this.attribs.has(name)) {
             this.attribs.set(name, this.gl.getAttribLocation(this.program, name));
         }
         return this.attribs.get(name)!;

@@ -1,5 +1,6 @@
 import { Camera } from "./Camera";
 import { Color } from "./Color";
+import { LineRenderer } from "./LineRenderer";
 import { Scene } from "./Scene";
 import { FunctionArg, ShaderBuilder, VariableType } from "./ShaderBuilder";
 import { Tileset } from "./Tileset";
@@ -8,7 +9,7 @@ import { Webgl2Renderer } from "./webgl2/Webgl2Renderer";
 import { WebgpuRenderer } from "./webgpu/WebgpuRenderer";
 
 export const STATIC_LAYER_MAX_SPRITES = 100000;
-export const DYNAMIC_LAYER_MAX_SPRITES = 50000;
+export const DYNAMIC_LAYER_MAX_SPRITES = 10000;
 export const LAYER_LIFETIME = 30;
 export const LAYER_MAX_TEXTURES = 16;
 export const OFFSCREEN_TEXTURES = 12;
@@ -46,9 +47,9 @@ export type RendererType = "webgl" | "webgl2" | "webgpu";
 
 export interface RendererBuilderOptions {
     componentMap: Record<string, string>;
-    replaceType: (type: VariableType) => string;
-    declareFn: (name: string, type: VariableType | null, ...args: FunctionArg[]) => string;
-    declareVar: (name: string, type: VariableType, isUniform?: boolean) => string;
+    replaceType(type: VariableType): string;
+    declareFn(name: string, type: VariableType | null, ...args: FunctionArg[]): string;
+    declareVar(name: string, type: VariableType, isUniform?: boolean): string;
 }
 
 export const maskClearColor = new Color(0, 0, 0, 1);
@@ -60,10 +61,11 @@ export interface Renderer {
     render(scene: Scene, camera: Camera): void;
     setSize(width: number, height: number): void;
     getCanvas(): HTMLCanvasElement;
-    setClearColor(color: Color): void;
+    clearColor: Color;
     getBuilderOptions(): RendererBuilderOptions;
     registerShader(name: string, builder: ShaderBuilder, blendMode?: BlendMode): void;
     pass: RenderPassStage[];
+    getLineRenderer(): LineRenderer;
 }
 
 export const createRenderer = (type: RendererType): Renderer => {

@@ -1,25 +1,41 @@
 import { Bounds } from "./common";
+import { RigidBody } from "./RigidBody";
 import { Vector } from "./Vector";
 
-export type ColliderType = "circle" | "polygon";
+export const DEFAULT_LAYER = 1;
+
+export type ColliderType = "circle" | "polygon" | "box";
+
+interface ColliderParams {
+    castShadow?: boolean;
+    layer: number;
+    mask: number;
+}
 
 export abstract class Collider {
     position: Vector;
-    offset: Vector;
     angle: number;
-    isStatic: boolean;
-    castsShadows: boolean;
+    layer: number;
+    mask: number;
+    castShadow: boolean;
+    body: RigidBody | null;
 
-    constructor() {
+    constructor(params: ColliderParams) {
         this.position = new Vector();
-        this.offset = new Vector();
         this.angle = 0;
-        this.isStatic = false;
-        this.castsShadows = true;
+        this.castShadow = params.castShadow !== undefined ? params.castShadow : true;
+        this.layer = params.layer || DEFAULT_LAYER;
+        this.mask = params.mask;
+        this.body = null;
     }
 
-    getCenter() {
-        return this.position.clone().add(this.offset);   
+    getWorldPosition() {
+        if (!this.body) return this.position.clone();
+        return this.body.position.clone();
+    }
+
+    getWorldAngle() {
+        return this.body ? this.body.angle : this.angle;
     }
 
     abstract getBounds(): Bounds;
@@ -27,12 +43,16 @@ export abstract class Collider {
     abstract getType(): ColliderType;
 }
 
+interface CircleColliderParams extends ColliderParams {
+    radius: number;
+}
+
 export class CircleCollider extends Collider {
     radius: number;
 
-    constructor(radius: number) {
-        super();
-        this.radius = radius;
+    constructor(params: CircleColliderParams) {
+        super(params);
+        this.radius = params.radius;
     }
 
     getType(): ColliderType {
@@ -40,7 +60,7 @@ export class CircleCollider extends Collider {
     }
 
     getBounds(): Bounds {
-        const center = this.getCenter();
+        const center = this.getWorldPosition();
         const r = this.radius;
 
         return {
@@ -51,12 +71,16 @@ export class CircleCollider extends Collider {
 
 }
 
+interface PolygonColliderParams extends ColliderParams {
+    points: Vector[];
+}
+
 export class PolygonCollider extends Collider {
     points: Vector[];
 
-    constructor(points: Vector[]) {
-        super();
-        this.points = points;
+    constructor(params: PolygonColliderParams) {
+        super(params);
+        this.points = params.points;
     }
 
     getType(): ColliderType {
@@ -64,10 +88,12 @@ export class PolygonCollider extends Collider {
     }
 
     getWorldPoints() {
+        const worldPos = this.getWorldPosition();
+        const worldAngle = this.getWorldAngle();
+
         return this.points.map(p => p.clone()
-            .add(this.offset)
-            .rot(-this.angle)
-            .add(this.position));
+            .rot(-worldAngle)
+            .add(worldPos));
     }
 
     getBounds(): Bounds {
@@ -91,20 +117,30 @@ export class PolygonCollider extends Collider {
 
 }
 
+interface BoxColliderParams extends ColliderParams {
+    width: number;
+    height: number;
+    offset?: Vector;
+}
+
 export class BoxCollider extends PolygonCollider {
     width: number;
     height: number;
 
-    constructor(width: number, height: number) {
+    constructor(params: BoxColliderParams) {
         const points = [
             new Vector(0, 0),
-            new Vector(width, 0),
-            new Vector(width, height),
-            new Vector(0, height)
-        ];
-        super(points);
-        this.width = width;
-        this.height = height;
+            new Vector(params.width, 0),
+            new Vector(params.width, params.height),
+            new Vector(0, params.height)
+        ].map(p => params.offset ? p.add(params.offset) : p);
+        super({ ...params, points });
+        this.width = params.width;
+        this.height = params.height;
+    }
+
+    getType(): ColliderType {
+        return "box";
     }
 }
 

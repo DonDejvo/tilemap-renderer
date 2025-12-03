@@ -2,6 +2,7 @@ import { Camera } from "../Camera";
 import { Color } from "../Color";
 import { overlaps } from "../common";
 import { geometry } from "../geometry";
+import { LineRenderer } from "../LineRenderer";
 import { math } from "../math";
 import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
@@ -9,15 +10,8 @@ import { ShaderBuilderOutput, defaultShaderBuilder, ShaderBuilder, lightShaderBu
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 import { Framebuffer } from "../webgl/Framebuffer";
-import { ShaderProgram } from "../webgl/ShaderProgram";
-
-const worldToClipVertex = `
-vec4 worldToClip(vec2 worldPos, vec2 cameraPos, vec2 viewport) {
-    vec2 pixelPos = worldPos - cameraPos;
-    vec2 clipPos = vec2(pixelPos.x / viewport.x, 1.0 - pixelPos.y / viewport.y) * 2.0 - 1.0;
-    return vec4(clipPos, 0.0, 1.0);
-}
-`;
+import { ShaderProgram, worldToClipVertex } from "../webgl/ShaderProgram";
+import { WebglLineRenderer } from "../webgl/WebglLineRenderer";
 
 const mainVertex = `#version 300 es
 
@@ -243,7 +237,7 @@ export class Webgl2Renderer implements Renderer {
     private layersMap: Map<SceneLayer, WebglRendererLayer>;
     private texturesMap: Map<string, TextureInfo>;
     private shaderMap: Map<string, { shader?: ShaderProgram, builder: ShaderBuilder, blendMode: BlendMode }>;
-    private clearColor: Color;
+    public clearColor: Color;
     private initialized: boolean;
     public pass: RenderPassStage[];
     private time: number;
@@ -252,6 +246,7 @@ export class Webgl2Renderer implements Renderer {
     private shadowsVbo!: WebGLBuffer;
     private shaderCache: Map<ShaderBuilder, ShaderProgram>;
     private resizeRequested: boolean;
+    private lineRenderer!: WebglLineRenderer;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -265,6 +260,9 @@ export class Webgl2Renderer implements Renderer {
         this.time = 0;
         this.shaderCache = new Map();
         this.resizeRequested = false;
+    }
+    getLineRenderer(): LineRenderer {
+        return this.lineRenderer;
     }
 
     public getType(): RendererType {
@@ -288,10 +286,6 @@ export class Webgl2Renderer implements Renderer {
 
     public registerShader(name: string, builder: ShaderBuilder, blendMode: BlendMode = "none") {
         this.shaderMap.set(name, { builder, blendMode });
-    }
-
-    public setClearColor(color: Color) {
-        this.clearColor.copy(color);
     }
 
     public setSize(width: number, height: number) {
@@ -389,6 +383,9 @@ export class Webgl2Renderer implements Renderer {
         gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
 
         gl.bindVertexArray(null);
+
+        this.lineRenderer = new WebglLineRenderer(gl);
+        this.lineRenderer.init();
 
         this.initialized = true;
     }
@@ -572,11 +569,11 @@ export class Webgl2Renderer implements Renderer {
     }
 
     public render(scene: Scene, camera: Camera) {
-        if(!this.initialized) {
+        if (!this.initialized) {
             throw new Error("Renderer is not initialized");
         }
 
-        if(this.resizeRequested) {
+        if (this.resizeRequested) {
             this.initFramebuffers();
             this.resizeRequested = false;
         }
@@ -593,7 +590,7 @@ export class Webgl2Renderer implements Renderer {
             layer = this.layersMap.get(sceneLayer)!;
             if (layer.needsUpdate) {
                 let sprites = sceneLayer.getSpritesOrdered();
-                if(!layer.isStatic) {
+                if (!layer.isStatic) {
                     sprites = sprites.filter(sprite => overlaps(cameraBounds, sprite.getBounds()))
                 }
                 layer.uploadSprites(sceneLayer.getSpritesOrdered());
@@ -613,6 +610,9 @@ export class Webgl2Renderer implements Renderer {
             const passStage = this.pass[i];
             this.renderFullscreenPass(passStage);
         }
+
+        this.lineRenderer.render(camera);
+        this.lineRenderer.clear();
 
         for (const [sceneLayer, rendererLayer] of this.layersMap) {
             if (rendererLayer.lifetime <= 0) {

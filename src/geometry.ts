@@ -1,5 +1,6 @@
 import { CircleCollider, Collider, PolygonCollider } from "./Collider";
 import { Light } from "./Light";
+import { Line } from "./LineRenderer";
 import { Sprite } from "./Sprite";
 import { Vector } from "./Vector";
 
@@ -77,7 +78,7 @@ export const geometry = (() => {
 
     const createLightsGeometry = (lights: Light[], instanced: boolean = false) => {
         const count = instanced ? 1 : 4;
-        const data = new Float32Array(lights.length * 64);
+        const data = new Float32Array(lights.length * 64); // Uniform alignment constraint
 
         let offset = 0;
         for (let light of lights) {
@@ -96,7 +97,7 @@ export const geometry = (() => {
     }
 
     const createCircleShadow = (light: Light, collider: CircleCollider): number[] => {
-        const center = collider.getCenter();
+        const center = collider.getWorldPosition();
         const dir = center.sub(light.position).normalize();
         const tangent = new Vector(-dir.y, dir.x).scale(collider.radius);
 
@@ -161,15 +162,15 @@ export const geometry = (() => {
         return vertices;
     };
 
-
     const createShadowsGeometry = (out: Float32Array, light: Light, colliders: Collider[], offset: number = 0) => {
-        for (let collider of colliders.filter(collider => collider.castsShadows)) {
+        for (let collider of colliders.filter(collider => collider.castShadow)) {
             let vertices: number[] = [];
             switch (collider.getType()) {
                 case "circle":
                     vertices = createCircleShadow(light, collider as CircleCollider);
                     break;
                 case "polygon":
+                case "box":
                     vertices = createPolygonShadow(light, collider as PolygonCollider);
                     break;
             }
@@ -179,6 +180,25 @@ export const geometry = (() => {
         return offset;
     }
 
+    const lineStride = 6;
+
+    const createLinesGeometry = (lines: Line[]) => {
+        const data = new Float32Array(lines.length * 2 * lineStride);
+        let offset = 0;
+        for (let line of lines) {
+            const colorData = line.color.toArray();
+            data[offset] = line.x0;
+            data[offset + 1] = line.y0;
+            data.set(colorData, offset + 2);
+            offset += lineStride;
+            data[offset] = line.x1;
+            data[offset + 1] = line.y1;
+            data.set(colorData, offset + 2);
+            offset += lineStride;
+        }
+        return data;
+    }
+
     return {
         quad,
         fullscreenQuad,
@@ -186,6 +206,8 @@ export const geometry = (() => {
         createSpritesData,
         lightStride,
         createLightsGeometry,
-        createShadowsGeometry
+        createShadowsGeometry,
+        lineStride,
+        createLinesGeometry
     }
 })();

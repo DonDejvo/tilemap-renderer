@@ -135,9 +135,9 @@
     </div>
 
     <script type="module">
-        import * as TilemapRenderer from "../src/TilemapRenderer.ts";
+        import { createRenderer, Tileset, Tilemap, Vector, math, colliders, Sprite, Light, ShaderBuilder, Camera, Scene, assets, Animator, Color } from "../src/TilemapRenderer.ts";
 
-        TilemapRenderer.ShaderBuilder.DEBUG = true;
+        ShaderBuilder.DEBUG = true;
 
         const assetsUrl = "";
         const rendererContext = "webgpu";
@@ -194,7 +194,7 @@
 
         class Player {
             constructor(scene, x, y, zIndex, emitter, tileset) {
-                this.sprite = new TilemapRenderer.Sprite({
+                this.sprite = new Sprite({
                     tileset,
                     tilesetRegion: { x: 0, y: 0 },
                     isStatic: false,
@@ -203,10 +203,10 @@
                 this.sprite.maskColor.set(1, 1, 1, 1);
                 scene.addSprite(this.sprite);
 
-                this.animator = new TilemapRenderer.Animator(this.sprite);
+                this.animator = new Animator(this.sprite);
 
-                this.position = new TilemapRenderer.Vector(x, y);
-                this.velocity = new TilemapRenderer.Vector();
+                this.position = new Vector(x, y);
+                this.velocity = new Vector();
 
                 this.speed = 80;
 
@@ -217,8 +217,11 @@
                 this.isCasting = false;
                 this.emitter = emitter;
 
-                this.collider = new TilemapRenderer.colliders.BoxCollider(24, 12);
-                this.collider.offset.set(-12, -6);
+                this.collider = new colliders.BoxCollider({
+                    width: 24, 
+                    height: 12,
+                    offset: new Vector(-12, -6)
+                });
                 scene.addCollider(this.collider);
             }
 
@@ -264,18 +267,18 @@
 
             getLookVector() {
                 switch (this.direction) {
-                    case 0: return new TilemapRenderer.Vector(0, -1);
-                    case 1: return new TilemapRenderer.Vector(-1, 0);
-                    case 2: return new TilemapRenderer.Vector(0, 1);
-                    case 3: return new TilemapRenderer.Vector(1, 0);
+                    case 0: return new Vector(0, -1);
+                    case 1: return new Vector(-1, 0);
+                    case 2: return new Vector(0, 1);
+                    case 3: return new Vector(1, 0);
                 }
-                return new TilemapRenderer.Vector(0, 0);
+                return new Vector(0, 0);
             }
         }
 
         class Particle {
             constructor(x, y, direction, zIndex, tileset, light) {
-                this.sprite = new TilemapRenderer.Sprite({
+                this.sprite = new Sprite({
                     tileset: tileset,
                     tilesetRegion: { x: 0, y: 0 },
                     isStatic: false,
@@ -289,7 +292,7 @@
 
                 this.direction = direction;
 
-                this.animator = new TilemapRenderer.Animator(this.sprite);
+                this.animator = new Animator(this.sprite);
                 this.animator.play({ x: 0, y: 0 }, { repeat: false });
 
                 this.onDead = null;
@@ -316,7 +319,7 @@
             }
 
             emit(x, y, direction, zIndex) {
-                const light = new TilemapRenderer.Light({ radius: 16, color: new TilemapRenderer.Color(1, 0.7, 0.2) })
+                const light = new Light({ radius: 16, color: new Color(1, 0.7, 0.2) })
                 const p = new Particle(x, y, direction, zIndex, this.tileset, light);
 
                 this.particles.push(p);
@@ -347,26 +350,26 @@
             let lastRAF = 0;
             let lastFPSUpdate = 0;
 
-            const camera = new TilemapRenderer.Camera(w, h);
+            const camera = new Camera(w, h);
             const input = new KeyboardInput();
 
-            const myTilesetImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/tileset.png");
-            const snowyLandsImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/RPGW_SnowyLands_v2.0/MainLev2.0_extruded.png");
-            const snowyLandsDecorativeImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/RPGW_SnowyLands_v2.0/decorative.png");
-            const skeletonBodyImage = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/lpc_entry/png/BODY_skeleton.png");
-            const FX16Image = await TilemapRenderer.assets.loadImage(assetsUrl + "/textures/FX/579.png");
+            const myTilesetImage = await assets.loadImage(assetsUrl + "/textures/tileset.png");
+            const snowyLandsImage = await assets.loadImage(assetsUrl + "/textures/RPGW_SnowyLands_v2.0/MainLev2.0_extruded.png");
+            const snowyLandsDecorativeImage = await assets.loadImage(assetsUrl + "/textures/RPGW_SnowyLands_v2.0/decorative.png");
+            const skeletonBodyImage = await assets.loadImage(assetsUrl + "/textures/lpc_entry/png/BODY_skeleton.png");
+            const FX16Image = await assets.loadImage(assetsUrl + "/textures/FX/579.png");
 
-            const skeletonBodyTileset = await TilemapRenderer.Tileset.load(assetsUrl + "/tilesets/BODY_skeleton.tsj");
-            const FX16Tileset = await TilemapRenderer.Tileset.load(assetsUrl + "/tilesets/FX_16.tsj");
+            const skeletonBodyTileset = await Tileset.load(assetsUrl + "/tilesets/BODY_skeleton.tsj");
+            const FX16Tileset = await Tileset.load(assetsUrl + "/tilesets/FX_16.tsj");
 
-            const exampleMap = await TilemapRenderer.Tilemap.load(assetsUrl + "/tilemaps/Example30x20.tmj", {
+            const exampleMap = await Tilemap.load(assetsUrl + "/tilemaps/Example30x20.tmj", {
                 ["SnowyLands"]: assetsUrl + "/tilesets/SnowyLands.tsj",
                 ["MyTileset"]: assetsUrl + "/tilesets/MyTileset.tsj",
                 ["SnowyLands_Decorative"]: assetsUrl + "/tilesets/SnowyLands_Decorative.tsj"
             });
 
-            const scene = new TilemapRenderer.Scene({
-                bounds: [new TilemapRenderer.Vector(0, 0), new TilemapRenderer.Vector(1000, 1000)]
+            const scene = new Scene({
+                bounds: [new Vector(0, 0), new Vector(1000, 1000)]
             });
             scene.ambientIntensity = 0.1;
 
@@ -382,8 +385,7 @@
                 onObject: (obj, x, y, w, h, zIndex, scene, layer) => {
                     switch (obj.name) {
                         case "tree_lg":
-                            for (let i = 0; i < 1; ++i) {
-                                const tree = new TilemapRenderer.Sprite({
+                                const tree = new Sprite({
                                     tileset: exampleMap.getTilesetByName("SnowyLands_Decorative"),
                                     tilesetRegion: { x: 3, y: 20, width: 3, height: 4 },
                                     zIndex,
@@ -392,12 +394,16 @@
                                 tree.offset.set(-1.5 * layer.tilemap.tileWidth, -4 * layer.tilemap.tileHeight + 4);
                                 tree.position.set(x, y);
                                 scene.addSprite(tree);
-                                const treeCollider = new TilemapRenderer.colliders.BoxCollider(2 * layer.tilemap.tileWidth - 12, 0.5 * layer.tilemap.tileWidth);
+                                const width = 2 * layer.tilemap.tileWidth - 12;
+                                const height = 0.5 * layer.tilemap.tileWidth;
+                                const treeCollider = new colliders.BoxCollider({
+                                    width,
+                                    height,
+                                    offset: new Vector(width * -0.5, height * -0.5),
+                                    castShadow: false
+                                });
                                 treeCollider.position.copy(tree.position);
-                                treeCollider.offset.set(treeCollider.width * -0.5, treeCollider.height * -0.5);
-                                treeCollider.isStatic = true;
                                 scene.addCollider(treeCollider);
-                            }
                             break;
 
                         case "player":
@@ -405,22 +411,20 @@
                             break;
 
                         case "light":
-                            for (let i = 0; i < 1; ++i) {
-                                const light = new TilemapRenderer.Light({
+                                const light = new Light({
                                     radius: 240,
                                     cutoff: 0.7,
-                                    direction: TilemapRenderer.Vector.fromAngle(TilemapRenderer.math.degToRad(obj.getProperty("angle") || 0))
+                                    direction: Vector.fromAngle(math.degToRad(obj.getProperty("angle") || 0))
                                 });
 
                                 light.position.set(obj.x, obj.y);
                                 scene.addLight(light);
-                            }
                             break;
                     }
                 }
             });
 
-            const renderer = TilemapRenderer.createRenderer(rendererContext);
+            const renderer = createRenderer(rendererContext);
             document.body.appendChild(renderer.getCanvas());
 
             camera.updateProjection(w, h);
@@ -434,7 +438,7 @@
 
             renderer.addTextures([skeletonBodyTileset, FX16Tileset], { ["BODY_skeleton"]: skeletonBodyImage, ["FX_16"]: FX16Image });
 
-            const neonExtract = new TilemapRenderer.ShaderBuilder();
+            const neonExtract = new ShaderBuilder();
 
             neonExtract
                 .uniform("threshold", "float")
@@ -447,7 +451,7 @@
                 .set("b", "max(color.rgb - vec3(uniforms.threshold), vec3(0.0))")
                 .set("fragColor", "vec4(b,1.0)");
 
-            const neonComposite = new TilemapRenderer.ShaderBuilder();
+            const neonComposite = new ShaderBuilder();
 
             neonComposite
                 .mainImage()
@@ -463,7 +467,7 @@
             renderer.registerShader("neonComposite", neonComposite);
 
             await renderer.init();
-            renderer.setClearColor(new TilemapRenderer.Color(0.5, 0.5, 0.5));
+            renderer.clearColor = new Color(0.5, 0.5, 0.5);
 
             const observer = new ResizeObserver(entries => {
                 for (const entry of entries) {
@@ -510,7 +514,17 @@
                         fpsElem.textContent = `${rendererContext.toUpperCase()} - FPS: ${fps}`;
                     }
 
-                    sceneinfo.innerText = Object.entries(scene.getInfo()).map(([key, val]) => `${key}: ${val}`).join("\n");
+                    const formatSceneInfo = (info) => {
+                        const format = (elem, depth = 0) => {
+                            if(typeof elem === "object") {
+                                return "\n" + Object.entries(elem).map(([key, val]) => "\t".repeat(depth) + key + ": " + format(val, depth + 1)).join("")
+                            }
+                            return ("" + elem).padEnd(6) + "\n";
+                        }
+                        return format(info);
+                    }
+
+                    sceneinfo.innerHTML = `<pre>${formatSceneInfo(scene.getInfo())}</pre>`;
 
                     input.update();
 
@@ -518,11 +532,11 @@
                         player.update(input, dt);
 
                         const targetCameraPos = player.position.clone()
-                            .sub(new TilemapRenderer.Vector(w * 0.5, h * 0.5));
+                            .sub(new Vector(w * 0.5, h * 0.5));
 
                         targetCameraPos.set(Math.round(targetCameraPos.x), Math.round(targetCameraPos.y));
 
-                        const lerpDistance = TilemapRenderer.Vector.distance(targetCameraPos, camera.position);
+                        const lerpDistance = Vector.distance(targetCameraPos, camera.position);
                         if (lerpDistance > 5) {
                             camera.position.lerp(targetCameraPos, Math.min(1, 5 * dt));
                         }
@@ -531,6 +545,21 @@
                     emitter.update(dt);
 
                     scene.update();
+
+                    const ctx = renderer.getLineRenderer()
+                    for(let collider of scene.getColliders()) {
+                        if(collider.getType() === "box") {
+                            const points = collider.getWorldPoints();
+                            ctx.strokeColor = Color.RED;
+                            ctx.beginPath();
+                            for(let i = 0; i < points.length; ++i) {
+                                const p = points[i];
+                                if(i === 0) ctx.moveTo(p.x, p.y);
+                                else ctx.lineTo(p.x, p.y);
+                            }
+                            ctx.closePath();
+                        }
+                    }
 
                     renderer.render(scene, camera);
                 });

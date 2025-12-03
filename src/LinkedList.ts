@@ -12,15 +12,18 @@ class LinkedListNode<T> {
 
 export class LinkedList<T> {
     head: LinkedListNode<T> | null;
+    size: number;
 
     constructor() {
         this.head = null;
+        this.size = 0;
     }
 
     public insert(value: T) {
         const newNode = new LinkedListNode(value);
         newNode.next = this.head;
         this.head = newNode;
+        ++this.size;
         return newNode;
     }
 
@@ -36,9 +39,10 @@ export class LinkedList<T> {
         }
         node.prev = null;
         node.next = null;
+        --this.size;
     }
 
-    [Symbol.iterator](): Iterator<T> {
+    public [Symbol.iterator](): Iterator<T> {
         let current = this.head;
 
         return {

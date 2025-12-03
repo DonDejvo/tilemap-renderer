@@ -2,39 +2,15 @@ import { Camera } from "../Camera";
 import { Color } from "../Color";
 import { overlaps } from "../common";
 import { geometry } from "../geometry";
+import { LineRenderer } from "../LineRenderer";
 import { math } from "../math";
 import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, LAYER_MAX_TEXTURES, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo, UNIFORMS_MAX_SIZE } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
 import { blurHorizontalBuilder, blurVerticalBuilder, defaultShaderBuilder, lightShaderBuilder, ShaderBuilder, ShaderBuilderOutput } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
-
-interface GPUConfig {
-    device: GPUDevice;
-    format: GPUTextureFormat;
-}
-
-export const requestConfig = async (): Promise<GPUConfig | null> => {
-    const adapter = await navigator.gpu?.requestAdapter();
-    const device = await adapter?.requestDevice();
-
-    if (!device) return null;
-
-    const format = navigator.gpu.getPreferredCanvasFormat();
-
-    return {
-        device,
-        format
-    };
-}
-
-const worldToClipVertex = `
-fn worldToClip(worldPos: vec2f, cameraPos: vec2f, viewport: vec2f) -> vec4f {
-    let pixelPos = worldPos - cameraPos;
-    let clipPos = vec2f(pixelPos.x / viewport.x, 1.0 - pixelPos.y / viewport.y) * 2.0 - 1.0;
-    return vec4f(clipPos, 0.0, 1.0);
-}
-`;
+import { GPUConfig, requestConfig, worldToClipVertex } from "./common";
+import { WebgpuLineRendrer } from "./WebgpuLineRenderer";
 
 const mainVertex = `
 struct VSInput {
@@ -333,7 +309,7 @@ export class WebgpuRenderer implements Renderer {
     private cameraBuffer!: GPUBuffer;
     private cameraBindGroup!: GPUBindGroup;
     private sampler!: GPUSampler;
-    private clearColor: Color;
+    public clearColor: Color;
     private shaderMap = new Map<string, FullscreenShaderInfo>();
     private offscreenTextures: GPUTexture[];
     private fullscreenSampler!: GPUSampler;
@@ -358,6 +334,7 @@ export class WebgpuRenderer implements Renderer {
         lightAdditive: RenderPassStage;
     };
     private resizeRequested: boolean;
+    private lineRenderer!: WebgpuLineRendrer;
 
     constructor(canvas: HTMLCanvasElement) {
         this.layersMap = new Map();
@@ -378,6 +355,10 @@ export class WebgpuRenderer implements Renderer {
             lightAdditive: { shader: "default_additive", inputs: [5], output: TEXID_LIGHTMAP }
         };
         this.resizeRequested = false;
+    }
+
+    public getLineRenderer(): LineRenderer {
+        return this.lineRenderer;
     }
 
     public getType(): RendererType {
@@ -401,10 +382,6 @@ export class WebgpuRenderer implements Renderer {
 
     public registerShader(name: string, builder: ShaderBuilder, blendMode: BlendMode = "none") {
         this.shaderMap.set(name, { builder, blendMode });
-    }
-
-    public setClearColor(color: Color) {
-        this.clearColor.copy(color);
     }
 
     public setSize(width: number, height: number) {
@@ -653,6 +630,9 @@ export class WebgpuRenderer implements Renderer {
             size: MAX_LIGHTS * SHADOW_MAX_VERTICES * 8,
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
         });
+
+        this.lineRenderer = new WebgpuLineRendrer(ctx, this.cfg);
+        this.lineRenderer.init();
 
         this.initialized = true;
     }
@@ -942,6 +922,9 @@ export class WebgpuRenderer implements Renderer {
             const passStage = this.pass[i];
             this.renderFullscreenPass(encoder, passStage);
         }
+
+        this.lineRenderer.render(encoder, camera);
+        this.lineRenderer.clear();
 
         const commandBuffer = encoder.finish();
         this.cfg.device.queue.submit([commandBuffer]);

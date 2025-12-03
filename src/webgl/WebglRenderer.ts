@@ -2,6 +2,7 @@ import { Camera } from "../Camera";
 import { Color } from "../Color";
 import { overlaps } from "../common";
 import { geometry } from "../geometry";
+import { LineRenderer } from "../LineRenderer";
 import { math } from "../math";
 import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
@@ -9,15 +10,8 @@ import { blurHorizontalBuilder, blurVerticalBuilder, defaultShaderBuilder, light
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 import { Framebuffer } from "./Framebuffer";
-import { ShaderProgram } from "./ShaderProgram";
-
-const worldToClipVertex = `
-vec4 worldToClip(vec2 worldPos, vec2 cameraPos, vec2 viewport) {
-    vec2 pixelPos = worldPos - cameraPos;
-    vec2 clipPos = vec2(pixelPos.x / viewport.x, 1.0 - pixelPos.y / viewport.y) * 2.0 - 1.0;
-    return vec4(clipPos, 0.0, 1.0);
-}
-`;
+import { ShaderProgram, worldToClipVertex } from "./ShaderProgram";
+import { WebglLineRenderer } from "./WebglLineRenderer";
 
 const mainVertex = `
 
@@ -229,13 +223,14 @@ export class WebglRenderer implements Renderer {
     private layersMap: Map<SceneLayer, WebglRendererLayer>;
     private texturesMap: Map<string, TextureInfo>;
     private shaderMap: Map<string, { shader?: ShaderProgram, builder: ShaderBuilder, blendMode: BlendMode }>;
-    private clearColor: Color;
+    public clearColor: Color;
     private initialized: boolean;
     public pass: RenderPassStage[];
     private shadowsVbo!: WebGLBuffer;
     private shaderCache: Map<ShaderBuilder, ShaderProgram>;
     private time: number;
     private resizeRequested: boolean;
+    private lineRenderer!: WebglLineRenderer;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -249,6 +244,10 @@ export class WebglRenderer implements Renderer {
         this.shaderCache = new Map();
         this.time = 0;
         this.resizeRequested = false;
+    }
+
+    public getLineRenderer(): LineRenderer {
+        return this.lineRenderer;
     }
 
     public getType(): RendererType {
@@ -272,10 +271,6 @@ export class WebglRenderer implements Renderer {
 
     public registerShader(name: string, builder: ShaderBuilder, blendMode: BlendMode = "none") {
         this.shaderMap.set(name, { builder, blendMode });
-    }
-
-    public setClearColor(color: Color) {
-        this.clearColor.copy(color);
     }
 
     public setSize(width: number, height: number) {
@@ -374,6 +369,9 @@ export class WebglRenderer implements Renderer {
         this.shadowsVbo = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.shadowsVbo);
         gl.bufferData(gl.ARRAY_BUFFER, MAX_LIGHTS * SHADOW_MAX_VERTICES * 8, gl.DYNAMIC_DRAW);
+
+        this.lineRenderer = new WebglLineRenderer(gl);
+        this.lineRenderer.init();
 
         this.initialized = true;
     }
@@ -622,6 +620,9 @@ export class WebglRenderer implements Renderer {
             const passStage = this.pass[i];
             this.renderFullscreenPass(passStage);
         }
+
+        this.lineRenderer.render(camera);
+        this.lineRenderer.clear();
 
         for (const [sceneLayer, rendererLayer] of this.layersMap) {
             if (rendererLayer.lifetime <= 0) {
