@@ -198,11 +198,20 @@ export class Scene {
         }
     }
 
-    public getColliders(bounds?: Bounds): Collider[] {
+    public getColliders(bounds?: Bounds, mask?: number): Collider[] {
+        let colliders: Collider[];
+
         if (bounds) {
-            return this.collidersHashGrid.findNearby(bounds).map(client => client.parent);
+            colliders = this.collidersHashGrid.findNearby(bounds).map(client => client.parent);
+        } else {
+            colliders = this.colliders.map(info => info.collider);
         }
-        return this.colliders.map(info => info.collider);
+
+        if (mask !== undefined) {
+            colliders = colliders.filter(c => (c.layer & mask) !== 0);
+        }
+
+        return colliders;
     }
 
     public addRigidBody(rb: RigidBody) {

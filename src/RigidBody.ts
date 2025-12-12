@@ -37,4 +37,12 @@ export class RigidBody {
         collider.body = this;
         this.colliders.push(collider);
     }
+
+    public update(dt: number) {
+        const frameVelocity = this.velocity.clone().scale(dt);
+        this.position.add(frameVelocity);
+
+        const frameAngularVelocity = this.angularVelocity * dt;
+        this.angle += frameAngularVelocity;
+    }
 }

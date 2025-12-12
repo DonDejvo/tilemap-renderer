@@ -10,6 +10,7 @@ interface ColliderParams {
     castShadow?: boolean;
     layer: number;
     mask: number;
+    isTrigger?: boolean;
 }
 
 export abstract class Collider {
@@ -19,6 +20,8 @@ export abstract class Collider {
     mask: number;
     castShadow: boolean;
     body: RigidBody | null;
+    isTrigger: boolean;
+    _processed: boolean;
 
     constructor(params: ColliderParams) {
         this.position = new Vector();
@@ -27,6 +30,8 @@ export abstract class Collider {
         this.layer = params.layer || DEFAULT_LAYER;
         this.mask = params.mask;
         this.body = null;
+        this.isTrigger = params.isTrigger !== undefined ? params.isTrigger : false;
+        this._processed = false;
     }
 
     getWorldPosition() {
