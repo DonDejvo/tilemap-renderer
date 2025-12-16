@@ -1,51 +1,93 @@
 import { Bounds } from "./common";
 import { RigidBody } from "./RigidBody";
+import { SceneNode } from "./SceneNode";
+import { SpatialHashGridClient } from "./SpatialHashGrid";
 import { Vector } from "./Vector";
 
 export const DEFAULT_LAYER = 1;
 
-export type ColliderType = "circle" | "polygon" | "box";
+export enum ColliderType {
+    POLYGON = "polygon",
+    CIRCLE = "circle"
+}
 
 interface ColliderParams {
     castShadow?: boolean;
     layer: number;
     mask: number;
     isTrigger?: boolean;
+    usage?: number;
 }
 
-export abstract class Collider {
+export abstract class Collider extends SceneNode {
     position: Vector;
+    offset: Vector;
     angle: number;
     layer: number;
     mask: number;
     castShadow: boolean;
     body: RigidBody | null;
     isTrigger: boolean;
+    _hashGridClient: SpatialHashGridClient<Collider> | null;
     _processed: boolean;
 
     constructor(params: ColliderParams) {
+        super();
         this.position = new Vector();
+        this.offset = new Vector();
         this.angle = 0;
         this.castShadow = params.castShadow !== undefined ? params.castShadow : true;
         this.layer = params.layer || DEFAULT_LAYER;
         this.mask = params.mask;
         this.body = null;
         this.isTrigger = params.isTrigger !== undefined ? params.isTrigger : false;
+        this._hashGridClient = null;
         this._processed = false;
     }
 
     getWorldPosition() {
-        if (!this.body) return this.position.clone();
-        return this.body.position.clone();
+        if (!this.body) {
+            return this.position.clone().add(this.offset);
+        }
+        return this.body.position.clone().add(this.offset);
     }
 
     getWorldAngle() {
         return this.body ? this.body.angle : this.angle;
     }
 
+    public start(): void {
+        this.scene.getColliders().push(this);
+        this._hashGridClient = this.scene.getColliderHashGrid().createClient(this, this.getBounds());
+    }
+
+    public fixedUpdate(): void {
+        if (this._hashGridClient) {
+            this._hashGridClient.bounds = this.getBounds();
+            this._hashGridClient.update();
+        }
+    }
+
+    public destroy(): void {
+        const i = this.scene.getColliders().indexOf(this);
+        if (i !== -1) {
+            this.scene.getColliders().splice(i, 1);
+        }
+        if (this.body) {
+            this.body.removeCollider(this);
+        }
+        if (this._hashGridClient) {
+            this.scene.getColliderHashGrid().removeClient(this._hashGridClient);
+        }
+    }
+
     abstract getBounds(): Bounds;
 
     abstract getType(): ColliderType;
+
+    protected calculatePositions() { }
+
+    protected calculateNormals() { }
 }
 
 interface CircleColliderParams extends ColliderParams {
@@ -61,7 +103,7 @@ export class CircleCollider extends Collider {
     }
 
     getType(): ColliderType {
-        return "circle";
+        return ColliderType.CIRCLE;
     }
 
     getBounds(): Bounds {
@@ -73,7 +115,6 @@ export class CircleCollider extends Collider {
             max: center.clone().add(new Vector(r, r))
         };
     }
-
 }
 
 interface PolygonColliderParams extends ColliderParams {
@@ -89,24 +130,14 @@ export class PolygonCollider extends Collider {
     }
 
     getType(): ColliderType {
-        return "polygon";
+        return ColliderType.POLYGON;
     }
 
-    getWorldPoints() {
-        const worldPos = this.getWorldPosition();
-        const worldAngle = this.getWorldAngle();
-
-        return this.points.map(p => p.clone()
-            .rot(-worldAngle)
-            .add(worldPos));
-    }
-
-    getBounds(): Bounds {
+    getBounds() {
         let minX = Infinity, minY = Infinity;
         let maxX = -Infinity, maxY = -Infinity;
 
-        const worldPoints = this.getWorldPoints();
-        for (const transformed of worldPoints) {
+        for (const transformed of this.getWorldPoints()) {
 
             if (transformed.x < minX) minX = transformed.x;
             if (transformed.y < minY) minY = transformed.y;
@@ -120,6 +151,24 @@ export class PolygonCollider extends Collider {
         };
     }
 
+    getWorldPoints() {
+        const worldPos = this.getWorldPosition();
+        const worldAngle = this.getWorldAngle();
+
+        return this.points.map(p => p.clone()
+            .rot(-worldAngle)
+            .add(worldPos));
+    }
+
+    getNormals() {
+        const worldPoints = this.getWorldPoints();
+        return worldPoints.map((p0, i) => {
+            const p1 = worldPoints[(i + 1) % worldPoints.length];
+
+            const edgeDir = p1.clone().sub(p0);
+            return new Vector(edgeDir.y, -edgeDir.x).normalize();
+        });
+    }
 }
 
 interface BoxColliderParams extends ColliderParams {
@@ -142,10 +191,6 @@ export class BoxCollider extends PolygonCollider {
         super({ ...params, points });
         this.width = params.width;
         this.height = params.height;
-    }
-
-    getType(): ColliderType {
-        return "box";
     }
 }
 

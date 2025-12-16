@@ -1,21 +1,21 @@
 import { Color } from "./Color";
 import { Bounds } from "./common";
+import { SceneNode } from "./SceneNode";
 import { Tileset, TilesetRegion } from "./Tileset";
 import { Vector } from "./Vector";
 
-    interface SpriteParams {
-        tileset: Tileset;
-        tilesetRegion?: TilesetRegion;
-        zIndex?: number;
-        isStatic?: boolean;
-    }
+interface SpriteParams {
+    tileset: Tileset;
+    tilesetRegion?: TilesetRegion;
+    zIndex?: number;
+    isStatic?: boolean;
+}
 
-export class Sprite {
+export class Sprite extends SceneNode {
     zIndex: number;
     tileset: Tileset;
     tilesetRegion: TilesetRegion;
     isStatic: boolean;
-    position: Vector;
     offset: Vector;
     scale: Vector;
     angle: number;
@@ -23,14 +23,14 @@ export class Sprite {
     maskColor: Color;
 
     constructor(params: SpriteParams) {
+        super();
         this.zIndex = params.zIndex || 0;
         this.tileset = params.tileset;
         this.tilesetRegion = params.tilesetRegion || { x: 0, y: 0 };
         this.isStatic = params.isStatic || false;
-        this.position = new Vector();
         this.offset = new Vector();
         this.scale = new Vector(
-            this.tileset.tileWidth * (this.tilesetRegion.width || 1), 
+            this.tileset.tileWidth * (this.tilesetRegion.width || 1),
             this.tileset.tileHeight * (this.tilesetRegion.height || 1)
         );
         this.angle = 0;
@@ -57,6 +57,25 @@ export class Sprite {
         return {
             min,
             max
+        }
+    }
+
+    public start(): void {
+        let layer;
+        layer = this.scene.findLayerBySprite(this);
+        if (!layer) {
+            layer = this.scene.createLayer({
+                zIndex: this.zIndex,
+                isStatic: this.isStatic
+            });
+        }
+        layer.add(this);
+    }
+
+    public destroy(): void {
+        const layer = this.scene.findLayerBySprite(this);
+        if (layer) {
+            layer.remove(this);
         }
     }
 }

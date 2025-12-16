@@ -4,7 +4,8 @@ import { Color } from "./Color";
 import { Bounds } from "./common";
 import { Light } from "./Light";
 import { RigidBody } from "./RigidBody";
-import { SpatialHashGrid, SpatialHashGridClient, SpatialHashGridParams } from "./SpatialHashGrid";
+import { SceneNode } from "./SceneNode";
+import { SpatialHashGrid, SpatialHashGridParams } from "./SpatialHashGrid";
 import { Sprite } from "./Sprite";
 import { ObjectLayer, TileLayer, Tilemap, TilemapObject } from "./Tilemap";
 import { Vector } from "./Vector";
@@ -20,64 +21,53 @@ interface SceneAddTilemapConfig {
 }
 
 interface SceneParams {
-    collidersHashGrid?: SpatialHashGridParams;
+    colliderHashGrid?: SpatialHashGridParams;
 }
 
 export class Scene {
+    private nodes: SceneNode[];
     private layers: SceneLayer[];
     public ambientColor: Color;
     public ambientIntensity: number;
+
     private lights: Light[];
-    private colliders: { collider: Collider, hashGridClient: SpatialHashGridClient<Collider> }[];
+    private colliders: Collider[];
     private rigidBodies: RigidBody[];
-    private collidersHashGrid: SpatialHashGrid<Collider>;
+    private colliderHashGrid: SpatialHashGrid<Collider>;
 
     constructor(params: SceneParams = {}) {
+        this.nodes = [];
         this.layers = [];
         this.ambientIntensity = 1.0;
         this.ambientColor = new Color(1, 1, 1);
         this.lights = [];
         this.colliders = [];
         this.rigidBodies = [];
-        this.collidersHashGrid = new SpatialHashGrid(params.collidersHashGrid || {
+        this.colliderHashGrid = new SpatialHashGrid(params.colliderHashGrid || {
             bounds: { min: new Vector(-1000, -1000), max: new Vector(1000, 1000) },
             dimensions: [20, 20]
         });
     }
 
-    private findLayerBySprite(sprite: Sprite) {
+    public findLayerBySprite(sprite: Sprite) {
         return this.layers.find(layer =>
             layer.isStatic === sprite.isStatic &&
             layer.zIndex === sprite.zIndex);
     }
 
-    public addLight(light: Light) {
-        this.lights.push(light);
+    public addNode<T extends SceneNode>(node: T): T {
+        node.scene = this;
+        this.nodes.push(node);
+        node.start();
+        return node;
     }
 
-    public removeLight(light: Light) {
-        const i = this.lights.indexOf(light);
-        if (i !== -1) this.lights.splice(i, 1);
-    }
-
-    public addSprite(sprite: Sprite) {
-        let layer;
-        layer = this.findLayerBySprite(sprite);
-        if (!layer) {
-            layer = this.createLayer({
-                zIndex: sprite.zIndex,
-                isStatic: sprite.isStatic
-            });
+    public removeNode(node: SceneNode) {
+        const i = this.nodes.indexOf(node);
+        if (i !== -1) {
+            node.destroy();
+            this.nodes.splice(i, 1);
         }
-        layer.add(sprite);
-        return sprite;
-    }
-
-    public removeSprite(sprite: Sprite) {
-        const layer = this.findLayerBySprite(sprite);
-        if (!layer) return;
-
-        layer.remove(sprite);
     }
 
     public addTilemap(tilemap: Tilemap, config: SceneAddTilemapConfig = {}) {
@@ -125,12 +115,13 @@ export class Scene {
                             s.position.set((j + layer.x) * tileWidth, (i + layer.y) * tileHeight);
                             s.scale.set(tileWidth, tileHeight);
 
-                            sprites.push(this.addSprite(s));
+                            sprites.push(this.addNode(s));
 
                             if (tile.animation) {
                                 const animator = new Animator(s);
-                                animator.play({ x: tile.x, y: tile.y }, { repeat: true });
+                                animator.play([tile.x, tile.y], { repeat: true });
                                 animators.push(animator);
+                                this.addNode(animator);
                             }
                         }
                     }
@@ -174,37 +165,17 @@ export class Scene {
         return this.lights;
     }
 
-    public addCollider(collider: Collider, rb?: RigidBody) {
-        this.colliders.push({
-            collider,
-            hashGridClient: this.collidersHashGrid.createClient(collider, collider.getBounds())
-        });
-
-        if (rb) {
-            rb.addCollider(collider);
-        }
-
-        return collider;
-    }
-
-    public removeCollider(collider: Collider) {
-        const i = this.colliders.findIndex(colliderInfo => colliderInfo.collider === collider);
-        if (i !== -1) {
-            if (collider.body) {
-                collider.body.removeCollider(collider);
-            }
-            this.collidersHashGrid.removeClient(this.colliders[i].hashGridClient);
-            this.colliders.splice(i, 1);
-        }
+    public getColliderHashGrid() {
+        return this.colliderHashGrid;
     }
 
     public getColliders(bounds?: Bounds, mask?: number): Collider[] {
         let colliders: Collider[];
 
         if (bounds) {
-            colliders = this.collidersHashGrid.findNearby(bounds).map(client => client.parent);
+            colliders = this.colliderHashGrid.findNearby(bounds).map(client => client.parent);
         } else {
-            colliders = this.colliders.map(info => info.collider);
+            colliders = this.colliders;
         }
 
         if (mask !== undefined) {
@@ -214,37 +185,35 @@ export class Scene {
         return colliders;
     }
 
-    public addRigidBody(rb: RigidBody) {
-        this.rigidBodies.push(rb);
-        return rb;
+    public getRigidbodies() {
+        return this.rigidBodies;
     }
 
-    public removeRigidBody(rb: RigidBody) {
-        const i = this.rigidBodies.indexOf(rb);
-        if (i !== -1) {
-            this.rigidBodies.splice(i, 1);
+    public update(dt: number) {
+        for (const node of this.nodes) {
+            node.update(dt);
         }
     }
 
-    public update() {
-        for (let colliderInfo of this.colliders) {
-            colliderInfo.hashGridClient.bounds = colliderInfo.collider.getBounds();
-            this.collidersHashGrid.updateClient(colliderInfo.hashGridClient);
+    public fixedUpdate(dt: number) {
+        for (const node of this.nodes) {
+            node.fixedUpdate(dt);
         }
     }
 
     public getInfo() {
         const spritesCount = this.layers.reduce((spritesCount, layer) => spritesCount + layer.sprites.length, 0);
         const staticSpritesCount = this.layers.reduce((spritesCount, layer) => spritesCount + layer.sprites.filter(sprite => sprite.isStatic).length, 0);
-        const collidersHashGridInfo = this.collidersHashGrid.getInfo();
+        const collidersHashGridInfo = this.colliderHashGrid.getInfo();
         return {
+            nodes: this.nodes.length,
             lights: this.lights.length,
             colliders: this.colliders.length,
             sprites: spritesCount,
             staticSprites: staticSpritesCount,
             dynamicSprites: spritesCount - staticSpritesCount,
             rigidBodies: this.rigidBodies.length,
-            collidersHashGrid: collidersHashGridInfo
+            colliderHashGrid: collidersHashGridInfo
         };
     }
 }

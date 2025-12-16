@@ -9,6 +9,9 @@ export class Color {
     static RED = new Color(1, 0, 0);
     static GREEN = new Color(0, 1, 0);
     static BLUE = new Color(0, 0, 1);
+    static YELLOW = new Color(1, 1, 0);
+    static CYAN = new Color(0, 1, 1);
+    static MAGENTA = new Color(1, 0, 1);
 
     constructor(r: number, g: number, b: number, a: number = 1) {
         this.r = r;

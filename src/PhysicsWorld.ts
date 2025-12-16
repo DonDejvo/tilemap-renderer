@@ -1,59 +1,79 @@
-import { Collider } from "./Collider";
-import { Collision } from "./Collision";
+import { Collision, detectCollision } from "./Collision";
 import { Scene } from "./Scene";
 
 export class PhysicsWorld {
-    scene: Scene;
-    collisions: Collision[];
-    triggerCollisions: Collision[];
+    private scene: Scene;
+
+    private previousCollisions = new Map<bigint, Collision>();
+    private currentCollisions = new Map<bigint, Collision>();
 
     constructor(scene: Scene) {
         this.scene = scene;
-        this.collisions = [];
-        this.triggerCollisions = [];
     }
 
     public step(dt: number) {
         const colliders = this.scene.getColliders();
-        for (const collider of colliders) {
-            collider._processed = false;
-        }
 
-        this.collisions.length = 0;
-        this.triggerCollisions.length = 0;
+        for (const c of colliders) c._processed = false;
+
+        this.currentCollisions.clear();
 
         for (const colliderA of colliders) {
             if (colliderA._processed) continue;
 
-            const candidates = this.scene.getColliders(colliderA.getBounds(), colliderA.mask);
+            const candidates = this.scene.getColliders(
+                colliderA.getBounds(),
+                colliderA.mask
+            );
 
             for (const colliderB of candidates) {
                 if (colliderA === colliderB || colliderB._processed) continue;
 
-                const collision = this.detectCollision(colliderA, colliderB);
-                
-                if(!collision) continue;
+                const collision = detectCollision(colliderA, colliderB);
+                if (!collision) continue;
 
-                if(collision.isTrigger) {
-                    this.triggerCollisions.push(collision);
-                } else {
-                    this.collisions.push(collision);
-                }
+                const key = collision.key;
+                this.currentCollisions.set(key, collision);
+
+                const existed = this.previousCollisions.has(key);
+                this.emitEnterStay(collision, existed);
             }
 
             colliderA._processed = true;
         }
 
-        this.resolveCollisions(dt);
+        this.emitExit();
+
+        this.previousCollisions = new Map(this.currentCollisions);
     }
 
-    private detectCollision(colliderA: Collider, colliderB: Collider): Collision | null {
-        // TODO
+    private emitEnterStay(collision: Collision, existed: boolean) {
+        const body = collision.collider.body;
+        const otherBody = collision.otherCollider.body;
 
-        return null;
+        if (!body && !otherBody) return;
+
+        const type = collision.isTrigger
+            ? existed ? "triggerstay" : "triggerenter"
+            : existed ? "collisionstay" : "collisionenter";     
+
+        if (body) body.emitMessage(type, collision);
+        if (otherBody) otherBody.emitMessage(type, collision.clone().flip());
     }
 
-    private resolveCollisions(dt: number) {
-        // TODO
+    private emitExit() {
+        for (const [key, collision] of this.previousCollisions) {
+            if (this.currentCollisions.has(key)) continue;
+
+            const body = collision.collider.body;
+            const otherBody = collision.otherCollider.body;
+
+            const type = collision.isTrigger
+                ? "triggerexit"
+                : "collisionexit";
+
+            if (body) body.emitMessage(type, collision);
+            if (otherBody) otherBody.emitMessage(type, collision.clone().flip());
+        }
     }
 }

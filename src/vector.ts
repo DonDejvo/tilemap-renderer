@@ -83,8 +83,8 @@ export class Vector {
     project(v: Vector) {
         const vLen = v.lenSq();
         if (vLen === 0) return this.scale(0);
-        const d = Vector.dot(this, v);
-        return this.copy(v).scale(d / vLen);
+        const proj = Vector.dot(this, v);
+        return this.copy(v).scale(proj / vLen);
     }
 
     static distance(v1: Vector, v2: Vector) {

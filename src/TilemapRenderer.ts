@@ -6,12 +6,15 @@ import { Color } from "./Color";
 import { Light } from "./Light";
 import { math } from "./math";
 import { matrix } from "./matrix";
+import { PhysicsWorld } from "./PhysicsWorld";
 import { createRenderer } from "./Renderer";
+import { RigidBody } from "./RigidBody";
 import { Scene } from "./Scene";
+import { SceneNode } from "./SceneNode";
 import { ShaderBuilder } from "./ShaderBuilder";
 import { Sprite } from "./Sprite";
 import { Tilemap } from "./Tilemap";
 import { Tileset } from "./Tileset";
 import { Vector } from "./Vector";
 
-export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, Animator, ShaderBuilder, Light, colliders, assets, matrix, math, createRenderer };
+export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, Animator, ShaderBuilder, Light, RigidBody, PhysicsWorld, SceneNode, colliders, assets, matrix, math, createRenderer };

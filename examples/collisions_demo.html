@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collisions Demo</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            height: 100%;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #fps {
+            position: fixed;
+            left: 10px;
+            top: 10px;
+            color: white;
+            font: 14px monospace;
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        #sceneinfo {
+            position: fixed;
+            right: 10px;
+            top: 10px;
+            color: white;
+            font: 14px monospace;
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="fps">FPS: 0</div>
+    <div id="sceneinfo"></div>
+
+    <script type="module">
+        import {
+            createRenderer,
+            Vector,
+            Camera,
+            Scene,
+            Color,
+            RigidBody,
+            PhysicsWorld,
+            colliders
+        } from "../src/TilemapRenderer.ts";
+
+        const rendererContext = "webgpu";
+
+        class Input {
+            constructor() {
+                this.keys = new Set();
+                window.addEventListener("keydown", e => this.keys.add(e.code));
+                window.addEventListener("keyup", e => this.keys.delete(e.code));
+            }
+
+            down(code) {
+                return this.keys.has(code);
+            }
+        }
+
+        class Shape {
+            constructor(x, y, collider) {
+                collider.shape = this;
+                this.collider = collider;
+                this.body = new RigidBody({ mass: 1 });
+                this.body.position.set(x, y);
+                this.body.addCollider(collider);
+            }
+
+            draw(ctx, active) { }
+        }
+
+        class BoxShape extends Shape {
+            constructor(x, y, w, h) {
+                const collider = new colliders.BoxCollider({ width: w, height: h });
+                super(x, y, collider);
+                this.w = w;
+                this.h = h;
+            }
+
+            draw(ctx) {
+                const { x, y } = this.collider.getWorldPosition();
+
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                ctx.lineTo(x + this.w, y);
+                ctx.lineTo(x + this.w, y + this.h);
+                ctx.lineTo(x, y + this.h);
+                ctx.closePath();
+            }
+        }
+
+        class CircleShape extends Shape {
+            constructor(x, y, r) {
+                const collider = new colliders.CircleCollider({ radius: r });
+                super(x, y, collider);
+                this.r = r;
+            }
+
+            draw(ctx) {
+                const { x, y } = this.collider.getWorldPosition();
+                ctx.beginPath();
+                ctx.arc(x, y, this.r, 0, Math.PI * 2);
+                ctx.closePath();
+            }
+        }
+
+        const main = async () => {
+            let w = 1920, h = 1080;
+
+            const fpsElem = document.getElementById("fps");
+            const sceneinfo = document.getElementById("sceneinfo");
+
+            let frameCount = 0;
+            let lastRAF = 0;
+            let lastFPSUpdate = 0;
+
+            let accTime = 0;
+            const fixedDeltaTime = 0.02;
+
+            const input = new Input();
+            const camera = new Camera(w, h);
+
+            const scene = new Scene({
+                colliderHashGrid: {
+                    bounds: { min: new Vector(), max: new Vector(1000, 1000) },
+                    dimensions: [5, 5]
+                }
+            });
+
+            const physicsWorld = new PhysicsWorld(scene);
+
+            const renderer = createRenderer(rendererContext);
+            document.body.appendChild(renderer.getCanvas());
+
+            camera.updateProjection(w, h);
+            renderer.setSize(w, h);
+
+            await renderer.init();
+            renderer.clearColor = new Color(0.5, 0.5, 0.5);
+
+            const observer = new ResizeObserver(entries => {
+                for (const entry of entries) {
+                    w = entry.contentBoxSize[0].inlineSize;
+                    h = entry.contentBoxSize[0].blockSize;
+                    renderer.setSize(w, h);
+                    camera.vw = w;
+                    camera.vh = h;
+                }
+            });
+
+            observer.observe(renderer.getCanvas());
+
+            const shapes = [];
+            const SHAPE_COUNT = 30;
+
+            for (let i = 0; i < SHAPE_COUNT; i++) {
+                let shape;
+                if (Math.random() < 0.5) {
+                    shape = new BoxShape(
+                        Math.random() * 900,
+                        Math.random() * 900,
+                        20 + Math.random() * 80,
+                        20 + Math.random() * 80
+                    );
+                } else {
+                    shape = new CircleShape(
+                        Math.random() * 900,
+                        Math.random() * 900,
+                        10 + Math.random() * 40
+                    );
+                }
+                shapes.push(shape);
+                scene.addNode(shape.collider);
+                scene.addNode(shape.body);
+            }
+
+            let activeIndex = 0;
+            let ctrlPrev = false;
+            const speed = 300;
+
+            let activeBody = null;
+            const activeCollisions = new Set();
+
+            const setActiveShape = (shape) => {
+                if (activeBody) {
+                    activeBody.removeMessageHandler("collisionenter", onCollisionEnter);
+                    activeBody.removeMessageHandler("collisionexit", onCollisionExit);
+                }
+
+                activeCollisions.clear();
+
+                activeBody = shape.body;
+
+                activeBody.addMessageHandler("collisionenter", onCollisionEnter);
+                activeBody.addMessageHandler("collisionexit", onCollisionExit);
+            };
+
+
+            const onCollisionEnter = (collision) => {
+                const otherShape = collision.otherCollider.shape;
+                activeCollisions.add(otherShape);
+            };
+
+            const onCollisionExit = (collision) => {
+                const otherShape = collision.otherCollider.shape;
+                activeCollisions.delete(otherShape);
+            };
+
+            setActiveShape(shapes[activeIndex]);
+
+            const draw = () => {
+                requestAnimationFrame(now => {
+                    draw();
+
+                    now *= 0.001;
+                    const dt = now - (lastRAF || now);
+                    lastRAF = now;
+
+                    frameCount++;
+                    if (now - lastFPSUpdate >= 1) {
+                        fpsElem.textContent = `${rendererContext.toUpperCase()} - FPS: ${frameCount}`;
+                        frameCount = 0;
+                        lastFPSUpdate = now;
+                    }
+
+                    accTime += dt;
+
+                    while(accTime >= fixedDeltaTime) {
+                        accTime -= fixedDeltaTime;
+                        scene.fixedUpdate(fixedDeltaTime);
+                        physicsWorld.step(fixedDeltaTime);
+                    }
+
+                    const active = shapes[activeIndex];
+
+                    let dx = 0;
+                    let dy = 0;
+
+                    if (input.down("KeyW")) dy -= 1;
+                    if (input.down("KeyS")) dy += 1;
+                    if (input.down("KeyA")) dx -= 1;
+                    if (input.down("KeyD")) dx += 1;
+
+                    if (dx || dy) {
+                        const len = Math.hypot(dx, dy) || 1;
+                        active.body.position.x += (dx / len) * speed * dt;
+                        active.body.position.y += (dy / len) * speed * dt;
+                    }
+
+                    const ctrl =
+                        input.down("ControlLeft") || input.down("ControlRight");
+
+                    if (ctrl && !ctrlPrev) {
+                        if (input.down("ControlLeft")) {
+                            activeIndex =
+                                (activeIndex - 1 + shapes.length) % shapes.length;
+                        } else {
+                            activeIndex =
+                                (activeIndex + 1) % shapes.length;
+                        }
+
+                        setActiveShape(shapes[activeIndex]);
+                    }
+
+                    ctrlPrev = ctrl;
+
+                    sceneinfo.innerHTML = `<pre>${JSON.stringify(scene.getInfo(), null, 2)}</pre>`;
+
+                    scene.update(dt);
+
+                    const ctx = renderer.getLineRenderer();
+
+                    ctx.strokeColor = Color.YELLOW;
+                    scene.getColliderHashGrid().draw(ctx);
+
+                    for (let i = 0; i < shapes.length; i++) {
+                        if (i === activeIndex) {
+                            ctx.strokeColor = Color.RED;
+                        } else if (activeCollisions.has(shapes[i])) {
+                            ctx.strokeColor = Color.GREEN;
+                        } else {
+                            ctx.strokeColor = Color.WHITE;
+                        }
+                        
+                        shapes[i].draw(ctx);
+                    }
+
+                    renderer.render(scene, camera);
+                });
+            };
+
+            draw();
+        };
+
+        main();
+    </script>
+
+
+</body>
+
+</html>

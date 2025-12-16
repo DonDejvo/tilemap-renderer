@@ -8,7 +8,7 @@
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
     "module": "esnext",
-    "target": "es2015",
+    "target": "es2020",
     "types": ["@webgpu/types"],
     // For nodejs:
     "lib": ["ESNext", "DOM", "DOM.Iterable"],

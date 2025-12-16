@@ -1,19 +1,18 @@
 import { Color } from "./Color";
 import { Bounds } from "./common";
+import { SceneNode } from "./SceneNode";
 import { Vector } from "./Vector";
 
 interface LightParams {
     radius: number;
     color?: Color;
-    position?: Vector;
     intensity?: number;
     direction?: Vector;
     cutoff?: number;
     isStatic?: boolean;
 }
 
-export class Light {
-    position: Vector;
+export class Light extends SceneNode {
     color: Color;
     intensity: number;
     radius: number;
@@ -22,7 +21,7 @@ export class Light {
     isStatic: boolean;
 
     constructor(params: LightParams) {
-        this.position = params.position || new Vector();
+        super();
         this.color = params.color || new Color(1, 1, 1);
         this.intensity = params.intensity || 1.0;
         this.radius = params.radius;
@@ -37,5 +36,14 @@ export class Light {
             min: this.position.clone().sub(vec),
             max: this.position.clone().add(vec)
         }
+    }
+
+    public start(): void {
+        this.scene.getLights().push(this);
+    }
+
+    public destroy(): void {
+        const i = this.scene.getLights().indexOf(this);
+        if (i !== -1) this.scene.getLights().splice(i, 1);
     }
 }

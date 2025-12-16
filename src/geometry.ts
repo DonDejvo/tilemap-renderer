@@ -1,4 +1,4 @@
-import { CircleCollider, Collider, PolygonCollider } from "./Collider";
+import { CircleCollider, Collider, ColliderType, PolygonCollider } from "./Collider";
 import { Light } from "./Light";
 import { Line } from "./LineRenderer";
 import { Sprite } from "./Sprite";
@@ -131,15 +131,15 @@ export const geometry = (() => {
 
         const worldPoints = collider.getWorldPoints();
 
-        for (let i = 0; i < worldPoints.length; i++) {
+        for (let i = 0; i < worldPoints.length; ++i) {
             const p0 = worldPoints[i];
             const p1 = worldPoints[(i + 1) % worldPoints.length];
 
             const edgeCenter = p0.clone().add(p1).scale(0.5);
-            const toLight = edgeCenter.clone().sub(light.position).normalize();
+            const toLight = light.position.clone().sub(edgeCenter).normalize();
             const edgeDir = p1.clone().sub(p0).normalize();
 
-            const normal = new Vector(-edgeDir.y, edgeDir.x);
+            const normal = new Vector(edgeDir.y, -edgeDir.x);
             if (Vector.dot(normal, toLight) <= 0) continue;
 
             const dir0 = p0.clone().sub(light.position).normalize();
@@ -166,11 +166,10 @@ export const geometry = (() => {
         for (let collider of colliders.filter(collider => collider.castShadow)) {
             let vertices: number[] = [];
             switch (collider.getType()) {
-                case "circle":
+                case ColliderType.CIRCLE:
                     vertices = createCircleShadow(light, collider as CircleCollider);
                     break;
-                case "polygon":
-                case "box":
+                case ColliderType.POLYGON:
                     vertices = createPolygonShadow(light, collider as PolygonCollider);
                     break;
             }

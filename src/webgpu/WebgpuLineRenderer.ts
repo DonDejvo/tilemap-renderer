@@ -110,6 +110,8 @@ export class WebgpuLineRendrer extends LineRenderer {
     }
 
     render(encoder: GPUCommandEncoder, camera: Camera) {
+        if(this.lines.length === 0) return;
+
         this.cfg.device.queue.writeBuffer(this.vbo, 0, geometry.createLinesGeometry(this.lines));
         this.cfg.device.queue.writeBuffer(
             this.cameraBuffer,

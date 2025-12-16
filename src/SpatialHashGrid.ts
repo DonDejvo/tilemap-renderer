@@ -1,9 +1,11 @@
 import { Bounds } from "./common";
+import { LineRenderer } from "./LineRenderer";
 import { LinkedList, LinkedListNode } from "./LinkedList";
 import { math } from "./math";
 import { Vector } from "./Vector";
 
 export class SpatialHashGridClient<T> {
+    hashGrid!: SpatialHashGrid<T>;
     bounds: Bounds;
     cells!: {
         min: [number, number];
@@ -17,6 +19,10 @@ export class SpatialHashGridClient<T> {
         this.bounds = bounds;
         this.parent = parent;
         this.queryId = 0;
+    }
+
+    update() {
+        this.hashGrid.updateClient(this);
     }
 }
 
@@ -66,6 +72,7 @@ export class SpatialHashGrid<T> {
 
     public createClient(parent: T, bounds: Bounds): SpatialHashGridClient<T> {
         const client = new SpatialHashGridClient<T>(parent, bounds);
+        client.hashGrid = this;
         this.insert(client);
         return client;
     }
@@ -103,7 +110,7 @@ export class SpatialHashGrid<T> {
         }
         let totalNodes = 0;
         let minNodes = Number.MAX_VALUE;
-        let maxNodes = Number.MIN_VALUE;
+        let maxNodes = 0;
         for (let i = 0; i < numRows; ++i) {
             for (let j = 0; j < numCols; ++j) {
                 const size = this.cells[i][j].size;
@@ -114,6 +121,33 @@ export class SpatialHashGrid<T> {
         }
         const avgNodes = totalNodes / totalCells;
         return { totalCells, totalNodes, minNodes, maxNodes, avgNodes };
+    }
+
+    public draw(ctx: LineRenderer) {
+        const { bounds, dimensions } = this;
+
+        const min = bounds.min;
+        const max = bounds.max;
+
+        const cols = dimensions[0];
+        const rows = dimensions[1];
+
+        const cellW = (max.x - min.x) / cols;
+        const cellH = (max.y - min.y) / rows;
+
+        ctx.beginPath();
+
+        for (let i = 0; i <= cols; i++) {
+            const x = min.x + i * cellW;
+            ctx.moveTo(x, min.y);
+            ctx.lineTo(x, max.y);
+        }
+
+        for (let j = 0; j <= rows; j++) {
+            const y = min.y + j * cellH;
+            ctx.moveTo(min.x, y);
+            ctx.lineTo(max.x, y);
+        }
     }
 
     private insert(client: SpatialHashGridClient<T>): void {

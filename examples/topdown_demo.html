@@ -201,9 +201,10 @@
                     zIndex
                 });
                 this.sprite.maskColor.set(1, 1, 1, 1);
-                scene.addSprite(this.sprite);
+                scene.addNode(this.sprite);
 
                 this.animator = new Animator(this.sprite);
+                scene.addNode(this.animator);
 
                 this.position = new Vector(x, y);
                 this.velocity = new Vector();
@@ -218,11 +219,11 @@
                 this.emitter = emitter;
 
                 this.collider = new colliders.BoxCollider({
-                    width: 24, 
+                    width: 24,
                     height: 12,
                     offset: new Vector(-12, -6)
                 });
-                scene.addCollider(this.collider);
+                scene.addNode(this.collider);
             }
 
             update(input, dt) {
@@ -230,15 +231,14 @@
 
                 if (!this.isCasting && input.actionPressed) {
                     this.isCasting = true;
-                    this.animator.play({ x: 0, y: 4 + this.direction }, { repeat: false, restart: true });
-                    this.animator.onEnded = () => {
+                    this.animator.play([0, 4 + this.direction], { repeat: false, restart: true });
+                    this.animator.addMessageHandler("animationend", (label) => {
                         const look = this.getLookVector();
                         const px = this.position.x + look.x * 16;
                         const py = this.position.y - 16 + look.y * 16;
                         this.emitter.emit(px, py, look, this.sprite.zIndex);
                         this.isCasting = false;
-                        this.animator.onEnded = null;
-                    };
+                    }, { once: true });
                 }
 
                 if (!this.isCasting) {
@@ -253,16 +253,14 @@
                         this.velocity.normalize().scale(this.speed);
                         this.position.add(this.velocity.clone().scale(dt));
 
-                        this.animator.play({ x: 1, y: this.direction }, { repeat: true, restart: false }); // walking
+                        this.animator.play([1, this.direction], { repeat: true, restart: false }); // walking
                     } else {
-                        this.animator.play({ x: 0, y: this.direction }, { repeat: true, restart: false }); // idle
+                        this.animator.play([0, this.direction], { repeat: true, restart: false }); // idle
                     }
 
                     this.sprite.position.copy(this.position);
                     this.collider.position.copy(this.position);
                 }
-
-                this.animator.update(dt);
             }
 
             getLookVector() {
@@ -287,13 +285,14 @@
                 this.light = light;
 
                 this.sprite.position.set(x, y);
+                light.position.set(x, y);
                 this.sprite.angle = direction.angle();
                 this.sprite.offset.set(-32, -32);
 
                 this.direction = direction;
 
                 this.animator = new Animator(this.sprite);
-                this.animator.play({ x: 0, y: 0 }, { repeat: false });
+                this.animator.play([0, 0], { repeat: false });
 
                 this.onDead = null;
                 this.startLifetime = 1.0;
@@ -302,7 +301,6 @@
 
             update(dt) {
                 this.sprite.position.add(this.direction.clone().scale(160 * dt));
-                this.animator.update(dt);
                 this.light.position.copy(this.sprite.position.clone().add(this.direction.clone().scale(24)));
                 this.lifetime -= dt;
                 if (this.onDead && this.lifetime <= 0) {
@@ -319,16 +317,18 @@
             }
 
             emit(x, y, direction, zIndex) {
-                const light = new Light({ radius: 16, color: new Color(1, 0.7, 0.2) })
+                const light = new Light({ radius: 16, color: new Color(1, 0.7, 0.2) });
                 const p = new Particle(x, y, direction, zIndex, this.tileset, light);
 
                 this.particles.push(p);
-                this.scene.addSprite(p.sprite);
-                this.scene.addLight(light);
+                this.scene.addNode(p.sprite);
+                this.scene.addNode(p.animator);
+                this.scene.addNode(light);
 
                 p.onDead = () => {
-                    this.scene.removeSprite(p.sprite);
-                    this.scene.removeLight(light);
+                    this.scene.removeNode(p.sprite);
+                    this.scene.removeNode(light);
+                    this.scene.removeNode(p.animator);
                     this.particles = this.particles.filter(pp => pp !== p);
                 };
             }
@@ -349,6 +349,8 @@
             let dt = 0;
             let lastRAF = 0;
             let lastFPSUpdate = 0;
+            let accTime = 0;
+            const fixedDeltaTime = 0.02;
 
             const camera = new Camera(w, h);
             const input = new KeyboardInput();
@@ -368,9 +370,7 @@
                 ["SnowyLands_Decorative"]: assetsUrl + "/tilesets/SnowyLands_Decorative.tsj"
             });
 
-            const scene = new Scene({
-                bounds: [new Vector(0, 0), new Vector(1000, 1000)]
-            });
+            const scene = new Scene();
             scene.ambientIntensity = 0.1;
 
             let player = null;
@@ -385,25 +385,26 @@
                 onObject: (obj, x, y, w, h, zIndex, scene, layer) => {
                     switch (obj.name) {
                         case "tree_lg":
-                                const tree = new Sprite({
-                                    tileset: exampleMap.getTilesetByName("SnowyLands_Decorative"),
-                                    tilesetRegion: { x: 3, y: 20, width: 3, height: 4 },
-                                    zIndex,
-                                    isStatic: false
-                                });
-                                tree.offset.set(-1.5 * layer.tilemap.tileWidth, -4 * layer.tilemap.tileHeight + 4);
-                                tree.position.set(x, y);
-                                scene.addSprite(tree);
-                                const width = 2 * layer.tilemap.tileWidth - 12;
-                                const height = 0.5 * layer.tilemap.tileWidth;
-                                const treeCollider = new colliders.BoxCollider({
-                                    width,
-                                    height,
-                                    offset: new Vector(width * -0.5, height * -0.5),
-                                    castShadow: true
-                                });
-                                treeCollider.position.copy(tree.position);
-                                scene.addCollider(treeCollider);
+                            const tree = new Sprite({
+                                tileset: exampleMap.getTilesetByName("SnowyLands_Decorative"),
+                                tilesetRegion: { x: 3, y: 20, width: 3, height: 4 },
+                                zIndex,
+                                isStatic: false
+                            });
+                            tree.offset.set(-1.5 * layer.tilemap.tileWidth, -4 * layer.tilemap.tileHeight + 4);
+                            tree.position.set(x, y);
+                            scene.addNode(tree);
+                            const width = 2 * layer.tilemap.tileWidth - 12;
+                            const height = 0.5 * layer.tilemap.tileWidth;
+                            const treeCollider = new colliders.BoxCollider({
+                                width,
+                                height,
+                                offset: new Vector(width * -0.5, height * -0.5),
+                                castShadow: true,
+                                usage: 0
+                            });
+                            treeCollider.position.copy(tree.position);
+                            scene.addNode(treeCollider);
                             break;
 
                         case "player":
@@ -411,14 +412,14 @@
                             break;
 
                         case "light":
-                                const light = new Light({
-                                    radius: 240,
-                                    cutoff: 0.7,
-                                    direction: Vector.fromAngle(math.degToRad(obj.getProperty("angle") || 0))
-                                });
+                            const light = new Light({
+                                radius: 240,
+                                cutoff: 0.7,
+                                direction: Vector.fromAngle(math.degToRad(obj.getProperty("angle") || 0))
+                            });
 
-                                light.position.set(obj.x, obj.y);
-                                scene.addLight(light);
+                            light.position.set(obj.x, obj.y);
+                            scene.addNode(light);
                             break;
                     }
                 }
@@ -514,9 +515,16 @@
                         fpsElem.textContent = `${rendererContext.toUpperCase()} - FPS: ${fps}`;
                     }
 
+                    accTime += dt;
+
+                    while(accTime >= fixedDeltaTime) {
+                        accTime -= fixedDeltaTime;
+                        scene.fixedUpdate(fixedDeltaTime);
+                    }
+
                     const formatSceneInfo = (info) => {
                         const format = (elem, depth = 0) => {
-                            if(typeof elem === "object") {
+                            if (typeof elem === "object") {
                                 return "\n" + Object.entries(elem).map(([key, val]) => "\t".repeat(depth) + key + ": " + format(val, depth + 1)).join("")
                             }
                             return ("" + elem).padEnd(6) + "\n";
@@ -543,18 +551,21 @@
                     }
 
                     emitter.update(dt);
+                    scene.update(dt);
 
-                    scene.update();
+                    const ctx = renderer.getLineRenderer();
 
-                    const ctx = renderer.getLineRenderer()
-                    for(let collider of scene.getColliders()) {
-                        if(collider.getType() === "box") {
+                    ctx.strokeColor = Color.YELLOW;
+                    scene.getColliderHashGrid().draw(ctx);
+
+                    for (let collider of scene.getColliders()) {
+                        if (collider.getType() === "polygon") {
                             const points = collider.getWorldPoints();
                             ctx.strokeColor = Color.RED;
                             ctx.beginPath();
-                            for(let i = 0; i < points.length; ++i) {
+                            for (let i = 0; i < points.length; ++i) {
                                 const p = points[i];
-                                if(i === 0) ctx.moveTo(p.x, p.y);
+                                if (i === 0) ctx.moveTo(p.x, p.y);
                                 else ctx.lineTo(p.x, p.y);
                             }
                             ctx.closePath();

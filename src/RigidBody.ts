@@ -1,12 +1,12 @@
 import { Collider } from "./Collider";
+import { SceneNode } from "./SceneNode";
 import { Vector } from "./Vector";
 
 interface RigidBodyParams {
     mass: number;
 }
 
-export class RigidBody {
-    position: Vector;
+export class RigidBody extends SceneNode {
     angle: number;
     velocity: Vector;
     angularVelocity: number;
@@ -14,7 +14,7 @@ export class RigidBody {
     colliders: Collider[];
 
     constructor(params: RigidBodyParams) {
-        this.position = new Vector();
+        super();
         this.angle = 0;
         this.velocity = new Vector();
         this.angularVelocity = 0;
@@ -31,18 +31,34 @@ export class RigidBody {
     }
 
     public addCollider(collider: Collider) {
-        if(collider.body) {
+        if (collider.body) {
             collider.body.removeCollider(collider);
         }
         collider.body = this;
         this.colliders.push(collider);
     }
 
-    public update(dt: number) {
+    public fixedUpdate(dt: number): void {
         const frameVelocity = this.velocity.clone().scale(dt);
         this.position.add(frameVelocity);
 
-        const frameAngularVelocity = this.angularVelocity * dt;
+        const frameAngularVelocity = this.angularVelocity * dt
         this.angle += frameAngularVelocity;
+    }
+
+    public start(): void {
+        this.scene.getRigidbodies().push(this);
+    }
+
+    public destroy(): void {
+        const i = this.scene.getRigidbodies().indexOf(this);
+        if (i !== -1) {
+
+            for (const collider of this.colliders) {
+                collider.body = null;
+            }
+
+            this.scene.getRigidbodies().splice(i, 1);
+        }
     }
 }
