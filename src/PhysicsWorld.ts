@@ -30,12 +30,12 @@ export class PhysicsWorld {
                 if (colliderA === colliderB || colliderB._processed) continue;
 
                 const collision = detectCollision(colliderA, colliderB);
+                
                 if (!collision) continue;
 
-                const key = collision.key;
-                this.currentCollisions.set(key, collision);
+                this.currentCollisions.set(collision.key, collision);
 
-                const existed = this.previousCollisions.has(key);
+                const existed = this.previousCollisions.has(collision.key);
                 this.emitEnterStay(collision, existed);
             }
 
@@ -55,7 +55,7 @@ export class PhysicsWorld {
 
         const type = collision.isTrigger
             ? existed ? "triggerstay" : "triggerenter"
-            : existed ? "collisionstay" : "collisionenter";     
+            : existed ? "collisionstay" : "collisionenter";
 
         if (body) body.emitMessage(type, collision);
         if (otherBody) otherBody.emitMessage(type, collision.clone().flip());

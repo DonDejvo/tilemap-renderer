@@ -121,6 +121,35 @@
             }
         }
 
+        const drawCross = (ctx, p, size = 6) => {
+            ctx.beginPath();
+            ctx.moveTo(p.x - size, p.y);
+            ctx.lineTo(p.x + size, p.y);
+            ctx.moveTo(p.x, p.y - size);
+            ctx.lineTo(p.x, p.y + size);
+        };
+
+        const drawNormal = (ctx, p, n, length = 20) => {
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(
+                p.x + n.x * length,
+                p.y + n.y * length
+            );
+        };
+
+        const drawBounds = (ctx, bounds) => {
+            const { min, max } = bounds;
+
+            ctx.beginPath();
+            ctx.moveTo(min.x, min.y);
+            ctx.lineTo(max.x, min.y);
+            ctx.lineTo(max.x, max.y);
+            ctx.lineTo(min.x, max.y);
+            ctx.closePath();
+        };
+
+
         const main = async () => {
             let w = 1920, h = 1080;
 
@@ -196,11 +225,12 @@
             const speed = 300;
 
             let activeBody = null;
-            const activeCollisions = new Set();
+            const activeCollisions = new Map();
 
             const setActiveShape = (shape) => {
                 if (activeBody) {
                     activeBody.removeMessageHandler("collisionenter", onCollisionEnter);
+                    activeBody.removeMessageHandler("collisionstay", onCollisionEnter);
                     activeBody.removeMessageHandler("collisionexit", onCollisionExit);
                 }
 
@@ -209,18 +239,17 @@
                 activeBody = shape.body;
 
                 activeBody.addMessageHandler("collisionenter", onCollisionEnter);
+                activeBody.addMessageHandler("collisionstay", onCollisionEnter);
                 activeBody.addMessageHandler("collisionexit", onCollisionExit);
             };
 
 
             const onCollisionEnter = (collision) => {
-                const otherShape = collision.otherCollider.shape;
-                activeCollisions.add(otherShape);
+                activeCollisions.set(collision.key, collision);
             };
 
             const onCollisionExit = (collision) => {
-                const otherShape = collision.otherCollider.shape;
-                activeCollisions.delete(otherShape);
+                activeCollisions.delete(collision.key);
             };
 
             setActiveShape(shapes[activeIndex]);
@@ -242,7 +271,7 @@
 
                     accTime += dt;
 
-                    while(accTime >= fixedDeltaTime) {
+                    while (accTime >= fixedDeltaTime) {
                         accTime -= fixedDeltaTime;
                         scene.fixedUpdate(fixedDeltaTime);
                         physicsWorld.step(fixedDeltaTime);
@@ -282,6 +311,9 @@
                     ctrlPrev = ctrl;
 
                     sceneinfo.innerHTML = `<pre>${JSON.stringify(scene.getInfo(), null, 2)}</pre>`;
+                    // for(let collider of scene.getColliders()) {
+                    //     console.log("ID: " + collider.id, collider._hashGridClient.cells.min, collider._hashGridClient.cells.max);
+                    // }
 
                     scene.update(dt);
 
@@ -291,15 +323,28 @@
                     scene.getColliderHashGrid().draw(ctx);
 
                     for (let i = 0; i < shapes.length; i++) {
+                        const colliding = activeCollisions.entries().some(([key, collision]) => collision.otherCollider === shapes[i].collider);
                         if (i === activeIndex) {
-                            ctx.strokeColor = Color.RED;
-                        } else if (activeCollisions.has(shapes[i])) {
+                            ctx.strokeColor = Color.BLUE;
+                        } else if (colliding) {
                             ctx.strokeColor = Color.GREEN;
                         } else {
                             ctx.strokeColor = Color.WHITE;
                         }
-                        
+
                         shapes[i].draw(ctx);
+
+                        //     ctx.strokeColor = Color.RED;
+                        //     drawBounds(ctx, shapes[i].collider._hashGridClient.bounds);
+                    }
+
+                    for (const [key, collision] of activeCollisions) {
+                        for (const p of collision.contactPoints) {
+                            ctx.strokeColor = Color.RED;
+                            drawCross(ctx, p);
+                            ctx.strokeColor = Color.MAGENTA;
+                            drawNormal(ctx, p, collision.normal);
+                        }
                     }
 
                     renderer.render(scene, camera);

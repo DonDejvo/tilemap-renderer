@@ -22,19 +22,22 @@ export class LinkedList<T> {
     public insert(value: T) {
         const newNode = new LinkedListNode(value);
         newNode.next = this.head;
+        if (this.head) {
+            this.head.prev = newNode;
+        }
         this.head = newNode;
         ++this.size;
         return newNode;
     }
 
     public remove(node: LinkedListNode<T>) {
-        if(node.next) {
+        if (node.next) {
             node.next.prev = node.prev;
         }
-        if(node.prev) {
+        if (node.prev) {
             node.prev.next = node.next;
         }
-        if(this.head === node) {
+        if (this.head === node) {
             this.head = node.next;
         }
         node.prev = null;

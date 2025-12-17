@@ -14,7 +14,7 @@ export enum ColliderType {
 interface ColliderParams {
     castShadow?: boolean;
     layer: number;
-    mask: number;
+    mask?: number;
     isTrigger?: boolean;
     usage?: number;
 }
@@ -38,7 +38,7 @@ export abstract class Collider extends SceneNode {
         this.angle = 0;
         this.castShadow = params.castShadow !== undefined ? params.castShadow : true;
         this.layer = params.layer || DEFAULT_LAYER;
-        this.mask = params.mask;
+        this.mask = params.mask !== undefined ? params.mask : 0xFFFFFFFF;
         this.body = null;
         this.isTrigger = params.isTrigger !== undefined ? params.isTrigger : false;
         this._hashGridClient = null;

@@ -6,17 +6,11 @@ export class Collision {
     collider: Collider;
     otherCollider: Collider;
 
-    contacts: Vector[];
+    contactPoints: Vector[];
     normal: Vector;
     depth: number;
 
     isTrigger: boolean;
-
-    normalImpulse: number = 0;
-    tangentImpulse: number = 0;
-
-    restitution: number = 0;
-    friction: number = 0;
 
     private static getKey(collider: Collider, otherCollider: Collider): bigint {
         const a = BigInt(collider.id);
@@ -30,14 +24,14 @@ export class Collision {
     constructor(
         collider: Collider,
         otherCollider: Collider,
-        contacts: Vector[],
+        contactPoints: Vector[],
         normal: Vector,
         depth: number
     ) {
         this.key = Collision.getKey(collider, otherCollider);
         this.collider = collider;
         this.otherCollider = otherCollider;
-        this.contacts = contacts;
+        this.contactPoints = contactPoints;
         this.normal = normal;
         this.depth = depth;
 
@@ -45,7 +39,7 @@ export class Collision {
     }
 
     public clone() {
-        return new Collision(this.collider, this.otherCollider, this.contacts, this.normal, this.depth);
+        return new Collision(this.collider, this.otherCollider, this.contactPoints.map(p => p.clone()), this.normal.clone(), this.depth);
     }
 
     public flip() {
@@ -90,16 +84,20 @@ const circleVsCircle = (colliderA: CircleCollider, colliderB: CircleCollider): C
     const posA = colliderA.getWorldPosition();
     const posB = colliderB.getWorldPosition();
 
-    const diff = posB.clone().sub(posA);
-    const dist = diff.len();
+    const diffVec = posB.clone().sub(posA);
+    const dist = diffVec.len();
     const radiusSum = colliderA.radius + colliderB.radius;
 
     if (dist >= radiusSum) return null;
 
     const depth = radiusSum - dist;
-    const normal = diff.clone().normalize();
+    const normal = diffVec.clone().normalize();
 
-    return new Collision(colliderA, colliderB, [], normal, depth);
+    const contactPoint = posA
+        .clone()
+        .add(normal.clone().scale(colliderA.radius - depth / 2));
+
+    return new Collision(colliderA, colliderB, [contactPoint], normal, depth);
 }
 
 const polygonVsPolygon = (colliderA: PolygonCollider, colliderB: PolygonCollider): Collision | null => {
@@ -111,8 +109,24 @@ const polygonVsPolygon = (colliderA: PolygonCollider, colliderB: PolygonCollider
     let minDepth = Infinity;
     let collisionNormal!: Vector;
 
-    const normals = [...colliderA.getNormals(), ...colliderB.getNormals()];
-    for (let normal of normals) {
+
+    const normalsA = colliderA.getNormals();
+    for (let normal of normalsA) {
+        const [minA, maxA] = projectPoints(pointsA, normal);
+        const [minB, maxB] = projectPoints(pointsB, normal);
+
+        const depth = Math.min(maxA, maxB) - Math.max(minA, minB);
+
+        if (depth <= 0) return null;
+
+        if (depth < minDepth) {
+            minDepth = depth;
+            collisionNormal = normal;
+        }
+    }
+
+    const normalsB = colliderA.getNormals();
+    for (let normal of normalsB) {
         const [minA, maxA] = projectPoints(pointsA, normal);
         const [minB, maxB] = projectPoints(pointsB, normal);
 
@@ -141,8 +155,26 @@ const polygonVsCircle = (colliderA: PolygonCollider, colliderB: CircleCollider):
     let minDepth = Infinity;
     let collisionNormal!: Vector;
 
-    const normals = [...colliderA.getNormals(), posB.clone().sub(findClosestPoint(pointsA, posB)).normalize()];
-    for (let normal of normals) {
+    const normalsA = colliderA.getNormals();
+    for (let i = 0; i < normalsA.length; ++i) {
+        const normal = normalsA[i];
+
+        const [minA, maxA] = projectPoints([pointsA[i], pointsA[(i + 2) % pointsA.length]], normal);
+        const [minB, maxB] = projectCircle(posB, colliderB.radius, normal);
+
+        const depth = Math.min(maxA, maxB) - Math.max(minA, minB);
+
+        if (depth <= 0) return null;
+
+        if (depth < minDepth) {
+            minDepth = depth;
+            collisionNormal = normal;
+        }
+    }
+
+    {
+        const normal = posB.clone().sub(findClosestPoint(pointsA, posB)).normalize();
+
         const [minA, maxA] = projectPoints(pointsA, normal);
         const [minB, maxB] = projectCircle(posB, colliderB.radius, normal);
 
@@ -160,7 +192,11 @@ const polygonVsCircle = (colliderA: PolygonCollider, colliderB: CircleCollider):
         collisionNormal!.scale(-1);
     }
 
-    return new Collision(colliderA, colliderB, [], collisionNormal, minDepth);
+    const contactPoint = posB
+        .clone()
+        .sub(collisionNormal.clone().scale(colliderB.radius - minDepth / 2));
+
+    return new Collision(colliderA, colliderB, [contactPoint], collisionNormal, minDepth);
 }
 
 export const detectCollision = (colliderA: Collider, colliderB: Collider): Collision | null => {
