@@ -1,6 +1,6 @@
 import { Camera } from "../Camera";
 import { Color } from "../Color";
-import { overlaps } from "../common";
+import { getHeight, getWidth, overlaps } from "../common";
 import { geometry } from "../geometry";
 import { LineRenderer } from "../LineRenderer";
 import { math } from "../math";
@@ -484,9 +484,25 @@ export class WebglRenderer implements Renderer {
 
             this.framebuffers[TEXID_LIGHTMAP + 1].unbind();
 
-            this.renderFullscreenPass({ shader: "blurHorizontal", inputs: [TEXID_LIGHTMAP + 1], output: 4 });
-            this.renderFullscreenPass({ shader: "blurVertical", inputs: [4], output: 5 });
-            this.renderFullscreenPass({ shader: "default_additive", inputs: [5], output: TEXID_LIGHTMAP });
+            const lightBounds = light.getBounds();
+
+            const scissor: [number, number, number, number] = [
+                lightBounds.min.x - cameraBounds.min.x,
+                (lightBounds.min.y - cameraBounds.min.y),
+                getWidth(lightBounds),
+                getHeight(lightBounds)
+            ];
+
+            const scissorHalf: [number, number, number, number] = [
+                (lightBounds.min.x - cameraBounds.min.x) * 0.5 - 4,
+                (lightBounds.min.y - cameraBounds.min.y) * 0.5 - 4,
+                getWidth(lightBounds) * 0.5 + 8,
+                getHeight(lightBounds) * 0.5 + 8
+            ];
+
+            this.renderFullscreenPass({ shader: "blurHorizontal", inputs: [TEXID_LIGHTMAP + 1], output: 4, scissor: scissorHalf });
+            this.renderFullscreenPass({ shader: "blurVertical", inputs: [4], output: 5, scissor: scissorHalf });
+            this.renderFullscreenPass({ shader: "default_additive", inputs: [5], output: TEXID_LIGHTMAP, scissor });
         }
     }
 
@@ -511,6 +527,11 @@ export class WebglRenderer implements Renderer {
             outFbo.bind();
         } else {
             this.gl.viewport(0, 0, sw, sh);
+        }
+
+        if (passStage.scissor) {
+            this.gl.enable(this.gl.SCISSOR_TEST);
+            this.gl.scissor(passStage.scissor[0], sh - passStage.scissor[1] - passStage.scissor[3], passStage.scissor[2], passStage.scissor[3]);
         }
 
         this.blend(shaderInfo.blendMode);
@@ -572,6 +593,10 @@ export class WebglRenderer implements Renderer {
         if (passStage.output !== -1) {
             this.framebuffers[math.clamp(passStage.output, 0, OFFSCREEN_TEXTURES - 1)].unbind();
         }
+
+        if (passStage.scissor) {
+            this.gl.disable(this.gl.SCISSOR_TEST);
+        }
     }
 
     public render(scene: Scene, camera: Camera) {
@@ -579,7 +604,7 @@ export class WebglRenderer implements Renderer {
             throw new Error("Renderer is not initialized");
         }
 
-        if(this.resizeRequested) {
+        if (this.resizeRequested) {
             this.initFramebuffers();
             this.resizeRequested = false;
         }

@@ -1,6 +1,6 @@
 import { Camera } from "../Camera";
 import { Color } from "../Color";
-import { overlaps } from "../common";
+import { getHeight, getWidth, overlaps } from "../common";
 import { geometry } from "../geometry";
 import { LineRenderer } from "../LineRenderer";
 import { math } from "../math";
@@ -286,7 +286,7 @@ interface FullscreenShaderInfo {
 
 const builderOptions: RendererBuilderOptions = {
     componentMap: { r: "x", g: "y", b: "z", a: "w" },
-    replaceType(type) { 
+    replaceType(type) {
         return `${type === "float" ? "f32" : type + "<f32>"}`;
     },
     declareFn(name, returnType, ...args) {
@@ -409,7 +409,7 @@ export class WebgpuRenderer implements Renderer {
                 label: "offscreen texture " + i
             });
         }
-        for(let [passStage, info] of this.renderPassUniformMap) {
+        for (let [passStage, info] of this.renderPassUniformMap) {
             info.textureBindGroup = this.renderPassCreateTextureBindGroup(passStage);
         }
     }
@@ -778,6 +778,26 @@ export class WebgpuRenderer implements Renderer {
 
             lightPass.end();
 
+            const lightBounds = sceneLights[i].getBounds();
+
+            const scissor: [number, number, number, number] = [
+                lightBounds.min.x - cameraBounds.min.x,
+                lightBounds.min.y - cameraBounds.min.y,
+                getWidth(lightBounds),
+                getHeight(lightBounds)
+            ];
+
+            const scissorHalf: [number, number, number, number] = [
+                (lightBounds.min.x - cameraBounds.min.x) * 0.5 - 4,
+                (lightBounds.min.y - cameraBounds.min.y) * 0.5 - 4,
+                getWidth(lightBounds) * 0.5 + 8,
+                getHeight(lightBounds) * 0.5 + 8
+            ];
+
+            this.fullscreenPassStages.lightBlurHorizontal.scissor = scissorHalf;
+            this.fullscreenPassStages.lightBlurVertical.scissor = scissorHalf;
+            this.fullscreenPassStages.lightAdditive.scissor = scissor;
+
             this.renderFullscreenPass(encoder, this.fullscreenPassStages.lightBlurHorizontal);
             this.renderFullscreenPass(encoder, this.fullscreenPassStages.lightBlurVertical);
             this.renderFullscreenPass(encoder, this.fullscreenPassStages.lightAdditive);
@@ -859,6 +879,14 @@ export class WebgpuRenderer implements Renderer {
                 storeOp: "store"
             }]
         });
+
+        if (passStage.scissor) {
+            const x = math.clamp(passStage.scissor[0], 0, outputTex.width);
+            const y = math.clamp(passStage.scissor[1], 0, outputTex.height);
+            const width = math.clamp(passStage.scissor[2], 0, outputTex.width - x);
+            const height = math.clamp(passStage.scissor[3], 0, outputTex.height - y);
+            fullscreenPass.setScissorRect(x, y, width, height);
+        }
 
         fullscreenPass.setPipeline(shaderInfo.pipeline!);
 

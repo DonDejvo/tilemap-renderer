@@ -40,6 +40,7 @@ export interface RenderPassStage {
     output: number;
     uniforms?: ({ name: string; value: number } | { name: string; value: number[] })[];
     clearColor?: Color;
+    scissor?: [number, number, number, number];
 }
 
 export type BlendMode = "none" | "alpha" | "additive" | "multiply" | "screen";
