@@ -317,7 +317,7 @@
             }
 
             emit(x, y, direction, zIndex) {
-                const light = new Light({ radius: 16, color: new Color(1, 0.7, 0.2) });
+                const light = new Light({ radius: 45, intensity: 0.65, color: new Color(1, 0.7, 0.2) });
                 const p = new Particle(x, y, direction, zIndex, this.tileset, light);
 
                 this.particles.push(p);

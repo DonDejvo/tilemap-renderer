@@ -56,8 +56,8 @@ export class Scene {
     }
 
     public addNode<T extends SceneNode>(node: T): T {
-        node.scene = this;
         this.nodes.push(node);
+        node.scene = this;
         node.start();
         return node;
     }
@@ -65,7 +65,12 @@ export class Scene {
     public removeNode(node: SceneNode) {
         const i = this.nodes.indexOf(node);
         if (i !== -1) {
+            for (const childNode of node.getNodes()) {
+                this.removeNode(childNode);
+            }
+
             node.destroy();
+            node.scene = null as any;
             this.nodes.splice(i, 1);
         }
     }
@@ -173,7 +178,7 @@ export class Scene {
         let colliders: Collider[];
 
         if (bounds) {
-            colliders = this.colliderHashGrid.findNearby(bounds).map(client => client.parent);
+            colliders = this.colliderHashGrid.findNearby(bounds).map(client => client.data);
         } else {
             colliders = this.colliders;
         }

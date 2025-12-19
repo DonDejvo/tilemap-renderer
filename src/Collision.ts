@@ -81,8 +81,8 @@ const findClosestPoint = (points: Vector[], point: Vector) => {
 }
 
 const circleVsCircle = (colliderA: CircleCollider, colliderB: CircleCollider): Collision | null => {
-    const posA = colliderA.getWorldPosition();
-    const posB = colliderB.getWorldPosition();
+    const posA = colliderA.worldPosition;
+    const posB = colliderB.worldPosition;
 
     const diffVec = posB.clone().sub(posA);
     const dist = diffVec.len();
@@ -103,8 +103,8 @@ const circleVsCircle = (colliderA: CircleCollider, colliderB: CircleCollider): C
 const polygonVsPolygon = (colliderA: PolygonCollider, colliderB: PolygonCollider): Collision | null => {
     const pointsA = colliderA.getWorldPoints();
     const pointsB = colliderB.getWorldPoints();
-    const posA = colliderA.getWorldPosition();
-    const posB = colliderB.getWorldPosition();
+    const posA = colliderA.worldPosition;
+    const posB = colliderB.worldPosition;
 
     let minDepth = Infinity;
     let collisionNormal!: Vector;
@@ -149,8 +149,8 @@ const polygonVsPolygon = (colliderA: PolygonCollider, colliderB: PolygonCollider
 
 const polygonVsCircle = (colliderA: PolygonCollider, colliderB: CircleCollider): Collision | null => {
     const pointsA = colliderA.getWorldPoints();
-    const posA = colliderA.getWorldPosition();
-    const posB = colliderB.getWorldPosition();
+    const posA = colliderA.worldPosition;
+    const posB = colliderB.worldPosition;
 
     let minDepth = Infinity;
     let collisionNormal!: Vector;

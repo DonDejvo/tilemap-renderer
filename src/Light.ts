@@ -33,8 +33,8 @@ export class Light extends SceneNode {
     public getBounds(): Bounds {
         const vec = new Vector(this.radius, this.radius);
         return {
-            min: this.position.clone().sub(vec),
-            max: this.position.clone().add(vec)
+            min: this.worldPosition.clone().sub(vec),
+            max: this.worldPosition.clone().add(vec)
         }
     }
 

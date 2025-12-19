@@ -20,9 +20,6 @@ interface ColliderParams {
 }
 
 export abstract class Collider extends SceneNode {
-    position: Vector;
-    offset: Vector;
-    angle: number;
     layer: number;
     mask: number;
     castShadow: boolean;
@@ -33,9 +30,6 @@ export abstract class Collider extends SceneNode {
 
     constructor(params: ColliderParams) {
         super();
-        this.position = new Vector();
-        this.offset = new Vector();
-        this.angle = 0;
         this.castShadow = params.castShadow !== undefined ? params.castShadow : true;
         this.layer = params.layer || DEFAULT_LAYER;
         this.mask = params.mask !== undefined ? params.mask : 0xFFFFFFFF;
@@ -45,16 +39,6 @@ export abstract class Collider extends SceneNode {
         this._processed = false;
     }
 
-    getWorldPosition() {
-        if (!this.body) {
-            return this.position.clone().add(this.offset);
-        }
-        return this.body.position.clone().add(this.offset);
-    }
-
-    getWorldAngle() {
-        return this.body ? this.body.angle : this.angle;
-    }
 
     public start(): void {
         this.scene.getColliders().push(this);
@@ -107,7 +91,7 @@ export class CircleCollider extends Collider {
     }
 
     getBounds(): Bounds {
-        const center = this.getWorldPosition();
+        const center = this.worldPosition;
         const r = this.radius;
 
         return {
@@ -152,8 +136,8 @@ export class PolygonCollider extends Collider {
     }
 
     getWorldPoints() {
-        const worldPos = this.getWorldPosition();
-        const worldAngle = this.getWorldAngle();
+        const worldPos = this.worldPosition;
+        const worldAngle = this.worldAngle;
 
         return this.points.map(p => p.clone()
             .rot(-worldAngle)

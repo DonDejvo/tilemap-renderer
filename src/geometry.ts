@@ -29,13 +29,12 @@ export const geometry = (() => {
 
         let offset = 0;
         for (const sprite of sprites) {
-            const posX = sprite.position.x;
-            const posY = sprite.position.y;
+            const { x, y } = sprite.worldPosition;
 
             const scaleX = sprite.scale.x;
             const scaleY = sprite.scale.y;
 
-            const angle = sprite.angle;
+            const angle = sprite.worldAngle;
 
             const regionX = sprite.tilesetRegion.x * (sprite.tileset.tileWidth + sprite.tileset.spacing) + sprite.tileset.margin;
             const regionY = sprite.tilesetRegion.y * (sprite.tileset.tileHeight + sprite.tileset.spacing) + sprite.tileset.margin;
@@ -43,8 +42,8 @@ export const geometry = (() => {
             const regionH = sprite.tileset.tileHeight + ((sprite.tilesetRegion.height || 1) - 1) * (sprite.tileset.tileHeight + sprite.tileset.spacing);
 
             for (let i = 0; i < count; ++i) {
-                view.setFloat32(offset, posX, true);
-                view.setFloat32(offset + 4, posY, true);
+                view.setFloat32(offset, x, true);
+                view.setFloat32(offset + 4, y, true);
                 view.setFloat32(offset + 8, scaleX, true);
                 view.setFloat32(offset + 12, scaleY, true);
                 view.setFloat32(offset + 16, angle, true);
@@ -83,7 +82,7 @@ export const geometry = (() => {
         let offset = 0;
         for (let light of lights) {
             for (let i = 0; i < count; ++i) {
-                data.set(light.position.toArray(), offset);
+                data.set(light.worldPosition.toArray(), offset);
                 data[offset + 2] = light.radius;
                 data.set(light.color.toArray(), offset + 4);
                 data[offset + 7] = light.intensity;
@@ -97,15 +96,17 @@ export const geometry = (() => {
     }
 
     const createCircleShadow = (light: Light, collider: CircleCollider): number[] => {
-        const center = collider.getWorldPosition();
-        const dir = center.sub(light.position).normalize();
+        const center = collider.worldPosition;
+        const lightWorldPos = light.worldPosition;
+
+        const dir = center.sub(lightWorldPos).normalize();
         const tangent = new Vector(-dir.y, dir.x).scale(collider.radius);
 
         const p1 = center.clone().sub(tangent);
         const p2 = center.clone().add(tangent);
 
-        const dir1 = p1.clone().sub(light.position).normalize();
-        const dir2 = p2.clone().sub(light.position).normalize();
+        const dir1 = p1.clone().sub(lightWorldPos).normalize();
+        const dir2 = p2.clone().sub(lightWorldPos).normalize();
 
         const shadowLength = light.radius;
 
@@ -130,20 +131,21 @@ export const geometry = (() => {
         const shadowLength = light.radius;
 
         const worldPoints = collider.getWorldPoints();
+        const lightWorldPos = light.worldPosition;
 
         for (let i = 0; i < worldPoints.length; ++i) {
             const p0 = worldPoints[i];
             const p1 = worldPoints[(i + 1) % worldPoints.length];
 
             const edgeCenter = p0.clone().add(p1).scale(0.5);
-            const toLight = light.position.clone().sub(edgeCenter).normalize();
+            const toLight = lightWorldPos.clone().sub(edgeCenter).normalize();
             const edgeDir = p1.clone().sub(p0).normalize();
 
             const normal = new Vector(edgeDir.y, -edgeDir.x);
             if (Vector.dot(normal, toLight) <= 0) continue;
 
-            const dir0 = p0.clone().sub(light.position).normalize();
-            const dir1 = p1.clone().sub(light.position).normalize();
+            const dir0 = p0.clone().sub(lightWorldPos).normalize();
+            const dir1 = p1.clone().sub(lightWorldPos).normalize();
 
             const p2 = p0.clone().add(dir0.scale(shadowLength * 100));
             const p3 = p1.clone().add(dir1.scale(shadowLength * 100));

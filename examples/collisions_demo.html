@@ -79,6 +79,7 @@
                 collider.shape = this;
                 this.collider = collider;
                 this.body = new RigidBody({ mass: 1 });
+                collider.setParent(this.body);
                 this.body.position.set(x, y);
                 this.body.addCollider(collider);
             }
@@ -95,7 +96,7 @@
             }
 
             draw(ctx) {
-                const { x, y } = this.collider.getWorldPosition();
+                const { x, y } = this.collider.worldPosition;
 
                 ctx.beginPath();
                 ctx.moveTo(x, y);
@@ -114,7 +115,7 @@
             }
 
             draw(ctx) {
-                const { x, y } = this.collider.getWorldPosition();
+                const { x, y } = this.collider.worldPosition;
                 ctx.beginPath();
                 ctx.arc(x, y, this.r, 0, Math.PI * 2);
                 ctx.closePath();

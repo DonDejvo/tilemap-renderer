@@ -7,7 +7,6 @@ interface RigidBodyParams {
 }
 
 export class RigidBody extends SceneNode {
-    angle: number;
     velocity: Vector;
     angularVelocity: number;
     mass: number;
@@ -15,7 +14,6 @@ export class RigidBody extends SceneNode {
 
     constructor(params: RigidBodyParams) {
         super();
-        this.angle = 0;
         this.velocity = new Vector();
         this.angularVelocity = 0;
         this.mass = params.mass;

@@ -12,12 +12,12 @@ export class SpatialHashGridClient<T> {
         max: [number, number];
         nodes: LinkedListNode<SpatialHashGridClient<T>>[][];
     };
-    parent: T;
+    data: T;
     queryId: number;
 
-    constructor(parent: T, bounds: Bounds) {
+    constructor(data: T, bounds: Bounds) {
         this.bounds = bounds;
-        this.parent = parent;
+        this.data = data;
         this.queryId = 0;
     }
 
@@ -70,8 +70,8 @@ export class SpatialHashGrid<T> {
         return clients;
     }
 
-    public createClient(parent: T, bounds: Bounds): SpatialHashGridClient<T> {
-        const client = new SpatialHashGridClient<T>(parent, bounds);
+    public createClient(data: T, bounds: Bounds): SpatialHashGridClient<T> {
+        const client = new SpatialHashGridClient<T>(data, bounds);
         client.hashGrid = this;
         this.insert(client);
         return client;

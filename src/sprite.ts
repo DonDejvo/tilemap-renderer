@@ -18,7 +18,6 @@ export class Sprite extends SceneNode {
     isStatic: boolean;
     offset: Vector;
     scale: Vector;
-    angle: number;
     tintColor: Color;
     maskColor: Color;
 
@@ -33,7 +32,6 @@ export class Sprite extends SceneNode {
             this.tileset.tileWidth * (this.tilesetRegion.width || 1),
             this.tileset.tileHeight * (this.tilesetRegion.height || 1)
         );
-        this.angle = 0;
         this.tintColor = new Color(1, 1, 1, 1);
         this.maskColor = new Color(0, 0, 0, 1);
     }
@@ -52,7 +50,7 @@ export class Sprite extends SceneNode {
     public getBounds(): Bounds {
         const radius = Math.max(Math.abs(this.scale.x), Math.abs(this.scale.y));
         const vec = new Vector(radius, radius);
-        const min = this.position.clone().add(this.offset).sub(vec);
+        const min = this.worldPosition.clone().add(this.offset).sub(vec);
         const max = min.clone().add(vec).add(vec);
         return {
             min,
