@@ -42,7 +42,7 @@ export type ReturnOp = [ShaderOp.RETURN, expr: string];
 export type ShaderOperation = DeclareVarOp | MathOp | ConditionalOp | ReturnOp | [ShaderOp.ELSE | ShaderOp.ENDIF];
 
 export class ShaderBuilder {
-    public static DEBUG = false;
+    public static LOG_SHADERS = false;
 
     private uniforms: { name: string; type: VariableType; offset: number; }[];
     private uniformOffset: number;
@@ -214,7 +214,7 @@ export class ShaderBuilder {
             functions.push(lines.join("\n"));
         }
 
-        if (ShaderBuilder.DEBUG) {
+        if (ShaderBuilder.LOG_SHADERS) {
             console.log(functions.join("\n\n"));
         }
 

@@ -137,10 +137,10 @@
     <script type="module">
         import { createRenderer, Tileset, Tilemap, Vector, math, colliders, Sprite, Light, ShaderBuilder, Camera, Scene, assets, Animator, Color } from "../src/TilemapRenderer.ts";
 
-        ShaderBuilder.DEBUG = true;
+        ShaderBuilder.LOG_SHADERS = true;
 
         const assetsUrl = "";
-        const rendererContext = "webgl";
+        const rendererContext = "webgl2";
         let k = 6;
 
         class KeyboardInput {

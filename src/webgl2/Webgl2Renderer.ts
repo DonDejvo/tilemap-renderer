@@ -261,7 +261,8 @@ export class Webgl2Renderer implements Renderer {
         this.shaderCache = new Map();
         this.resizeRequested = false;
     }
-    getLineRenderer(): LineRenderer {
+
+    public getLineRenderer(): LineRenderer {
         return this.lineRenderer;
     }
 
