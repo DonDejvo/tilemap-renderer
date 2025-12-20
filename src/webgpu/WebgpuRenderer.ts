@@ -4,7 +4,7 @@ import { getHeight, getWidth, overlaps } from "../common";
 import { geometry } from "../geometry";
 import { LineRenderer } from "../LineRenderer";
 import { math } from "../math";
-import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, LAYER_MAX_TEXTURES, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo, UNIFORMS_MAX_SIZE } from "../Renderer";
+import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo, UNIFORMS_MAX_SIZE } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
 import { blurHorizontalBuilder, blurVerticalBuilder, defaultShaderBuilder, lightShaderBuilder, ShaderBuilder, ShaderBuilderOutput } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
@@ -311,7 +311,7 @@ export class WebgpuRenderer implements Renderer {
     private sampler!: GPUSampler;
     public clearColor: Color;
     private shaderMap = new Map<string, FullscreenShaderInfo>();
-    private offscreenTextures: GPUTexture[];
+    private offscreenTextures: { texture: GPUTexture, view: GPUTextureView }[];
     private fullscreenSampler!: GPUSampler;
     private initialized: boolean;
     public pass: RenderPassStage[];
@@ -335,6 +335,9 @@ export class WebgpuRenderer implements Renderer {
     };
     private resizeRequested: boolean;
     private lineRenderer!: WebgpuLineRendrer;
+    private textureDimBuffer!: GPUBuffer;
+    private nextTextureIdx: number = 0;
+    private spriteBindGroups: Map<string, GPUBindGroup> = new Map();
 
     constructor(canvas: HTMLCanvasElement) {
         this.layersMap = new Map();
@@ -374,7 +377,8 @@ export class WebgpuRenderer implements Renderer {
             if (images[tileset.name]) {
                 this.texturesMap.set(tileset.name, {
                     tileset,
-                    image: images[tileset.name]
+                    image: images[tileset.name],
+                    idx: this.nextTextureIdx++
                 });
             }
         }
@@ -397,19 +401,34 @@ export class WebgpuRenderer implements Renderer {
         return this.canvas;
     }
 
+    private initTextures() {
+        for (const texInfo of this.texturesMap.values()) {
+            if (texInfo.tileset) {
+                texInfo.texture = this.createTexture(texInfo.tileset, texInfo.image);
+                texInfo.view = ((texInfo.texture) as GPUTexture).createView();
+                this.cfg.device.queue.writeBuffer(
+                    this.textureDimBuffer,
+                    texInfo.idx * 256,
+                    new Float32Array([texInfo.tileset.imageWidth, texInfo.tileset.imageHeight])
+                );
+            }
+        }
+    }
+
     private initOffscreenTextures() {
         for (let i = 0; i < OFFSCREEN_TEXTURES; ++i) {
-            this.offscreenTextures[i]?.destroy();
+            this.offscreenTextures[i]?.texture.destroy();
             const n = getOffscreenTextureSizeFactor(i);
             const width = Math.ceil(this.canvas.width * n);
             const height = Math.ceil(this.canvas.height * n);
-            this.offscreenTextures[i] = this.cfg.device.createTexture({
+            const texture = this.cfg.device.createTexture({
                 size: { width, height, depthOrArrayLayers: 1 },
                 format: this.cfg.format,
                 usage: GPUTextureUsage.RENDER_ATTACHMENT |
                     GPUTextureUsage.TEXTURE_BINDING,
                 label: "Offscreen Texture " + i + " - " + width + "x" + height
             });
+            this.offscreenTextures[i] = { texture, view: texture.createView() };
         }
         for (let [passStage, info] of this.renderPassUniformMap) {
             info.textureBindGroup = this.renderPassCreateTextureBindGroup(passStage);
@@ -459,11 +478,13 @@ export class WebgpuRenderer implements Renderer {
 
         this.ctx.configure(this.cfg);
 
-        for (const texInfo of this.texturesMap.values()) {
-            if (texInfo.tileset) {
-                texInfo.texture = this.createTexture(texInfo.tileset, texInfo.image);
-            }
-        }
+        this.textureDimBuffer = this.cfg.device.createBuffer({
+            label: "Texture Dimensions Buffer",
+            size: 256 * 256,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        });
+
+        this.initTextures();
 
         this.initOffscreenTextures();
 
@@ -707,11 +728,11 @@ export class WebgpuRenderer implements Renderer {
         });
     }
 
-    private renderScene(encoder: GPUCommandEncoder, pipeline: GPURenderPipeline, writeTexture: GPUTexture, clearColor: Color | null, layers: WebgpuRendererLayer[]) {
+    private renderScene(encoder: GPUCommandEncoder, pipeline: GPURenderPipeline, view: GPUTextureView, clearColor: Color | null, layers: WebgpuRendererLayer[]) {
         const scenePass = encoder.beginRenderPass({
             colorAttachments: [{
                 clearValue: clearColor || undefined,
-                view: writeTexture.createView(),
+                view,
                 loadOp: clearColor ? "clear" : "load",
                 storeOp: "store"
             }]
@@ -754,7 +775,7 @@ export class WebgpuRenderer implements Renderer {
 
         const lightAmbientPass = encoder.beginRenderPass({
             colorAttachments: [{
-                view: this.offscreenTextures[TEXID_LIGHTMAP].createView(),
+                view: this.offscreenTextures[TEXID_LIGHTMAP].view,
                 clearValue: clearColor,
                 loadOp: "clear",
                 storeOp: "store"
@@ -765,7 +786,7 @@ export class WebgpuRenderer implements Renderer {
         const lightsUniformData = geometry.createLightsGeometry(sceneLights, true);
         this.cfg.device.queue.writeBuffer(this.lightUniformBuffer, 0, lightsUniformData);
 
-        const texView = this.offscreenTextures[TEXID_LIGHTMAP + 1].createView();
+        const texView = this.offscreenTextures[TEXID_LIGHTMAP + 1].view;
 
         for (let i = 0; i < sceneLights.length; ++i) {
 
@@ -838,7 +859,7 @@ export class WebgpuRenderer implements Renderer {
 
             entries.push({
                 binding: i + 1,
-                resource: texture.createView()
+                resource: texture.view
             });
         }
         const textureBindGroup = this.cfg.device.createBindGroup({
@@ -856,12 +877,16 @@ export class WebgpuRenderer implements Renderer {
             throw new Error("Unknown shader " + passStage.shader);
         }
 
-        const outputTex = passStage.output === -1 ?
-            this.ctx.getCurrentTexture() :
-            this.offscreenTextures[math.clamp(passStage.output, 0, OFFSCREEN_TEXTURES - 1)];
+        let outputTex: { texture: GPUTexture, view: GPUTextureView };
+        if(passStage.output === -1) {
+            const canvasTexture = this.ctx.getCurrentTexture();
+            outputTex = { texture: canvasTexture, view: canvasTexture.createView() };
+        } else {
+            outputTex = this.offscreenTextures[math.clamp(passStage.output, 0, OFFSCREEN_TEXTURES - 1)];
+        } 
 
         const uniforms = shaderInfo.builder.getUniforms();
-        const stageUniforms = [{ name: "time", value: this.time }, { name: "resolution", value: [outputTex.width, outputTex.height] }].concat(passStage.uniforms ?? []);
+        const stageUniforms = [{ name: "time", value: this.time }, { name: "resolution", value: [outputTex.texture.width, outputTex.texture.height] }].concat(passStage.uniforms ?? []);
         const uniformData = new Float32Array(UNIFORMS_MAX_SIZE);
 
         for (let uniform of uniforms) {
@@ -893,7 +918,7 @@ export class WebgpuRenderer implements Renderer {
 
         const fullscreenPass = encoder.beginRenderPass({
             colorAttachments: [{
-                view: outputTex.createView(),
+                view: outputTex.view,
                 loadOp: passStage.clearColor ? "clear" : "load",
                 clearValue: passStage.clearColor,
                 storeOp: "store"
@@ -901,10 +926,10 @@ export class WebgpuRenderer implements Renderer {
         });
 
         if (passStage.scissor) {
-            const x = math.clamp(passStage.scissor[0], 0, outputTex.width);
-            const y = math.clamp(passStage.scissor[1], 0, outputTex.height);
-            const width = math.clamp(passStage.scissor[2], 0, outputTex.width - x);
-            const height = math.clamp(passStage.scissor[3], 0, outputTex.height - y);
+            const x = math.clamp(passStage.scissor[0], 0, outputTex.texture.width);
+            const y = math.clamp(passStage.scissor[1], 0, outputTex.texture.height);
+            const width = math.clamp(passStage.scissor[2], 0, outputTex.texture.width - x);
+            const height = math.clamp(passStage.scissor[3], 0, outputTex.texture.height - y);
             fullscreenPass.setScissorRect(x, y, width, height);
         }
 
@@ -960,11 +985,11 @@ export class WebgpuRenderer implements Renderer {
 
         this.renderLights(encoder, scene, camera);
 
-        this.renderScene(encoder, this.pipeline, this.offscreenTextures[TEXID_SCENE], this.clearColor, layers);
+        this.renderScene(encoder, this.pipeline, this.offscreenTextures[TEXID_SCENE].view, this.clearColor, layers);
 
         this.renderFullscreenPass(encoder, this.fullscreenPassStages.mainLight);
 
-        this.renderScene(encoder, this.maskPipeline, this.offscreenTextures[TEXID_MASK], maskClearColor, layers);
+        this.renderScene(encoder, this.maskPipeline, this.offscreenTextures[TEXID_MASK].view, maskClearColor, layers);
 
         for (let i = 0; i < this.pass.length; ++i) {
             const passStage = this.pass[i];
@@ -1070,6 +1095,14 @@ export class WebgpuRenderer implements Renderer {
     public getSampler() {
         return this.sampler;
     }
+
+    public getTextureDimBuffer() {
+        return this.textureDimBuffer;
+    }
+
+    public getSpriteBindGroups() {
+        return this.spriteBindGroups;
+    }
 }
 
 interface DrawCall {
@@ -1082,11 +1115,11 @@ class WebgpuRendererLayer {
     isStatic: boolean;
     needsUpdate: boolean;
     drawCalls: DrawCall[];
-    bindGroups: Map<string, GPUBindGroup>;
+    bindGroups: Map<string, GPUBindGroup> = new Map();
     lastTexIdx: number;
     private renderer: WebgpuRenderer;
     private instanceBuffer: GPUBuffer;
-    private tilesetDimBuffer: GPUBuffer;
+    // private tilesetDimBuffer: GPUBuffer;
     lifetime: number;
 
     constructor(renderer: WebgpuRenderer, isStatic: boolean) {
@@ -1094,7 +1127,6 @@ class WebgpuRendererLayer {
         this.isStatic = isStatic;
         this.needsUpdate = true;
         this.drawCalls = [];
-        this.bindGroups = new Map();
         this.lifetime = LAYER_LIFETIME;
         this.lastTexIdx = 0;
 
@@ -1102,12 +1134,6 @@ class WebgpuRendererLayer {
             label: "Render Layer Vertex Buffer",
             size: geometry.spriteStride * (isStatic ? STATIC_LAYER_MAX_SPRITES : DYNAMIC_LAYER_MAX_SPRITES),
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-        });
-
-        this.tilesetDimBuffer = renderer.getConfig().device.createBuffer({
-            label: "Render Layer Uniform Buffer",
-            size: LAYER_MAX_TEXTURES * 256,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
     }
 
@@ -1130,30 +1156,28 @@ class WebgpuRendererLayer {
             const texName = sprites[i].tileset.name;
 
             if (!currentCall || texName !== currentCall.texName) {
-                const texInfo = this.renderer.getTextureInfo(texName);
-
-                device.queue.writeBuffer(
-                    this.tilesetDimBuffer,
-                    this.lastTexIdx * 256,
-                    new Float32Array([texInfo.tileset.imageWidth, texInfo.tileset.imageHeight])
-                );
-
-                const bindGroup = device.createBindGroup({
-                    label: "Texture \"" + texName + "\" - Sprite Draw Call Bind Group",
-                    layout: pipeline.getBindGroupLayout(1),
-                    entries: [
-                        { binding: 0, resource: sampler },
-                        { binding: 1, resource: (texInfo.texture as GPUTexture).createView() },
-                        {
-                            binding: 2,
-                            resource: {
-                                buffer: this.tilesetDimBuffer,
-                                offset: this.lastTexIdx * 256,
-                                size: 8
+                const spriteBindGroups = this.renderer.getSpriteBindGroups();
+                if (!spriteBindGroups.has(texName)) {
+                    const texInfo = this.renderer.getTextureInfo(texName);
+                    const bindGroup = device.createBindGroup({
+                        label: "Texture \"" + texName + "\" - Sprite Draw Call Bind Group",
+                        layout: pipeline.getBindGroupLayout(1),
+                        entries: [
+                            { binding: 0, resource: sampler },
+                            { binding: 1, resource: texInfo.view! },
+                            {
+                                binding: 2,
+                                resource: {
+                                    buffer: this.renderer.getTextureDimBuffer(),
+                                    offset: texInfo.idx * 256,
+                                    size: 8
+                                }
                             }
-                        }
-                    ],
-                });
+                        ],
+                    });
+                    spriteBindGroups.set(texName, bindGroup);
+                }
+                const bindGroup = spriteBindGroups.get(texName)!;
 
                 currentCall = {
                     texName,
@@ -1184,6 +1208,5 @@ class WebgpuRendererLayer {
 
     public destroy() {
         this.instanceBuffer.destroy();
-        this.tilesetDimBuffer.destroy();
     }
 }

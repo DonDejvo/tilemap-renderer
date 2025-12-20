@@ -231,6 +231,7 @@ export class WebglRenderer implements Renderer {
     private time: number;
     private resizeRequested: boolean;
     private lineRenderer!: WebglLineRenderer;
+    private nextTextureIdx: number = 0;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -263,7 +264,8 @@ export class WebglRenderer implements Renderer {
             if (images[tileset.name]) {
                 this.texturesMap.set(tileset.name, {
                     tileset,
-                    image: images[tileset.name]
+                    image: images[tileset.name],
+                    idx: this.nextTextureIdx++
                 });
             }
         }

@@ -9,14 +9,13 @@ import { Webgl2Renderer } from "./webgl2/Webgl2Renderer";
 import { WebgpuRenderer } from "./webgpu/WebgpuRenderer";
 
 export const STATIC_LAYER_MAX_SPRITES = 100000;
-export const DYNAMIC_LAYER_MAX_SPRITES = 10000;
+export const DYNAMIC_LAYER_MAX_SPRITES = 20000;
 export const LAYER_LIFETIME = 30;
-export const LAYER_MAX_TEXTURES = 16;
 export const OFFSCREEN_TEXTURES = 12;
 export const MAX_CHANNELS = 8;
 export const UNIFORMS_MAX_SIZE = 64;
 export const MAX_LIGHTS = 1000;
-export const SHADOW_MAX_VERTICES = 3 * 8 * 32;
+export const SHADOW_MAX_VERTICES = 3 * 8 * 256;
 
 export const TEXID_SCENE = 3;
 export const TEXID_MASK = 1;
@@ -32,6 +31,8 @@ export interface TextureInfo {
     texture?: WebGLTexture | GPUTexture;
     tileset: Tileset;
     image: TexImageSource;
+    view?: GPUTextureView;
+    idx: number;
 }
 
 export interface RenderPassStage {
