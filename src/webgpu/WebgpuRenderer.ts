@@ -401,12 +401,14 @@ export class WebgpuRenderer implements Renderer {
         for (let i = 0; i < OFFSCREEN_TEXTURES; ++i) {
             this.offscreenTextures[i]?.destroy();
             const n = getOffscreenTextureSizeFactor(i);
+            const width = Math.ceil(this.canvas.width * n);
+            const height = Math.ceil(this.canvas.height * n);
             this.offscreenTextures[i] = this.cfg.device.createTexture({
-                size: { width: this.canvas.width * n, height: this.canvas.height * n, depthOrArrayLayers: 1 },
+                size: { width, height, depthOrArrayLayers: 1 },
                 format: this.cfg.format,
                 usage: GPUTextureUsage.RENDER_ATTACHMENT |
                     GPUTextureUsage.TEXTURE_BINDING,
-                label: "offscreen texture " + i
+                label: "Offscreen Texture " + i + " - " + width + "x" + height
             });
         }
         for (let [passStage, info] of this.renderPassUniformMap) {
@@ -466,6 +468,7 @@ export class WebgpuRenderer implements Renderer {
         this.initOffscreenTextures();
 
         this.sampler = device.createSampler({
+            label: "Sprite Sampler",
             magFilter: "nearest",
             minFilter: "nearest",
             addressModeU: "clamp-to-edge",
@@ -473,6 +476,7 @@ export class WebgpuRenderer implements Renderer {
         });
 
         this.fullscreenSampler = device.createSampler({
+            label: "Fullscreen Sampler",
             magFilter: "linear",
             minFilter: "linear",
             addressModeU: "clamp-to-edge",
@@ -490,7 +494,7 @@ export class WebgpuRenderer implements Renderer {
             if (!this.shaderCache.has(shaderInfo.builder)) {
                 const code = fullscreenSource(shaderInfo.builder.build(this));
                 const module = device.createShaderModule({
-                    label: name + " shader module",
+                    label: "Fullscreen Shader Module \"" + name + "\"",
                     code
                 });
                 this.shaderCache.set(shaderInfo.builder, module);
@@ -499,6 +503,7 @@ export class WebgpuRenderer implements Renderer {
             const module = this.shaderCache.get(shaderInfo.builder)!;
 
             const pipeline = device.createRenderPipeline({
+                label: "Fullscreen Pipeline \"" + name + "\"",
                 layout: "auto",
                 vertex: {
                     module,
@@ -519,6 +524,7 @@ export class WebgpuRenderer implements Renderer {
         }
 
         this.commonBGL = this.cfg.device.createBindGroupLayout({
+            label: "Common Bind Group Layout",
             entries: [
                 { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
                 { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
@@ -526,33 +532,37 @@ export class WebgpuRenderer implements Renderer {
             ]
         });
         this.cameraBGL = this.cfg.device.createBindGroupLayout({
+            label: "Camera Bind Group Layout",
             entries: [
                 { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: "uniform" } }
             ]
         });
         this.lightBGL = this.cfg.device.createBindGroupLayout({
+            label: "Light Bind Group Layout",
             entries: [
                 { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: "uniform", hasDynamicOffset: true } }
             ]
         });
 
-        this.pipeline = this.createMainPipeline(mainSource);
-        this.maskPipeline = this.createMainPipeline(maskSource);
+        this.pipeline = this.createMainPipeline(mainSource, "Main");
+        this.maskPipeline = this.createMainPipeline(maskSource, "Mask");
 
         this.lightUniformBuffer = this.cfg.device.createBuffer({
-            label: "Light uniform buffer",
+            label: "Light Uniform Buffer",
             size: MAX_LIGHTS * 256,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
 
         const lightPipelineLayout = this.cfg.device.createPipelineLayout({
+            label: "Light Pipeline Layout",
             bindGroupLayouts: [this.cameraBGL, this.lightBGL],
         });
         const lightShaderModule = this.cfg.device.createShaderModule({
+            label: "Light Shader Module",
             code: lightSource
         });
         this.lightPipeline = this.cfg.device.createRenderPipeline({
-            label: "Light pipeline",
+            label: "Light Pipeline",
             layout: lightPipelineLayout,
             vertex: {
                 module: lightShaderModule,
@@ -575,19 +585,21 @@ export class WebgpuRenderer implements Renderer {
         });
 
         this.lightUniformBindGroup = this.cfg.device.createBindGroup({
-            label: "Light uniform bind group",
+            label: "Light Uniform Bind Group",
             layout: this.lightPipeline.getBindGroupLayout(1),
             entries: [{ binding: 0, resource: { buffer: this.lightUniformBuffer, size: geometry.lightStride } }]
         });
 
         const shadowPipelineLayot = this.cfg.device.createPipelineLayout({
+            label: "Shadow Pipeline Layout",
             bindGroupLayouts: [this.cameraBGL]
         });
         const shadowShaderModule = this.cfg.device.createShaderModule({
+            label: "Shadow Shader Module",
             code: shadowSource
         });
         this.shadowPipeline = this.cfg.device.createRenderPipeline({
-            label: "Shadow pipeline",
+            label: "Shadow Pipeline",
             layout: shadowPipelineLayot,
             vertex: {
                 module: shadowShaderModule,
@@ -607,12 +619,13 @@ export class WebgpuRenderer implements Renderer {
         });
 
         this.cameraBuffer = device.createBuffer({
+            label: "Camera Uniform Buffer",
             size: 16,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         })
 
         this.cameraBindGroup = device.createBindGroup({
-            label: "Camera bind group",
+            label: "Camera Uniform Bind Group",
             layout: this.pipeline.getBindGroupLayout(0),
             entries: [{
                 binding: 0, resource: { buffer: this.cameraBuffer }
@@ -620,6 +633,7 @@ export class WebgpuRenderer implements Renderer {
         });
 
         this.vbo = device.createBuffer({
+            label: "Quad Vertex Buffer",
             size: geometry.quad.byteLength,
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
         });
@@ -627,6 +641,7 @@ export class WebgpuRenderer implements Renderer {
         device.queue.writeBuffer(this.vbo, 0, geometry.quad);
 
         this.shadowsVbo = this.cfg.device.createBuffer({
+            label: "Shadows Vertex Buffer",
             size: MAX_LIGHTS * SHADOW_MAX_VERTICES * 8,
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
         });
@@ -637,16 +652,19 @@ export class WebgpuRenderer implements Renderer {
         this.initialized = true;
     }
 
-    private createMainPipeline(shaderSource: string) {
+    private createMainPipeline(shaderSource: string, label: string) {
         const shaderModule = this.cfg.device.createShaderModule({
+            label: label + " Shader Module",
             code: shaderSource
         });
 
         const pipelineLayout = this.cfg.device.createPipelineLayout({
+            label: label + " Pipeline Layout",
             bindGroupLayouts: [this.cameraBGL, this.commonBGL]
         });
 
         return this.cfg.device.createRenderPipeline({
+            label: label + " Pipeline",
             layout: pipelineLayout,
             vertex: {
                 module: shaderModule,
@@ -824,7 +842,7 @@ export class WebgpuRenderer implements Renderer {
             });
         }
         const textureBindGroup = this.cfg.device.createBindGroup({
-            label: passStage.shader + " texture bind group",
+            label: "Render Pass \"" + passStage.shader + "\" - Texture Bind Group",
             layout: shaderInfo.pipeline!.getBindGroupLayout(1),
             entries
         });
@@ -856,10 +874,12 @@ export class WebgpuRenderer implements Renderer {
 
         if (!this.renderPassUniformMap.has(passStage)) {
             const ubo = this.cfg.device.createBuffer({
+                label: "Render Pass \"" + passStage.shader + "\" - Uniform Buffer",
                 size: 256,
                 usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
             });
             const uniformBindGroup = this.cfg.device.createBindGroup({
+                label: "Render Pass \"" + passStage.shader + "\" - Uniform Bind Group",
                 layout: shaderInfo.pipeline!.getBindGroupLayout(0),
                 entries: [{ binding: 0, resource: { buffer: ubo } }]
             });
@@ -966,8 +986,8 @@ export class WebgpuRenderer implements Renderer {
     }
 
     createTexture(tileset: Tileset, imageData: GPUCopyExternalImageSource) {
-
         const texture = this.cfg.device.createTexture({
+            label: "Tileset \"" + tileset.name + "\" Texture",
             size: {
                 width: tileset.imageWidth,
                 height: tileset.imageHeight,
@@ -1079,13 +1099,13 @@ class WebgpuRendererLayer {
         this.lastTexIdx = 0;
 
         this.instanceBuffer = renderer.getConfig().device.createBuffer({
-            label: "Instance Buffer",
+            label: "Render Layer Vertex Buffer",
             size: geometry.spriteStride * (isStatic ? STATIC_LAYER_MAX_SPRITES : DYNAMIC_LAYER_MAX_SPRITES),
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
         });
 
         this.tilesetDimBuffer = renderer.getConfig().device.createBuffer({
-            label: "Tileset Dimensions Buffer",
+            label: "Render Layer Uniform Buffer",
             size: LAYER_MAX_TEXTURES * 256,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
@@ -1119,6 +1139,7 @@ class WebgpuRendererLayer {
                 );
 
                 const bindGroup = device.createBindGroup({
+                    label: "Texture \"" + texName + "\" - Sprite Draw Call Bind Group",
                     layout: pipeline.getBindGroupLayout(1),
                     entries: [
                         { binding: 0, resource: sampler },

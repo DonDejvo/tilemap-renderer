@@ -306,7 +306,7 @@ export class Webgl2Renderer implements Renderer {
         for (let i = 0; i < OFFSCREEN_TEXTURES; ++i) {
             const n = getOffscreenTextureSizeFactor(i)
             this.framebuffers[i]?.destroy();
-            this.framebuffers[i] = new Framebuffer(this.gl, this.canvas.width * n, this.canvas.height * n);
+            this.framebuffers[i] = new Framebuffer(this.gl, Math.ceil(this.canvas.width * n), Math.ceil(this.canvas.height * n));
         }
     }
 

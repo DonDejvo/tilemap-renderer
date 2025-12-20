@@ -59,13 +59,13 @@ export class WebgpuLineRendrer extends LineRenderer {
 
     init() {
         this.vbo = this.cfg.device.createBuffer({
-            label: "Lines VBO",
+            label: "Lines Vertex Buffer",
             size: MAX_LINES * geometry.lineStride * 2 * 4,
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
         });
 
         const module = this.cfg.device.createShaderModule({
-            label: "Lines Shader",
+            label: "Lines Shader Module",
             code: linesSource
         })
 
@@ -95,13 +95,13 @@ export class WebgpuLineRendrer extends LineRenderer {
         });
 
         this.cameraBuffer = this.cfg.device.createBuffer({
-            label: "Lines Camera Buffer",
+            label: "Lines Camera Uniform Buffer",
             size: 16,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         })
 
         this.cameraBindGroup = this.cfg.device.createBindGroup({
-            label: "Lines Camera Bind Group",
+            label: "Lines Camera Uniform Bind Group",
             layout: this.pipeline.getBindGroupLayout(0),
             entries: [{
                 binding: 0, resource: { buffer: this.cameraBuffer }
