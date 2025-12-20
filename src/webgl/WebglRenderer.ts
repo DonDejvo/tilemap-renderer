@@ -310,7 +310,9 @@ export class WebglRenderer implements Renderer {
     }
 
     public async init() {
-        const gl = this.canvas.getContext("webgl");
+        const gl = this.canvas.getContext("webgl", {
+            powerPreference: "high-performance"
+        });
         if (!gl) throw new Error("WebGL not supported");
 
         this.gl = gl;
@@ -374,6 +376,13 @@ export class WebglRenderer implements Renderer {
         this.lineRenderer.init();
 
         this.initialized = true;
+
+        if (import.meta.env.DEV) {
+            import('spectorjs').then(({ Spector }) => {
+                const spector = new Spector();
+                spector.displayUI();
+            });
+        }
     }
 
     private renderScene(framebuffer: Framebuffer, shaderProgram: ShaderProgram, camera: Camera, clearColor: Color | null, layers: WebglRendererLayer[]) {

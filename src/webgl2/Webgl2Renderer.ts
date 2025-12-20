@@ -325,7 +325,9 @@ export class Webgl2Renderer implements Renderer {
     }
 
     public async init() {
-        const gl = this.canvas.getContext("webgl2");
+        const gl = this.canvas.getContext("webgl2", {
+            powerPreference: "high-performance"
+        });
         if (!gl) throw new Error("WebGL2 not supported");
 
         this.gl = gl;
@@ -388,6 +390,13 @@ export class Webgl2Renderer implements Renderer {
         this.lineRenderer.init();
 
         this.initialized = true;
+
+        if (import.meta.env.DEV) {
+            import('spectorjs').then(({ Spector }) => {
+                const spector = new Spector();
+                spector.displayUI();
+            });
+        }
     }
 
     private renderScene(framebuffer: Framebuffer, shaderProgram: ShaderProgram, camera: Camera, clearColor: Color | null, layers: WebglRendererLayer[]) {
