@@ -631,6 +631,10 @@ export class WebglRenderer implements Renderer {
         const cameraBounds = camera.getBounds();
         this.time = performance.now() * 0.001;
 
+        if (this.gpuTimer.isActive()) {
+            this.gpuTimer.begin();
+        }
+
         const layers: WebglRendererLayer[] = [];
         for (const sceneLayer of scene.getLayersOrdered()) {
             let layer: WebglRendererLayer;
@@ -667,6 +671,10 @@ export class WebglRenderer implements Renderer {
 
         this.lineRenderer.render(camera);
         this.lineRenderer.clear();
+
+        if (this.gpuTimer.isActive()) {
+            this.gpuTimer.end();
+        }
 
         for (const [sceneLayer, rendererLayer] of this.layersMap) {
             if (rendererLayer.lifetime <= 0) {

@@ -48,7 +48,7 @@ export class WebglGPUTimer implements GPUTimer {
 
     public activate(): boolean {
         this.active = this.supported;
-        
+
         return this.active;
     }
 
@@ -63,7 +63,6 @@ export class WebglGPUTimer implements GPUTimer {
             const gl = this.gl as WebGL2RenderingContext;
             this.query = gl.createQuery();
             gl.beginQuery(this.ext.TIME_ELAPSED_EXT, this.query);
-            
         } else {
             this.query = this.ext.createQueryEXT();
             this.ext.beginQueryEXT(this.ext.TIME_ELAPSED_EXT, this.query);
