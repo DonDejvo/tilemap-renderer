@@ -3,6 +3,7 @@ import { assets } from "./assets";
 import { Camera } from "./Camera";
 import { colliders } from "./Collider";
 import { Color } from "./Color";
+import { EMATimer } from "./EMATimer";
 import { Light } from "./Light";
 import { math } from "./math";
 import { matrix } from "./matrix";
@@ -17,4 +18,4 @@ import { Tilemap } from "./Tilemap";
 import { Tileset } from "./Tileset";
 import { Vector } from "./Vector";
 
-export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, Animator, ShaderBuilder, Light, RigidBody, PhysicsWorld, SceneNode, colliders, assets, matrix, math, createRenderer };
+export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, Animator, ShaderBuilder, Light, RigidBody, PhysicsWorld, SceneNode, EMATimer, colliders, assets, matrix, math, createRenderer };

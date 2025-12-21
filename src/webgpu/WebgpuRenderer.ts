@@ -4,12 +4,13 @@ import { getHeight, getWidth, overlaps } from "../common";
 import { geometry } from "../geometry";
 import { LineRenderer } from "../LineRenderer";
 import { math } from "../math";
-import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo, UNIFORMS_MAX_SIZE } from "../Renderer";
+import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, GPUTimer, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo, UNIFORMS_MAX_SIZE } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
 import { blurHorizontalBuilder, blurVerticalBuilder, defaultShaderBuilder, lightShaderBuilder, ShaderBuilder, ShaderBuilderOutput } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 import { GPUConfig, requestConfig, worldToClipVertex } from "./common";
+import { WebgpuGPUTimer } from "./WebgpuGPUTimer";
 import { WebgpuLineRendrer } from "./WebgpuLineRenderer";
 
 const mainVertex = `
@@ -338,6 +339,7 @@ export class WebgpuRenderer implements Renderer {
     private textureDimBuffer!: GPUBuffer;
     private nextTextureIdx: number = 0;
     private spriteBindGroups: Map<string, GPUBindGroup> = new Map();
+    private gpuTimer!: WebgpuGPUTimer;
 
     constructor(canvas: HTMLCanvasElement) {
         this.layersMap = new Map();
@@ -358,6 +360,10 @@ export class WebgpuRenderer implements Renderer {
             lightAdditive: { shader: "default_additive", inputs: [5], output: TEXID_LIGHTMAP }
         };
         this.resizeRequested = false;
+    }
+
+    public getGpuTimer(): GPUTimer {
+        return this.gpuTimer;
     }
 
     public getLineRenderer(): LineRenderer {
@@ -670,6 +676,8 @@ export class WebgpuRenderer implements Renderer {
         this.lineRenderer = new WebgpuLineRendrer(ctx, this.cfg);
         this.lineRenderer.init();
 
+        this.gpuTimer = new WebgpuGPUTimer(this.cfg);
+
         this.initialized = true;
     }
 
@@ -729,14 +737,16 @@ export class WebgpuRenderer implements Renderer {
     }
 
     private renderScene(encoder: GPUCommandEncoder, pipeline: GPURenderPipeline, view: GPUTextureView, clearColor: Color | null, layers: WebgpuRendererLayer[]) {
-        const scenePass = encoder.beginRenderPass({
+        const scenePassDescriptor: GPURenderPassDescriptor = {
             colorAttachments: [{
                 clearValue: clearColor || undefined,
                 view,
                 loadOp: clearColor ? "clear" : "load",
                 storeOp: "store"
             }]
-        });
+        };
+
+        const scenePass = encoder.beginRenderPass(scenePassDescriptor);
         scenePass.setPipeline(pipeline);
         scenePass.setBindGroup(0, this.cameraBindGroup);
         scenePass.setVertexBuffer(0, this.vbo);
@@ -773,14 +783,15 @@ export class WebgpuRenderer implements Renderer {
             1.0
         );
 
-        const lightAmbientPass = encoder.beginRenderPass({
+        const lightAmbientPassDescriptor: GPURenderPassDescriptor = {
             colorAttachments: [{
                 view: this.offscreenTextures[TEXID_LIGHTMAP].view,
                 clearValue: clearColor,
                 loadOp: "clear",
                 storeOp: "store"
             }]
-        });
+        };
+        const lightAmbientPass = encoder.beginRenderPass(lightAmbientPassDescriptor);
         lightAmbientPass.end();
 
         const lightsUniformData = geometry.createLightsGeometry(sceneLights, true);
@@ -789,15 +800,15 @@ export class WebgpuRenderer implements Renderer {
         const texView = this.offscreenTextures[TEXID_LIGHTMAP + 1].view;
 
         for (let i = 0; i < sceneLights.length; ++i) {
-
-            const lightPass = encoder.beginRenderPass({
+            const lightPassDescriptor: GPURenderPassDescriptor = {
                 colorAttachments: [{
                     view: texView,
                     clearValue: new Color(0, 0, 0, 1),
                     loadOp: "clear",
                     storeOp: "store"
                 }]
-            });
+            };
+            const lightPass = encoder.beginRenderPass(lightPassDescriptor);
 
             lightPass.setPipeline(this.lightPipeline);
             lightPass.setVertexBuffer(0, this.vbo);
@@ -878,12 +889,12 @@ export class WebgpuRenderer implements Renderer {
         }
 
         let outputTex: { texture: GPUTexture, view: GPUTextureView };
-        if(passStage.output === -1) {
+        if (passStage.output === -1) {
             const canvasTexture = this.ctx.getCurrentTexture();
             outputTex = { texture: canvasTexture, view: canvasTexture.createView() };
         } else {
             outputTex = this.offscreenTextures[math.clamp(passStage.output, 0, OFFSCREEN_TEXTURES - 1)];
-        } 
+        }
 
         const uniforms = shaderInfo.builder.getUniforms();
         const stageUniforms = [{ name: "time", value: this.time }, { name: "resolution", value: [outputTex.texture.width, outputTex.texture.height] }].concat(passStage.uniforms ?? []);
@@ -916,14 +927,15 @@ export class WebgpuRenderer implements Renderer {
         const uniformsInfo = this.renderPassUniformMap.get(passStage)!;
         this.cfg.device.queue.writeBuffer(uniformsInfo.ubo, 0, uniformData);
 
-        const fullscreenPass = encoder.beginRenderPass({
+        const fullscreenPassDescriptor: GPURenderPassDescriptor = {
             colorAttachments: [{
                 view: outputTex.view,
                 loadOp: passStage.clearColor ? "clear" : "load",
                 clearValue: passStage.clearColor,
                 storeOp: "store"
             }]
-        });
+        };
+        const fullscreenPass = encoder.beginRenderPass(fullscreenPassDescriptor);
 
         if (passStage.scissor) {
             const x = math.clamp(passStage.scissor[0], 0, outputTex.texture.width);
@@ -955,6 +967,12 @@ export class WebgpuRenderer implements Renderer {
         const cameraBounds = camera.getBounds();
         this.time = performance.now() * 0.001;
 
+        const encoder = this.cfg.device.createCommandEncoder();
+
+        if (this.gpuTimer.isActive()) {
+            this.gpuTimer.begin(encoder);
+        }
+
         const layers: WebgpuRendererLayer[] = [];
         for (const sceneLayer of scene.getLayersOrdered()) {
             if (!this.layersMap.has(sceneLayer)) {
@@ -981,8 +999,6 @@ export class WebgpuRenderer implements Renderer {
             ])
         );
 
-        const encoder = this.cfg.device.createCommandEncoder();
-
         this.renderLights(encoder, scene, camera);
 
         this.renderScene(encoder, this.pipeline, this.offscreenTextures[TEXID_SCENE].view, this.clearColor, layers);
@@ -998,6 +1014,10 @@ export class WebgpuRenderer implements Renderer {
 
         this.lineRenderer.render(encoder, camera);
         this.lineRenderer.clear();
+
+        if (this.gpuTimer.isActive()) {
+            this.gpuTimer.end(encoder);
+        }
 
         const commandBuffer = encoder.finish();
         this.cfg.device.queue.submit([commandBuffer]);

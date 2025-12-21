@@ -4,12 +4,13 @@ import { getHeight, getWidth, overlaps } from "../common";
 import { geometry } from "../geometry";
 import { LineRenderer } from "../LineRenderer";
 import { math } from "../math";
-import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo } from "../Renderer";
+import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, GPUTimer, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
 import { blurHorizontalBuilder, blurVerticalBuilder, defaultShaderBuilder, lightShaderBuilder, ShaderBuilder, ShaderBuilderOutput } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 import { Framebuffer } from "./Framebuffer";
+import { WebglGPUTimer } from "./WebglGPUTimer";
 import { ShaderProgram, worldToClipVertex } from "./ShaderProgram";
 import { WebglLineRenderer } from "./WebglLineRenderer";
 
@@ -232,6 +233,7 @@ export class WebglRenderer implements Renderer {
     private resizeRequested: boolean;
     private lineRenderer!: WebglLineRenderer;
     private nextTextureIdx: number = 0;
+    private gpuTimer!: WebglGPUTimer;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -245,6 +247,10 @@ export class WebglRenderer implements Renderer {
         this.shaderCache = new Map();
         this.time = 0;
         this.resizeRequested = false;
+    }
+
+    public getGpuTimer(): GPUTimer {
+        return this.gpuTimer;
     }
 
     public getLineRenderer(): LineRenderer {
@@ -376,6 +382,8 @@ export class WebglRenderer implements Renderer {
 
         this.lineRenderer = new WebglLineRenderer(gl);
         this.lineRenderer.init();
+
+        this.gpuTimer = new WebglGPUTimer(gl);
 
         this.initialized = true;
 

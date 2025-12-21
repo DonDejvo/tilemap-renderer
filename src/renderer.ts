@@ -27,6 +27,8 @@ export const getOffscreenTextureSizeFactor = (idx: number) => {
     return 1 / (1 << Math.max(0, Math.floor((idx - 2) * 0.5)));
 }
 
+export const maskClearColor = new Color(0, 0, 0, 1);
+
 export interface TextureInfo {
     texture?: WebGLTexture | GPUTexture;
     tileset: Tileset;
@@ -54,7 +56,16 @@ export interface RendererBuilderOptions {
     declareVar(name: string, type: VariableType, isUniform?: boolean): string;
 }
 
-export const maskClearColor = new Color(0, 0, 0, 1);
+export interface GPUTimer {
+    isSupported(): boolean;
+    isActive(): boolean;
+    activate(): boolean;
+    deactivate(): void;
+    poll(): number | null;
+    getAverage(): number;
+    getPeak(): number;
+    resetAverage(): void;
+}
 
 export interface Renderer {
     getType(): RendererType;
@@ -68,6 +79,7 @@ export interface Renderer {
     registerShader(name: string, builder: ShaderBuilder, blendMode?: BlendMode): void;
     pass: RenderPassStage[];
     getLineRenderer(): LineRenderer;
+    getGpuTimer(): GPUTimer;
 }
 
 export const createRenderer = (type: RendererType): Renderer => {

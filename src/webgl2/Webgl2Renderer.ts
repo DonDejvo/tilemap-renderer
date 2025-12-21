@@ -4,13 +4,14 @@ import { getHeight, getWidth, overlaps } from "../common";
 import { geometry } from "../geometry";
 import { LineRenderer } from "../LineRenderer";
 import { math } from "../math";
-import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo } from "../Renderer";
+import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, GPUTimer, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
 import { ShaderBuilderOutput, defaultShaderBuilder, ShaderBuilder, lightShaderBuilder, blurHorizontalBuilder, blurVerticalBuilder } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 import { Framebuffer } from "../webgl/Framebuffer";
 import { ShaderProgram, worldToClipVertex } from "../webgl/ShaderProgram";
+import { WebglGPUTimer } from "../webgl/WebglGPUTimer";
 import { WebglLineRenderer } from "../webgl/WebglLineRenderer";
 
 const mainVertex = `#version 300 es
@@ -248,6 +249,7 @@ export class Webgl2Renderer implements Renderer {
     private resizeRequested: boolean;
     private lineRenderer!: WebglLineRenderer;
     private nextTextureIdx: number = 0;
+    private gpuTimer!: WebglGPUTimer;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -261,6 +263,10 @@ export class Webgl2Renderer implements Renderer {
         this.time = 0;
         this.shaderCache = new Map();
         this.resizeRequested = false;
+    }
+
+    public getGpuTimer(): GPUTimer {
+        return this.gpuTimer;
     }
 
     public getLineRenderer(): LineRenderer {
@@ -391,6 +397,8 @@ export class Webgl2Renderer implements Renderer {
 
         this.lineRenderer = new WebglLineRenderer(gl);
         this.lineRenderer.init();
+
+        this.gpuTimer = new WebglGPUTimer(gl);
 
         this.initialized = true;
 
@@ -618,6 +626,10 @@ export class Webgl2Renderer implements Renderer {
         const cameraBounds = camera.getBounds();
         this.time = performance.now() * 0.001;
 
+        if(this.gpuTimer.isActive()) {
+            this.gpuTimer.begin();
+        }
+
         const layers: WebglRendererLayer[] = [];
         for (const sceneLayer of scene.getLayersOrdered()) {
             let layer: WebglRendererLayer;
@@ -650,6 +662,10 @@ export class Webgl2Renderer implements Renderer {
 
         this.lineRenderer.render(camera);
         this.lineRenderer.clear();
+
+        if(this.gpuTimer.isActive()) {
+            this.gpuTimer.end();
+        }
 
         for (const [sceneLayer, rendererLayer] of this.layersMap) {
             if (rendererLayer.lifetime <= 0) {
