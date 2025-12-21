@@ -162,14 +162,7 @@ void main() {
 
 const shadowFragment = `#version 300 es
 
-precision mediump float;
-
-uniform vec2 uLightPos;
-
-out vec4 fragColor;
-
 void main() {
-    fragColor = vec4(vec3(0.0), 1.0);
 }
 `;
 
@@ -466,13 +459,43 @@ export class Webgl2Renderer implements Renderer {
 
         for (let i = 0; i < sceneLights.length; ++i) {
             const light = sceneLights[i];
+            const shadowDrawCall = shadowsDrawCalls[i];
 
             this.framebuffers[TEXID_LIGHTMAP + 1].bind();
 
             this.blend("none");
 
+            this.gl.enable(this.gl.STENCIL_TEST);
+
             this.gl.clearColor(0, 0, 0, 1);
-            this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+            this.gl.clearStencil(0);
+            this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.STENCIL_BUFFER_BIT);
+
+            // Shadows
+
+            if (shadowDrawCall.count !== 0) {
+                this.gl.colorMask(false, false, false, false);
+
+                this.gl.stencilFunc(this.gl.ALWAYS, 1, 0xFF);
+                this.gl.stencilOp(this.gl.KEEP, this.gl.KEEP, this.gl.REPLACE);
+
+                this.shadowShaderProgram.use();
+
+                this.gl.uniform2f(this.shadowShaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
+                this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uCameraPos"), camera.position.toArray());
+
+                this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uLightPos"), light.position.toArray());
+
+                this.gl.bindVertexArray(this.shadowsVao);
+                this.gl.drawArrays(this.gl.TRIANGLES, shadowDrawCall.offset, shadowDrawCall.count);
+                this.gl.bindVertexArray(null);
+            }
+
+            // Light
+
+            this.gl.colorMask(true, true, true, true);
+            this.gl.stencilFunc(this.gl.EQUAL, 0, 0xFF);
+            this.gl.stencilOp(this.gl.KEEP, this.gl.KEEP, this.gl.KEEP);
 
             this.lightShaderProgram.use();
 
@@ -490,20 +513,8 @@ export class Webgl2Renderer implements Renderer {
             this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
             this.gl.bindVertexArray(null);
 
-            const shadowDrawCall = shadowsDrawCalls[i];
-
-            if (shadowDrawCall.count !== 0) {
-                this.shadowShaderProgram.use();
-
-                this.gl.uniform2f(this.shadowShaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
-                this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uCameraPos"), camera.position.toArray());
-
-                this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uLightPos"), light.position.toArray());
-
-                this.gl.bindVertexArray(this.shadowsVao);
-                this.gl.drawArrays(this.gl.TRIANGLES, shadowDrawCall.offset, shadowDrawCall.count);
-                this.gl.bindVertexArray(null);
-            }
+            this.gl.colorMask(true, true, true, true);
+            this.gl.disable(this.gl.STENCIL_TEST);
 
             this.framebuffers[TEXID_LIGHTMAP + 1].unbind();
 
@@ -626,7 +637,7 @@ export class Webgl2Renderer implements Renderer {
         const cameraBounds = camera.getBounds();
         this.time = performance.now() * 0.001;
 
-        if(this.gpuTimer.isActive()) {
+        if (this.gpuTimer.isEnabled()) {
             this.gpuTimer.begin();
         }
 
@@ -663,7 +674,7 @@ export class Webgl2Renderer implements Renderer {
         this.lineRenderer.render(camera);
         this.lineRenderer.clear();
 
-        if(this.gpuTimer.isActive()) {
+        if (this.gpuTimer.isEnabled()) {
             this.gpuTimer.end();
         }
 

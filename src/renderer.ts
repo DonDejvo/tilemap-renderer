@@ -58,9 +58,9 @@ export interface RendererBuilderOptions {
 
 export interface GPUTimer {
     isSupported(): boolean;
-    isActive(): boolean;
-    activate(): boolean;
-    deactivate(): void;
+    isEnabled(): boolean;
+    enable(): void;
+    disable(): void;
     poll(): number | null;
     getAverage(): number;
     getPeak(): number;

@@ -7,7 +7,7 @@ export class WebglGPUTimer implements GPUTimer {
     private query: any = null;
     private queryActive: boolean = false;
     private supported: boolean;
-    private active: boolean = false;
+    private enabled: boolean = false;
 
     private avgMs: number = 0;
     private readonly alpha: number;
@@ -42,18 +42,16 @@ export class WebglGPUTimer implements GPUTimer {
         return this.supported;
     }
 
-    public isActive(): boolean {
-        return this.active;
+    public isEnabled(): boolean {
+        return this.enabled;
     }
 
-    public activate(): boolean {
-        this.active = this.supported;
-
-        return this.active;
+    public enable(): void {
+        this.enabled = this.supported;
     }
 
-    public deactivate(): void {
-        this.active = false;
+    public disable(): void {
+        this.enabled = false;
     }
 
     public begin(): boolean {

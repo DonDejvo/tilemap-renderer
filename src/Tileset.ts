@@ -98,16 +98,16 @@ export class Tileset {
         return this.cache.get(url)!;
     }
 
-    public static fromImage(name: string, image: HTMLImageElement) {
+    public static fromImage(name: string, image: HTMLImageElement, cols: number = 1, rows: number = 1) {
         const w = image.width;
         const h = image.height;
         return new Tileset({
-            tilewidth: w,
-            tileheight: h,
+            tilewidth: w / cols,
+            tileheight: h / rows,
             imagewidth: w,
             imageheight: h,
-            tilecount: 1,
-            columns: 1,
+            tilecount: rows * cols,
+            columns: cols,
             name
         });
     }

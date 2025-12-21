@@ -151,12 +151,7 @@ void main() {
 `;
 
 const shadowFragment = `
-precision mediump float;
-
-uniform vec2 uLightPos;
-
 void main() {
-    gl_FragColor = vec4(vec3(0.0), 1.0);
 }
 `;
 
@@ -454,13 +449,45 @@ export class WebglRenderer implements Renderer {
 
         for (let i = 0; i < sceneLights.length; ++i) {
             const light = sceneLights[i];
+            const shadowDrawCall = shadowsDrawCalls[i];
 
             this.framebuffers[TEXID_LIGHTMAP + 1].bind();
 
-            this.blend("none");
+            this.gl.enable(this.gl.STENCIL_TEST);
 
             this.gl.clearColor(0, 0, 0, 1);
-            this.gl.clear(this.gl.COLOR_BUFFER_BIT);
+            this.gl.clearStencil(0);
+            this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.STENCIL_BUFFER_BIT);
+
+            // Shadows
+
+            if (shadowDrawCall.count !== 0) {
+                this.gl.colorMask(false, false, false, false);
+
+                this.gl.stencilFunc(this.gl.ALWAYS, 1, 0xFF);
+                this.gl.stencilOp(this.gl.KEEP, this.gl.KEEP, this.gl.REPLACE);
+
+                this.shadowShaderProgram.use();
+
+                this.gl.uniform2f(this.shadowShaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
+                this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uCameraPos"), camera.position.toArray());
+
+                this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uLightPos"), light.position.toArray());
+
+                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shadowsVbo);
+                this.gl.enableVertexAttribArray(shadowPosLoc);
+                this.gl.vertexAttribPointer(shadowPosLoc, 2, this.gl.FLOAT, false, 8, 0);
+
+                this.gl.drawArrays(this.gl.TRIANGLES, shadowDrawCall.offset, shadowDrawCall.count);
+
+                this.gl.disableVertexAttribArray(shadowPosLoc);
+            }
+
+            // Light
+
+            this.gl.colorMask(true, true, true, true);
+            this.gl.stencilFunc(this.gl.EQUAL, 0, 0xFF);
+            this.gl.stencilOp(this.gl.KEEP, this.gl.KEEP, this.gl.KEEP);
 
             this.lightShaderProgram.use();
 
@@ -482,24 +509,8 @@ export class WebglRenderer implements Renderer {
 
             this.gl.disableVertexAttribArray(lightPosLoc);
 
-            const shadowDrawCall = shadowsDrawCalls[i];
-
-            if (shadowDrawCall.count !== 0) {
-                this.shadowShaderProgram.use();
-
-                this.gl.uniform2f(this.shadowShaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
-                this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uCameraPos"), camera.position.toArray());
-
-                this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uLightPos"), light.position.toArray());
-
-                this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shadowsVbo);
-                this.gl.enableVertexAttribArray(shadowPosLoc);
-                this.gl.vertexAttribPointer(shadowPosLoc, 2, this.gl.FLOAT, false, 8, 0);
-
-                this.gl.drawArrays(this.gl.TRIANGLES, shadowDrawCall.offset, shadowDrawCall.count);
-
-                this.gl.disableVertexAttribArray(shadowPosLoc);
-            }
+            this.gl.colorMask(true, true, true, true);
+            this.gl.disable(this.gl.STENCIL_TEST);
 
             this.framebuffers[TEXID_LIGHTMAP + 1].unbind();
 
@@ -631,7 +642,7 @@ export class WebglRenderer implements Renderer {
         const cameraBounds = camera.getBounds();
         this.time = performance.now() * 0.001;
 
-        if (this.gpuTimer.isActive()) {
+        if (this.gpuTimer.isEnabled()) {
             this.gpuTimer.begin();
         }
 
@@ -672,7 +683,7 @@ export class WebglRenderer implements Renderer {
         this.lineRenderer.render(camera);
         this.lineRenderer.clear();
 
-        if (this.gpuTimer.isActive()) {
+        if (this.gpuTimer.isEnabled()) {
             this.gpuTimer.end();
         }
 

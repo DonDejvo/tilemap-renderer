@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Performance Test</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            height: 100%;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #fpsinfo {
+            position: fixed;
+            left: 10px;
+            top: 10px;
+            color: white;
+            font: 14px monospace;
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        #sceneinfo {
+            position: fixed;
+            right: 10px;
+            top: 10px;
+            color: white;
+            font: 14px monospace;
+            z-index: 9999;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        #frametimeinfo {
+            position: fixed;
+            left: 10px;
+            top: 40px;
+            color: white;
+            font: 14px monospace;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            z-index: 9999;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="fpsinfo">FPS: 0</div>
+    <div id="sceneinfo"></div>
+    <div id="frametimeinfo"></div>
+
+    <script type="module">
+        import { createRenderer, Vector, math, colliders, Sprite, Light, Camera, Scene, assets, Color, EMATimer, Tileset } from "../src/TilemapRenderer.ts";
+
+        const assetsUrl = "";
+        const rendererContext = "webgpu";
+
+        const main = async () => {
+            let w = 1920, h = 1080;
+            let frameCount = 0;
+            let fps = 0;
+            let dt = 0;
+            let lastRAF = 0;
+            let lastFPSUpdate = 0;
+            let accTime = 0;
+            const fixedDeltaTime = 0.02;
+
+            const camera = new Camera(w, h);
+
+            const myTilesetImage = await assets.loadImage(assetsUrl + "/textures/tileset.png");
+
+            const myTileset = Tileset.fromImage("MyTileset", myTilesetImage, 2, 2);
+
+            const scene = new Scene();
+            scene.ambientIntensity = 0.1;
+
+            const renderer = createRenderer(rendererContext);
+            document.body.appendChild(renderer.getCanvas());
+
+            camera.updateProjection(w, h);
+            renderer.setSize(w, h);
+
+            renderer.addTextures([myTileset], {
+                ["MyTileset"]: myTilesetImage
+            });
+
+            await renderer.init();
+            renderer.clearColor = new Color(0.5, 0.5, 0.5);
+
+            const observer = new ResizeObserver(entries => {
+                for (const entry of entries) {
+                    const width = w = entry.contentBoxSize[0].inlineSize;
+                    const height = h = entry.contentBoxSize[0].blockSize;
+
+                    renderer.setSize(width, height);
+                    camera.vw = width;
+                    camera.vh = height;
+                }
+            });
+
+            observer.observe(renderer.getCanvas());
+
+            const genSprites = (numSprites, minPos, maxPos) => {
+                for (let i = 0; i < numSprites; ++i) {
+                    const sprite = new Sprite({
+                        tileset: myTileset,
+                        tilesetRegion: { x: math.randRange(0, 1), y: math.randRange(0, 1) }
+                    });
+                    sprite.position.set(math.randRange(minPos.x, maxPos.x), math.randRange(minPos.y, maxPos.y));
+                    scene.addNode(sprite);
+                }
+            }
+
+            const genLights = (numLights, minPos, maxPos) => {
+                for (let i = 0; i < numLights; ++i) {
+                    const light = new Light({
+                        radius: math.randRange(25, 100),
+                        intensity: 0.4,
+                    });
+                    light.position.set(math.randRange(minPos.x, maxPos.x), math.randRange(minPos.y, maxPos.y));
+                    scene.addNode(light);
+                }
+            }
+
+            genSprites(15000, new Vector(0, 0), new Vector(2000, 2000));
+            genLights(400, new Vector(0, 0), new Vector(2000, 2000));
+
+            const cpuTimer = new EMATimer();
+            const gpuTimer = renderer.getGpuTimer();
+
+            gpuTimer.enable();
+
+            const draw = () => {
+                requestAnimationFrame(now => {
+                    draw();
+
+                    now *= 0.001;
+
+                    dt = now - (lastRAF || now);
+                    lastRAF = now;
+
+                    frameCount++;
+                    if (now - lastFPSUpdate >= 1) {
+                        fps = frameCount;
+                        frameCount = 0;
+                        lastFPSUpdate = now;
+                    }
+
+                    accTime += dt;
+
+                    while (accTime >= fixedDeltaTime) {
+                        accTime -= fixedDeltaTime;
+                        scene.fixedUpdate(fixedDeltaTime);
+                    }
+
+                    scene.update(dt);
+
+                    const ctx = renderer.getLineRenderer();
+                    for (let collider of scene.getColliders()) {
+                        if (collider.getType() === "polygon") {
+                            const points = collider.getWorldPoints();
+                            ctx.strokeColor = Color.ORANGE;
+                            ctx.beginPath();
+                            for (let i = 0; i < points.length; ++i) {
+                                const p = points[i];
+                                if (i === 0) ctx.moveTo(p.x, p.y);
+                                else ctx.lineTo(p.x, p.y);
+                            }
+                            ctx.closePath();
+                        }
+                    }
+
+                    cpuTimer.begin();
+
+                    renderer.render(scene, camera);
+
+                    cpuTimer.end();
+
+                    cpuTimer.poll();
+                    gpuTimer.poll();
+
+                });
+            }
+
+            draw();
+
+            setInterval(() => {
+                const formatSceneInfo = (info) => {
+                    const format = (elem, depth = 0) => {
+                        if (typeof elem === "object") {
+                            return "\n" + Object.entries(elem).map(([key, val]) => "\t".repeat(depth) + key + ": " + format(val, depth + 1)).join("")
+                        }
+                        return ("" + elem).padEnd(6) + "\n";
+                    }
+                    return format(info);
+                }
+
+                fpsinfo.textContent = `${rendererContext.toUpperCase()} - FPS: ${fps}`;
+
+                sceneinfo.innerHTML = `<pre>${formatSceneInfo(scene.getInfo())}</pre>`;
+
+                const avgGPU = gpuTimer.getAverage();
+                const peakGPU = gpuTimer.getPeak();
+                const avgCPU = cpuTimer.getAverage();
+                const peakCPU = cpuTimer.getPeak();
+
+                frametimeinfo.innerHTML = `
+<div>GPU: avg: ${avgGPU?.toFixed(2) ?? "-"} ms, peak: ${peakGPU.toFixed(2)}</div>
+<div>CPU: avg: ${avgCPU?.toFixed(2) ?? "-"} ms, peak: ${peakCPU.toFixed(2)}</div>
+`;
+            }, 100);
+        }
+
+        main();
+    </script>
+</body>
+
+</html>

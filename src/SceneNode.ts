@@ -54,15 +54,15 @@ export abstract class SceneNode {
     }
 
     public addNode(node: SceneNode) {
-        if(!this.scene) throw new Error("Cannot add node: Parent node is not started");
-        node.setParent(this);
+        if (!this.scene) throw new Error("Cannot add node: Parent node is not started");
+        node.setParent(this, false);
         return this.scene.addNode(node);
     }
 
     public removeNode(node: SceneNode) {
-        if(!this.scene) throw new Error("Cannot remove node: Parent node is not started");
+        if (!this.scene) throw new Error("Cannot remove node: Parent node is not started");
         const i = this._nodes.indexOf(node);
-        if(i !== -1) {
+        if (i !== -1) {
             this._nodes.splice(i, 1);
             this.scene.removeNode(node);
         }
@@ -124,7 +124,7 @@ export abstract class SceneNode {
         }
     }
 
-    public setParent(newParent: SceneNode | null) {
+    public setParent(newParent: SceneNode | null, worldPositionStays: boolean = true) {
         const curParent = this._parent;
         const curWorldPos = this.worldPosition;
         const curWorldAngle = this.worldAngle;
@@ -132,13 +132,17 @@ export abstract class SceneNode {
         this._parent = newParent;
 
         if (newParent) {
-            this.position.copy(curWorldPos.sub(newParent.worldPosition));
-            this.angle = curWorldAngle - newParent.worldAngle;
+            if (worldPositionStays) {
+                this.position.copy(curWorldPos.sub(newParent.worldPosition));
+                this.angle = curWorldAngle - newParent.worldAngle;
+            }
 
             newParent._nodes.push(this);
         } else if (curParent) {
-            this.position.copy(curWorldPos);
-            this.angle = curWorldAngle;
+            if (worldPositionStays) {
+                this.position.copy(curWorldPos);
+                this.angle = curWorldAngle;
+            }
 
             const i = curParent._nodes.indexOf(this);
             if (i !== -1) curParent._nodes.splice(i);

@@ -18,13 +18,17 @@ export const math = (() => {
     const radToDeg = (rad: number) => 
         rad / Math.PI * 180;
 
+    const randRange = (min: number, max: number) => 
+        Math.floor(Math.random() * (max - min + 1) + min);
+
     return {
         clamp,
         lerp,
         unlerp,
         sat,
         degToRad,
-        radToDeg
+        radToDeg,
+        randRange
     };
 
 })();

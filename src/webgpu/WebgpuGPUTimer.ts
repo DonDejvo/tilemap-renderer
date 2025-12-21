@@ -9,9 +9,9 @@ export class WebgpuGPUTimer implements GPUTimer {
     private resolveBuffer!: GPUBuffer;
     private availableReadBuffers: GPUBuffer[] = [];
     private readBuffer: GPUBuffer | null = null;
-    private queryStarted: boolean = false;
+    private queryActive: boolean = false;
 
-    private active = false;
+    private enabled = false;
     private pending = false;
 
     private avgMs = 0;
@@ -34,6 +34,7 @@ export class WebgpuGPUTimer implements GPUTimer {
         });
 
         this.resolveBuffer = cfg.device.createBuffer({
+            label: "GPU Timer Query Resolve Buffer",
             size: 32,
             usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC
         });
@@ -43,18 +44,16 @@ export class WebgpuGPUTimer implements GPUTimer {
         return this.supported;
     }
 
-    isActive(): boolean {
-        return this.active;
+    isEnabled(): boolean {
+        return this.enabled;
     }
 
-    activate(): boolean {
-        this.active = this.supported;
-
-        return this.active;
+    enable(): void {
+        this.enabled = this.supported;
     }
 
-    deactivate(): void {
-        this.active = false;
+    disable(): void {
+        this.enabled = false;
     }
 
     begin(encoder: GPUCommandEncoder): boolean {
@@ -63,20 +62,21 @@ export class WebgpuGPUTimer implements GPUTimer {
         const pass = this.beginComputePass(encoder, 0);
         pass.end();
 
-        this.queryStarted = true;
+        this.queryActive = true;
 
         return true;
     }
 
     end(encoder: GPUCommandEncoder): void {
-        if (!this.queryStarted) return;
+        if (!this.queryActive) return;
 
         const pass = this.beginComputePass(encoder, 2);
         pass.end();
 
-        this.queryStarted = false;
+        this.queryActive = false;
 
         this.readBuffer = this.availableReadBuffers.pop() || this.cfg.device.createBuffer({
+            label: "GPU Timer Result Buffer",
             size: 32,
             usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
         });

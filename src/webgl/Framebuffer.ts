@@ -23,6 +23,12 @@ export class Framebuffer {
 
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.texture, 0);
 
+        const depthStencil = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, depthStencil);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_STENCIL, width, height);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT,
+            gl.RENDERBUFFER, depthStencil);
+
         if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
             console.error("Framebuffer incomplete!");
         }

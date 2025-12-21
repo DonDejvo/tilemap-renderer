@@ -128,10 +128,11 @@ export const geometry = (() => {
 
     const createPolygonShadow = (light: Light, collider: PolygonCollider): number[] => {
         const vertices: number[] = [];
-        const shadowLength = light.radius;
+        const shadowLength = light.radius * 2;
+
+        const lightWorldPos = light.worldPosition;
 
         const worldPoints = collider.getWorldPoints();
-        const lightWorldPos = light.worldPosition;
 
         for (let i = 0; i < worldPoints.length; ++i) {
             const p0 = worldPoints[i];
@@ -142,13 +143,15 @@ export const geometry = (() => {
             const edgeDir = p1.clone().sub(p0).normalize();
 
             const normal = new Vector(edgeDir.y, -edgeDir.x);
-            if (Vector.dot(normal, toLight) <= 0) continue;
+            
+            const cosAngle = Vector.dot(normal, toLight);
+            if (cosAngle <= 0) continue;
 
             const dir0 = p0.clone().sub(lightWorldPos).normalize();
             const dir1 = p1.clone().sub(lightWorldPos).normalize();
 
-            const p2 = p0.clone().add(dir0.scale(shadowLength * 100));
-            const p3 = p1.clone().add(dir1.scale(shadowLength * 100));
+            const p2 = p0.clone().add(dir0.scale(shadowLength));
+            const p3 = p1.clone().add(dir1.scale(shadowLength));
 
             vertices.push(
                 p0.x, p0.y,
@@ -162,7 +165,7 @@ export const geometry = (() => {
         }
 
         return vertices;
-    };
+    }
 
     const createShadowsGeometry = (out: Float32Array, light: Light, colliders: Collider[], offset: number = 0) => {
         for (let collider of colliders.filter(collider => collider.castShadow)) {

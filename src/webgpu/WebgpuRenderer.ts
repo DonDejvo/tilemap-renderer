@@ -197,8 +197,7 @@ fn vs_main(input: VSInput) -> VSOutput {
 }
 
 @fragment
-fn fs_main(input: VSOutput) -> @location(0) vec4f {
-    return vec4f(0.0, 0.0, 0.0, 1.0);
+fn fs_main(input: VSOutput) {
 }
 `;
 
@@ -326,6 +325,7 @@ export class WebgpuRenderer implements Renderer {
     private lightUniformBindGroup!: GPUBindGroup;
     private lightUniformBuffer!: GPUBuffer;
     private shadowsVbo!: GPUBuffer;
+    private lightStencilTexture!: GPUTexture;
     private shaderCache: Map<ShaderBuilder, GPUShaderModule>;
     private renderPassUniformMap: Map<RenderPassStage, { ubo: GPUBuffer, uniformBindGroup: GPUBindGroup, textureBindGroup: GPUBindGroup }>;
     private fullscreenPassStages: {
@@ -436,6 +436,12 @@ export class WebgpuRenderer implements Renderer {
             });
             this.offscreenTextures[i] = { texture, view: texture.createView() };
         }
+        this.lightStencilTexture?.destroy();
+        this.lightStencilTexture = this.cfg.device.createTexture({
+            size: [this.canvas.width, this.canvas.height],
+            format: 'stencil8',
+            usage: GPUTextureUsage.RENDER_ATTACHMENT
+        });
         for (let [passStage, info] of this.renderPassUniformMap) {
             info.textureBindGroup = this.renderPassCreateTextureBindGroup(passStage);
         }
@@ -608,7 +614,25 @@ export class WebgpuRenderer implements Renderer {
                     format: this.cfg.format
                 }],
             },
-            primitive: { topology: "triangle-strip" }
+            primitive: { topology: "triangle-strip" },
+            depthStencil: {
+                format: 'stencil8',
+                depthWriteEnabled: false,
+                stencilFront: {
+                    compare: 'equal',
+                    failOp: 'keep',
+                    depthFailOp: 'keep',
+                    passOp: 'keep',
+                },
+                stencilBack: {
+                    compare: 'equal',
+                    failOp: 'keep',
+                    depthFailOp: 'keep',
+                    passOp: 'keep',
+                },
+                stencilReadMask: 0xFF,
+                stencilWriteMask: 0x00,
+            },
         });
 
         this.lightUniformBindGroup = this.cfg.device.createBindGroup({
@@ -641,7 +665,25 @@ export class WebgpuRenderer implements Renderer {
             fragment: {
                 module: shadowShaderModule,
                 entryPoint: "fs_main",
-                targets: [{ format: this.cfg.format }]
+                targets: [{ format: this.cfg.format, writeMask: 0 }],
+            },
+            depthStencil: {
+                format: "stencil8",
+                depthWriteEnabled: false,
+                stencilFront: {
+                    compare: 'always',
+                    failOp: 'keep',
+                    depthFailOp: 'keep',
+                    passOp: 'replace',
+                },
+                stencilBack: {
+                    compare: 'always',
+                    failOp: 'keep',
+                    depthFailOp: 'keep',
+                    passOp: 'replace',
+                },
+                stencilReadMask: 0xFF,
+                stencilWriteMask: 0xFF,
             }
         });
 
@@ -800,31 +842,38 @@ export class WebgpuRenderer implements Renderer {
         const texView = this.offscreenTextures[TEXID_LIGHTMAP + 1].view;
 
         for (let i = 0; i < sceneLights.length; ++i) {
+            const shadowDrawCall = shadowsDrawCalls[i];
+
             const lightPassDescriptor: GPURenderPassDescriptor = {
                 colorAttachments: [{
                     view: texView,
                     clearValue: new Color(0, 0, 0, 1),
                     loadOp: "clear",
                     storeOp: "store"
-                }]
+                }],
+                depthStencilAttachment: {
+                    view: this.lightStencilTexture.createView(),
+                    stencilLoadOp: 'clear',
+                    stencilStoreOp: 'store',
+                    stencilClearValue: 0,
+                }
             };
             const lightPass = encoder.beginRenderPass(lightPassDescriptor);
 
-            lightPass.setPipeline(this.lightPipeline);
-            lightPass.setVertexBuffer(0, this.vbo);
-            lightPass.setBindGroup(0, this.cameraBindGroup);
-            lightPass.setBindGroup(1, this.lightUniformBindGroup, [i * 256]);
-            lightPass.draw(4);
-
-            const shadowDrawCall = shadowsDrawCalls[i];
-
             if (shadowDrawCall.count !== 0) {
-
                 lightPass.setPipeline(this.shadowPipeline);
+                lightPass.setStencilReference(1);
                 lightPass.setVertexBuffer(0, this.shadowsVbo);
                 lightPass.setBindGroup(0, this.cameraBindGroup);
                 lightPass.draw(shadowDrawCall.count, 1, shadowDrawCall.offset);
             }
+
+            lightPass.setPipeline(this.lightPipeline);
+            lightPass.setStencilReference(0);
+            lightPass.setVertexBuffer(0, this.vbo);
+            lightPass.setBindGroup(0, this.cameraBindGroup);
+            lightPass.setBindGroup(1, this.lightUniformBindGroup, [i * 256]);
+            lightPass.draw(4);
 
             lightPass.end();
 
@@ -969,7 +1018,7 @@ export class WebgpuRenderer implements Renderer {
 
         const encoder = this.cfg.device.createCommandEncoder();
 
-        if (this.gpuTimer.isActive()) {
+        if (this.gpuTimer.isEnabled()) {
             this.gpuTimer.begin(encoder);
         }
 
@@ -1015,7 +1064,7 @@ export class WebgpuRenderer implements Renderer {
         this.lineRenderer.render(encoder, camera);
         this.lineRenderer.clear();
 
-        if (this.gpuTimer.isActive()) {
+        if (this.gpuTimer.isEnabled()) {
             this.gpuTimer.end(encoder);
         }
 
