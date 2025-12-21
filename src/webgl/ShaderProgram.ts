@@ -35,9 +35,6 @@ export class ShaderProgram {
         if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
             throw new ShaderError(gl.getProgramInfoLog(this.program) ?? "Failed to link program");
         }
-
-        gl.deleteShader(vertexShader);
-        gl.deleteShader(fragmentShader);
     }
 
     private compileShader(type: number, source: string) {
