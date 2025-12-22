@@ -87,7 +87,8 @@ export const geometry = (() => {
                 data.set(light.color.toArray(), offset + 4);
                 data[offset + 7] = light.intensity;
                 data.set(light.direction.toArray(), offset + 8);
-                data[offset + 10] = light.cutoff;
+                data[offset + 10] = light.outerCutoff;
+                data[offset + 11] = Math.max(light.innerCutoff, light.outerCutoff);
                 offset += 64;
             }
         }

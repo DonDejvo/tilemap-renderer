@@ -8,7 +8,8 @@ interface LightParams {
     color?: Color;
     intensity?: number;
     direction?: Vector;
-    cutoff?: number;
+    innerCutoff?: number;
+    outerCutoff?: number;
     isStatic?: boolean;
 }
 
@@ -17,7 +18,8 @@ export class Light extends SceneNode {
     intensity: number;
     radius: number;
     direction: Vector;
-    cutoff: number;
+    innerCutoff: number;
+    outerCutoff: number;
     isStatic: boolean;
 
     constructor(params: LightParams) {
@@ -26,7 +28,8 @@ export class Light extends SceneNode {
         this.intensity = params.intensity || 1.0;
         this.radius = params.radius;
         this.direction = params.direction || new Vector(0, 1);
-        this.cutoff = params.cutoff || 0.0;
+        this.outerCutoff = params.outerCutoff || 0.0;
+        this.innerCutoff = params.innerCutoff || 0.0;
         this.isStatic = params.isStatic || false;
     }
 

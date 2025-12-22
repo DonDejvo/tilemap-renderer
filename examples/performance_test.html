@@ -62,7 +62,7 @@
     <div id="frametimeinfo"></div>
 
     <script type="module">
-        import { createRenderer, Vector, math, colliders, Sprite, Light, Camera, Scene, assets, Color, EMATimer, Tileset } from "../src/TilemapRenderer.ts";
+        import { createRenderer, Vector, math, colliders, Sprite, Light, Camera, Scene, assets, Color, EMATimer, Tileset, TEXID_SCENE, TEXID_LIGHTMAP } from "../src/TilemapRenderer.ts";
 
         const assetsUrl = "";
         const rendererContext = "webgpu";
@@ -109,6 +109,10 @@
                     camera.vh = height;
                 }
             });
+
+            renderer.pass = [
+                { shader: "light", inputs: [TEXID_SCENE, TEXID_LIGHTMAP], output: -1 }
+            ];
 
             observer.observe(renderer.getCanvas());
 

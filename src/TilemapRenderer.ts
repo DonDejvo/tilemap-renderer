@@ -8,7 +8,7 @@ import { Light } from "./Light";
 import { math } from "./math";
 import { matrix } from "./matrix";
 import { PhysicsWorld } from "./PhysicsWorld";
-import { createRenderer } from "./Renderer";
+import { createRenderer, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE } from "./Renderer";
 import { RigidBody } from "./RigidBody";
 import { Scene } from "./Scene";
 import { SceneNode } from "./SceneNode";
@@ -18,4 +18,4 @@ import { Tilemap } from "./Tilemap";
 import { Tileset } from "./Tileset";
 import { Vector } from "./Vector";
 
-export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, Animator, ShaderBuilder, Light, RigidBody, PhysicsWorld, SceneNode, EMATimer, colliders, assets, matrix, math, createRenderer };
+export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, Animator, ShaderBuilder, Light, RigidBody, PhysicsWorld, SceneNode, EMATimer, colliders, assets, matrix, math, createRenderer, TEXID_SCENE, TEXID_MASK, TEXID_LIGHTMAP };

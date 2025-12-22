@@ -10,7 +10,7 @@ import { ShaderBuilderOutput, defaultShaderBuilder, ShaderBuilder, lightShaderBu
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 import { Framebuffer } from "../webgl/Framebuffer";
-import { ShaderProgram, worldToClipVertex } from "../webgl/ShaderProgram";
+import { lightStruct, ShaderProgram, worldToClipVertex } from "../webgl/ShaderProgram";
 import { WebglGPUTimer } from "../webgl/WebglGPUTimer";
 import { WebglLineRenderer } from "../webgl/WebglLineRenderer";
 
@@ -98,8 +98,9 @@ precision mediump float;
 
 layout(location = 0) in vec2 aVertexPos;
 
-uniform vec2 uLightCenter;
-uniform float uLightRadius;
+${lightStruct}
+
+uniform Light light;
 
 uniform vec2 uCameraPos;
 uniform vec2 uViewportDimensions;
@@ -109,7 +110,7 @@ out vec2 worldPos;
 ${worldToClipVertex}
 
 void main() {
-    worldPos = uLightCenter + (aVertexPos - 0.5) * 2.0 * uLightRadius;
+    worldPos = light.center + (aVertexPos - 0.5) * 2.0 * light.radius;
 
     gl_Position = worldToClip(worldPos, uCameraPos, uViewportDimensions);
 }
@@ -121,28 +122,29 @@ precision mediump float;
 
 in vec2 worldPos;
 
-uniform vec2 uLightCenter;
-uniform float uLightRadius;
-uniform vec3 uLightColor;
-uniform float uLightIntensity;
-uniform vec2 uLightDir;
-uniform float uLightCutoff;
+${lightStruct}
+
+uniform Light light;
 
 out vec4 fragColor;
 
 void main() {
-    vec2 toPixel = worldPos - uLightCenter;
+    vec2 toPixel = worldPos - light.center;
     float dist = length(toPixel);
 
-    float attenuation = clamp(1.0 - pow(dist / uLightRadius, 2.0), 0.0, 1.0);
+    float attenuation = clamp(1.0 - pow(dist / light.radius, 2.0), 0.0, 1.0);
 
     float spotFactor = 1.0;
-    if (uLightCutoff > 0.0) {
-        float cosAngle = dot(normalize(uLightDir), normalize(toPixel));
-        spotFactor = clamp((cosAngle - uLightCutoff) / (1.0 - uLightCutoff), 0.0, 1.0);
+    if (light.outerCutoff > 0.0) {
+        float cosAngle = dot(normalize(light.direction), normalize(toPixel));
+        spotFactor = smoothstep(
+            light.outerCutoff,
+            light.innerCutoff,
+            cosAngle
+        );
     }
 
-    fragColor = vec4(uLightColor * uLightIntensity * attenuation * spotFactor, 1.0);
+    fragColor = vec4(light.color * light.intensity * attenuation * spotFactor, 1.0);
 }
 `;
 
@@ -502,12 +504,13 @@ export class Webgl2Renderer implements Renderer {
             this.gl.uniform2f(this.lightShaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
             this.gl.uniform2f(this.lightShaderProgram.getUniform("uCameraPos"), camera.position.x, camera.position.y);
 
-            this.gl.uniform2f(this.lightShaderProgram.getUniform("uLightCenter"), light.position.x, light.position.y);
-            this.gl.uniform1f(this.lightShaderProgram.getUniform("uLightRadius"), light.radius);
-            this.gl.uniform3f(this.lightShaderProgram.getUniform("uLightColor"), light.color.r, light.color.g, light.color.b);
-            this.gl.uniform1f(this.lightShaderProgram.getUniform("uLightIntensity"), light.intensity);
-            this.gl.uniform2f(this.lightShaderProgram.getUniform("uLightDir"), light.direction.x, light.direction.y);
-            this.gl.uniform1f(this.lightShaderProgram.getUniform("uLightCutoff"), light.cutoff);
+            this.gl.uniform2f(this.lightShaderProgram.getUniform("light.center"), light.position.x, light.position.y);
+            this.gl.uniform1f(this.lightShaderProgram.getUniform("light.radius"), light.radius);
+            this.gl.uniform3f(this.lightShaderProgram.getUniform("light.color"), light.color.r, light.color.g, light.color.b);
+            this.gl.uniform1f(this.lightShaderProgram.getUniform("light.intensity"), light.intensity);
+            this.gl.uniform2f(this.lightShaderProgram.getUniform("light.direction"), light.direction.x, light.direction.y);
+            this.gl.uniform1f(this.lightShaderProgram.getUniform("light.outerCutoff"), light.outerCutoff);
+            this.gl.uniform1f(this.lightShaderProgram.getUniform("light.innerCutoff"), light.innerCutoff);
 
             this.gl.bindVertexArray(this.lightVao);
             this.gl.drawArrays(this.gl.TRIANGLE_STRIP, 0, 4);
@@ -659,11 +662,7 @@ export class Webgl2Renderer implements Renderer {
         }
 
         this.renderLights(scene, camera);
-
         this.renderScene(this.framebuffers[TEXID_SCENE], this.shaderProgram, camera, this.clearColor, layers);
-
-        this.renderFullscreenPass({ shader: "light", inputs: [TEXID_SCENE, TEXID_LIGHTMAP], output: 0 });
-
         this.renderScene(this.framebuffers[TEXID_MASK], this.maskShaderProgram, camera, maskClearColor, layers);
 
         for (let i = 0; i < this.pass.length; ++i) {

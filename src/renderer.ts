@@ -17,9 +17,9 @@ export const UNIFORMS_MAX_SIZE = 64;
 export const MAX_LIGHTS = 1000;
 export const SHADOW_MAX_VERTICES = 3 * 8 * 256;
 
-export const TEXID_SCENE = 3;
+export const TEXID_SCENE = 0;
 export const TEXID_MASK = 1;
-export const TEXID_LIGHTMAP = 1;
+export const TEXID_LIGHTMAP = 2;
 
 export const defaultPassStage: RenderPassStage = { shader: "default", inputs: [0], output: -1 };
 

@@ -131,7 +131,8 @@ struct Light {
     color: vec3f,
     intensity: f32,
     direction: vec2f,
-    cutoff: f32
+    outerCutoff: f32,
+    innerCutoff: f32
 }
 
 @group(0) @binding(0)
@@ -160,9 +161,13 @@ fn fs_main(input: VSOutput) -> @location(0) vec4f {
     let attenuation = clamp(1.0 - pow(dist / light.radius, 2.0), 0.0, 1.0);
 
     var spotFactor = 1.0;
-    if (light.cutoff > 0.0) {
+    if (light.outerCutoff > 0.0) {
         let cosAngle = dot(normalize(toPixel), normalize(light.direction));
-        spotFactor = clamp((cosAngle - light.cutoff) / (1.0 - light.cutoff), 0.0, 1.0);
+        spotFactor = smoothstep(
+            light.outerCutoff,
+            light.innerCutoff,
+            cosAngle
+        );
     }
 
     return vec4f(light.color * light.intensity * attenuation * spotFactor, 1.0);
@@ -325,11 +330,10 @@ export class WebgpuRenderer implements Renderer {
     private lightUniformBindGroup!: GPUBindGroup;
     private lightUniformBuffer!: GPUBuffer;
     private shadowsVbo!: GPUBuffer;
-    private lightStencilTexture!: GPUTexture;
+    private lightStencilTexture!: { texture: GPUTexture, view: GPUTextureView };
     private shaderCache: Map<ShaderBuilder, GPUShaderModule>;
     private renderPassUniformMap: Map<RenderPassStage, { ubo: GPUBuffer, uniformBindGroup: GPUBindGroup, textureBindGroup: GPUBindGroup }>;
     private fullscreenPassStages: {
-        mainLight: RenderPassStage;
         lightBlurHorizontal: RenderPassStage;
         lightBlurVertical: RenderPassStage;
         lightAdditive: RenderPassStage;
@@ -354,7 +358,6 @@ export class WebgpuRenderer implements Renderer {
         this.shaderCache = new Map();
         this.renderPassUniformMap = new Map();
         this.fullscreenPassStages = {
-            mainLight: { shader: "light", inputs: [TEXID_SCENE, TEXID_LIGHTMAP], output: 0 },
             lightBlurHorizontal: { shader: "blurHorizontal", inputs: [TEXID_LIGHTMAP + 1], output: 4 },
             lightBlurVertical: { shader: "blurVertical", inputs: [4], output: 5 },
             lightAdditive: { shader: "default_additive", inputs: [5], output: TEXID_LIGHTMAP }
@@ -436,12 +439,13 @@ export class WebgpuRenderer implements Renderer {
             });
             this.offscreenTextures[i] = { texture, view: texture.createView() };
         }
-        this.lightStencilTexture?.destroy();
-        this.lightStencilTexture = this.cfg.device.createTexture({
+        this.lightStencilTexture?.texture.destroy();
+        const stencilTexture = this.cfg.device.createTexture({
             size: [this.canvas.width, this.canvas.height],
             format: 'stencil8',
             usage: GPUTextureUsage.RENDER_ATTACHMENT
         });
+        this.lightStencilTexture = { texture: stencilTexture, view: stencilTexture.createView() };
         for (let [passStage, info] of this.renderPassUniformMap) {
             info.textureBindGroup = this.renderPassCreateTextureBindGroup(passStage);
         }
@@ -852,7 +856,7 @@ export class WebgpuRenderer implements Renderer {
                     storeOp: "store"
                 }],
                 depthStencilAttachment: {
-                    view: this.lightStencilTexture.createView(),
+                    view: this.lightStencilTexture.view,
                     stencilLoadOp: 'clear',
                     stencilStoreOp: 'store',
                     stencilClearValue: 0,
@@ -1049,11 +1053,7 @@ export class WebgpuRenderer implements Renderer {
         );
 
         this.renderLights(encoder, scene, camera);
-
         this.renderScene(encoder, this.pipeline, this.offscreenTextures[TEXID_SCENE].view, this.clearColor, layers);
-
-        this.renderFullscreenPass(encoder, this.fullscreenPassStages.mainLight);
-
         this.renderScene(encoder, this.maskPipeline, this.offscreenTextures[TEXID_MASK].view, maskClearColor, layers);
 
         for (let i = 0; i < this.pass.length; ++i) {

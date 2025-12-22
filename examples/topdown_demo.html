@@ -18,7 +18,7 @@
             height: 100%;
         }
 
-        #fps {
+        #fpsinfo {
             position: fixed;
             left: 10px;
             top: 10px;
@@ -135,7 +135,7 @@
 </head>
 
 <body>
-    <div id="fps">FPS: 0</div>
+    <div id="fpsinfo">FPS: 0</div>
     <div id="sceneinfo"></div>
     <div id="frametimeinfo"></div>
 
@@ -148,7 +148,7 @@
     </div>
 
     <script type="module">
-        import { createRenderer, Tileset, Tilemap, Vector, math, colliders, Sprite, Light, ShaderBuilder, Camera, Scene, assets, Animator, Color, EMATimer } from "../src/TilemapRenderer.ts";
+        import { createRenderer, Tileset, Tilemap, Vector, math, colliders, Sprite, Light, ShaderBuilder, Camera, Scene, assets, Animator, Color, EMATimer, TEXID_SCENE, TEXID_MASK, TEXID_LIGHTMAP } from "../src/TilemapRenderer.ts";
 
         ShaderBuilder.LOG_SHADERS = true;
 
@@ -356,7 +356,6 @@
 
         const main = async () => {
             let w = 1920, h = 1080;
-            const fpsElem = document.getElementById("fps");
             let frameCount = 0;
             let fps = 0;
             let dt = 0;
@@ -384,7 +383,7 @@
             });
 
             const scene = new Scene();
-            scene.ambientIntensity = 0.1;
+            scene.ambientIntensity = 0.2;
 
             let player = null;
 
@@ -427,7 +426,8 @@
                         case "light":
                             const light = new Light({
                                 radius: 240,
-                                cutoff: 0.7,
+                                innerCutoff: 0.7,
+                                outerCutoff: 0.7,
                                 direction: Vector.fromAngle(math.degToRad(obj.getProperty("angle") || 0))
                             });
 
@@ -480,6 +480,28 @@
             renderer.registerShader("neonExtract", neonExtract);
             renderer.registerShader("neonComposite", neonComposite);
 
+            const colorCut = new ShaderBuilder();
+
+            colorCut
+                .uniform("interval", "float")
+                .mainImage()
+                .declareVar("uv", "vec2")
+                .set("uv", "fragCoord / uniforms.resolution")
+                .set("fragColor", "floor(texture(0, uv) * uniforms.interval) / uniforms.interval");
+
+            renderer.registerShader("colorCut", colorCut);
+
+            const pixelate = new ShaderBuilder();
+
+            pixelate
+                .uniform("interval", "float")
+                .mainImage()
+                .declareVar("uv", "vec2")
+                .set("uv", "fragCoord / uniforms.resolution")
+                .set("fragColor", "texture(0, floor(uv * uniforms.interval) / uniforms.interval)");
+
+            renderer.registerShader("pixelate", pixelate);
+
             await renderer.init();
             renderer.clearColor = new Color(0.5, 0.5, 0.5);
 
@@ -498,7 +520,7 @@
 
             renderer.pass = [
                 // downscale to quarter
-                { shader: "default", inputs: [1], output: k },
+                { shader: "default", inputs: [TEXID_MASK], output: k },
 
                 // neon glow extraction
                 { shader: "neonExtract", inputs: [k], output: k + 1, uniforms: [{ name: "threshold", value: 0.5 }] },
@@ -507,8 +529,17 @@
                 { shader: "blurHorizontal", inputs: [k + 1], output: k },
                 { shader: "blurVertical", inputs: [k], output: k + 1 },
 
+                // Light color cut
+                { shader: "colorCut", inputs: [TEXID_LIGHTMAP], output: 3, uniforms: [{ name: "interval", value: 6 }] },
+
+                // Light pixelate
+                { shader: "pixelate", inputs: [3], output: TEXID_LIGHTMAP, uniforms: [{ name: "interval", value: 400 }] },
+
+                // Light
+                { shader: "light", inputs: [TEXID_SCENE, TEXID_LIGHTMAP], output: 3 },
+
                 // composite with original full scene
-                { shader: "neonComposite", inputs: [0, k + 1], output: -1 }
+                { shader: "neonComposite", inputs: [3, k + 1], output: -1 }
             ];
 
             const cpuTimer = new EMATimer();
@@ -530,7 +561,6 @@
                         fps = frameCount;
                         frameCount = 0;
                         lastFPSUpdate = now;
-                        fpsElem.textContent = `${rendererContext.toUpperCase()} - FPS: ${fps}`;
                     }
 
                     accTime += dt;
@@ -539,18 +569,6 @@
                         accTime -= fixedDeltaTime;
                         scene.fixedUpdate(fixedDeltaTime);
                     }
-
-                    const formatSceneInfo = (info) => {
-                        const format = (elem, depth = 0) => {
-                            if (typeof elem === "object") {
-                                return "\n" + Object.entries(elem).map(([key, val]) => "\t".repeat(depth) + key + ": " + format(val, depth + 1)).join("")
-                            }
-                            return ("" + elem).padEnd(6) + "\n";
-                        }
-                        return format(info);
-                    }
-
-                    sceneinfo.innerHTML = `<pre>${formatSceneInfo(scene.getInfo())}</pre>`;
 
                     input.update();
 
@@ -598,24 +616,36 @@
 
                     cpuTimer.poll();
                     gpuTimer.poll();
-
-                    const frameTimeInfo = document.getElementById("frametimeinfo");
-
-                    const avgGPU = gpuTimer.getAverage();
-                    const peakGPU = gpuTimer.getPeak();
-                    const avgCPU = cpuTimer.getAverage();
-                    const peakCPU = cpuTimer.getPeak();
-
-                    frameTimeInfo.innerHTML = `
-<div>GPU: avg: ${avgGPU?.toFixed(2) ?? "-"} ms, peak: ${peakGPU.toFixed(2)}</div>
-<div>CPU: avg: ${avgCPU?.toFixed(2) ?? "-"} ms, peak: ${peakCPU.toFixed(2)}</div>
-`;
-
-
                 });
             }
 
             draw();
+
+            setInterval(() => {
+                const formatSceneInfo = (info) => {
+                    const format = (elem, depth = 0) => {
+                        if (typeof elem === "object") {
+                            return "\n" + Object.entries(elem).map(([key, val]) => "\t".repeat(depth) + key + ": " + format(val, depth + 1)).join("")
+                        }
+                        return ("" + elem).padEnd(6) + "\n";
+                    }
+                    return format(info);
+                }
+
+                fpsinfo.textContent = `${rendererContext.toUpperCase()} - FPS: ${fps}`;
+
+                sceneinfo.innerHTML = `<pre>${formatSceneInfo(scene.getInfo())}</pre>`;
+
+                const avgGPU = gpuTimer.getAverage();
+                const peakGPU = gpuTimer.getPeak();
+                const avgCPU = cpuTimer.getAverage();
+                const peakCPU = cpuTimer.getPeak();
+
+                frametimeinfo.innerHTML = `
+<div>GPU: avg: ${avgGPU?.toFixed(2) ?? "-"} ms, peak: ${peakGPU.toFixed(2)}</div>
+<div>CPU: avg: ${avgCPU?.toFixed(2) ?? "-"} ms, peak: ${peakCPU.toFixed(2)}</div>
+`;
+            }, 100);
         };
 
         main();
