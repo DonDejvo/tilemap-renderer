@@ -1,4 +1,4 @@
-import { Bounds } from "./common";
+import { Bounds } from "./bounds";
 import { Vector } from "./Vector";
 
 export class Camera {

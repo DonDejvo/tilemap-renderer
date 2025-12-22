@@ -491,17 +491,6 @@
 
             renderer.registerShader("colorCut", colorCut);
 
-            const pixelate = new ShaderBuilder();
-
-            pixelate
-                .uniform("interval", "float")
-                .mainImage()
-                .declareVar("uv", "vec2")
-                .set("uv", "fragCoord / uniforms.resolution")
-                .set("fragColor", "texture(0, floor(uv * uniforms.interval) / uniforms.interval)");
-
-            renderer.registerShader("pixelate", pixelate);
-
             await renderer.init();
             renderer.clearColor = new Color(0.5, 0.5, 0.5);
 
@@ -518,7 +507,7 @@
 
             observer.observe(renderer.getCanvas());
 
-            renderer.pass = [
+            renderer.pipeline = [
                 // downscale to quarter
                 { shader: "default", inputs: [TEXID_MASK], output: k },
 
@@ -532,14 +521,11 @@
                 // Light color cut
                 { shader: "colorCut", inputs: [TEXID_LIGHTMAP], output: 3, uniforms: [{ name: "interval", value: 6 }] },
 
-                // Light pixelate
-                { shader: "pixelate", inputs: [3], output: TEXID_LIGHTMAP, uniforms: [{ name: "interval", value: 400 }] },
-
                 // Light
-                { shader: "light", inputs: [TEXID_SCENE, TEXID_LIGHTMAP], output: 3 },
+                { shader: "light", inputs: [TEXID_SCENE, 3], output: TEXID_LIGHTMAP },
 
                 // composite with original full scene
-                { shader: "neonComposite", inputs: [3, k + 1], output: -1 }
+                { shader: "neonComposite", inputs: [TEXID_LIGHTMAP, k + 1], output: -1 }
             ];
 
             const cpuTimer = new EMATimer();

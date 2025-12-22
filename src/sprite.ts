@@ -1,5 +1,5 @@
 import { Color } from "./Color";
-import { Bounds } from "./common";
+import { Bounds } from "./bounds";
 import { SceneNode } from "./SceneNode";
 import { Tileset, TilesetRegion } from "./Tileset";
 import { Vector } from "./Vector";

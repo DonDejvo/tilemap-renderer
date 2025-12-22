@@ -1,10 +1,10 @@
 import { Camera } from "../Camera";
 import { Color } from "../Color";
-import { getHeight, getWidth, overlaps } from "../common";
+import { getHeight, getWidth, overlaps } from "../bounds";
 import { geometry } from "../geometry";
 import { LineRenderer } from "../LineRenderer";
 import { math } from "../math";
-import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, GPUTimer, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo, UNIFORMS_MAX_SIZE } from "../Renderer";
+import { BlendMode, defaultPass, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, GPUTimer, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPass, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo, UNIFORMS_MAX_SIZE } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
 import { blurHorizontalBuilder, blurVerticalBuilder, defaultShaderBuilder, lightShaderBuilder, ShaderBuilder, ShaderBuilderOutput } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
@@ -307,7 +307,7 @@ export class WebgpuRenderer implements Renderer {
     private canvas: HTMLCanvasElement;
     private ctx!: GPUCanvasContext;
     private cfg!: GPUConfig;
-    private pipeline!: GPURenderPipeline;
+    private mainPipeline!: GPURenderPipeline;
     private vbo!: GPUBuffer;
     private layersMap: Map<SceneLayer, WebgpuRendererLayer>;
     private texturesMap: Map<string, TextureInfo>;
@@ -319,7 +319,7 @@ export class WebgpuRenderer implements Renderer {
     private offscreenTextures: { texture: GPUTexture, view: GPUTextureView }[];
     private fullscreenSampler!: GPUSampler;
     private initialized: boolean;
-    public pass: RenderPassStage[];
+    public pipeline: RenderPass[];
     private maskPipeline!: GPURenderPipeline;
     private commonBGL!: GPUBindGroupLayout;
     private cameraBGL!: GPUBindGroupLayout;
@@ -332,11 +332,11 @@ export class WebgpuRenderer implements Renderer {
     private shadowsVbo!: GPUBuffer;
     private lightStencilTexture!: { texture: GPUTexture, view: GPUTextureView };
     private shaderCache: Map<ShaderBuilder, GPUShaderModule>;
-    private renderPassUniformMap: Map<RenderPassStage, { ubo: GPUBuffer, uniformBindGroup: GPUBindGroup, textureBindGroup: GPUBindGroup }>;
-    private fullscreenPassStages: {
-        lightBlurHorizontal: RenderPassStage;
-        lightBlurVertical: RenderPassStage;
-        lightAdditive: RenderPassStage;
+    private renderPassUniformMap: Map<RenderPass, { ubo: GPUBuffer, uniformBindGroup: GPUBindGroup, textureBindGroup: GPUBindGroup }>;
+    private fullscreenPasses: {
+        lightBlurHorizontal: RenderPass;
+        lightBlurVertical: RenderPass;
+        lightAdditive: RenderPass;
     };
     private resizeRequested: boolean;
     private lineRenderer!: WebgpuLineRendrer;
@@ -352,12 +352,12 @@ export class WebgpuRenderer implements Renderer {
         this.clearColor = new Color(0, 0, 0, 0);
         this.shaderMap = new Map();
         this.initialized = false;
-        this.pass = [defaultPassStage];
+        this.pipeline = [defaultPass];
         this.offscreenTextures = [];
         this.time = 0;
         this.shaderCache = new Map();
         this.renderPassUniformMap = new Map();
-        this.fullscreenPassStages = {
+        this.fullscreenPasses = {
             lightBlurHorizontal: { shader: "blurHorizontal", inputs: [TEXID_LIGHTMAP + 1], output: 4 },
             lightBlurVertical: { shader: "blurVertical", inputs: [4], output: 5 },
             lightAdditive: { shader: "default_additive", inputs: [5], output: TEXID_LIGHTMAP }
@@ -446,8 +446,8 @@ export class WebgpuRenderer implements Renderer {
             usage: GPUTextureUsage.RENDER_ATTACHMENT
         });
         this.lightStencilTexture = { texture: stencilTexture, view: stencilTexture.createView() };
-        for (let [passStage, info] of this.renderPassUniformMap) {
-            info.textureBindGroup = this.renderPassCreateTextureBindGroup(passStage);
+        for (let [pass, info] of this.renderPassUniformMap) {
+            info.textureBindGroup = this.renderPassCreateTextureBindGroup(pass);
         }
     }
 
@@ -581,7 +581,7 @@ export class WebgpuRenderer implements Renderer {
             ]
         });
 
-        this.pipeline = this.createMainPipeline(mainSource, "Main");
+        this.mainPipeline = this.createMainPipeline(mainSource, "Main");
         this.maskPipeline = this.createMainPipeline(maskSource, "Mask");
 
         this.lightUniformBuffer = this.cfg.device.createBuffer({
@@ -699,7 +699,7 @@ export class WebgpuRenderer implements Renderer {
 
         this.cameraBindGroup = device.createBindGroup({
             label: "Camera Uniform Bind Group",
-            layout: this.pipeline.getBindGroupLayout(0),
+            layout: this.mainPipeline.getBindGroupLayout(0),
             entries: [{
                 binding: 0, resource: { buffer: this.cameraBuffer }
             }]
@@ -897,27 +897,27 @@ export class WebgpuRenderer implements Renderer {
                 getHeight(lightBounds) * 0.5 + 8
             ];
 
-            this.fullscreenPassStages.lightBlurHorizontal.scissor = scissorHalf;
-            this.fullscreenPassStages.lightBlurVertical.scissor = scissorHalf;
-            this.fullscreenPassStages.lightAdditive.scissor = scissor;
+            this.fullscreenPasses.lightBlurHorizontal.scissor = scissorHalf;
+            this.fullscreenPasses.lightBlurVertical.scissor = scissorHalf;
+            this.fullscreenPasses.lightAdditive.scissor = scissor;
 
-            this.renderFullscreenPass(encoder, this.fullscreenPassStages.lightBlurHorizontal);
-            this.renderFullscreenPass(encoder, this.fullscreenPassStages.lightBlurVertical);
-            this.renderFullscreenPass(encoder, this.fullscreenPassStages.lightAdditive);
+            this.renderFullscreenPass(encoder, this.fullscreenPasses.lightBlurHorizontal);
+            this.renderFullscreenPass(encoder, this.fullscreenPasses.lightBlurVertical);
+            this.renderFullscreenPass(encoder, this.fullscreenPasses.lightAdditive);
         }
     }
 
-    private renderPassCreateTextureBindGroup(passStage: RenderPassStage) {
-        const shaderInfo = this.shaderMap.get(passStage.shader);
+    private renderPassCreateTextureBindGroup(pass: RenderPass) {
+        const shaderInfo = this.shaderMap.get(pass.shader);
         if (!shaderInfo) {
-            throw new Error("Unknown shader " + passStage.shader);
+            throw new Error("Unknown shader " + pass.shader);
         }
 
         const entries: GPUBindGroupEntry[] = [
             { binding: 0, resource: this.fullscreenSampler }
         ];
         for (let i = 0; i < MAX_CHANNELS; i++) {
-            const texIndex = passStage.inputs[i] ?? passStage.inputs[0];
+            const texIndex = pass.inputs[i] ?? pass.inputs[0];
 
             const texture = this.offscreenTextures[math.clamp(texIndex, 0, OFFSCREEN_TEXTURES - 1)];
 
@@ -927,7 +927,7 @@ export class WebgpuRenderer implements Renderer {
             });
         }
         const textureBindGroup = this.cfg.device.createBindGroup({
-            label: "Render Pass \"" + passStage.shader + "\" - Texture Bind Group",
+            label: "Render Pass \"" + pass.shader + "\" - Texture Bind Group",
             layout: shaderInfo.pipeline!.getBindGroupLayout(1),
             entries
         });
@@ -935,66 +935,66 @@ export class WebgpuRenderer implements Renderer {
         return textureBindGroup;
     }
 
-    private renderFullscreenPass(encoder: GPUCommandEncoder, passStage: RenderPassStage) {
-        const shaderInfo = this.shaderMap.get(passStage.shader);
+    private renderFullscreenPass(encoder: GPUCommandEncoder, pass: RenderPass) {
+        const shaderInfo = this.shaderMap.get(pass.shader);
         if (!shaderInfo) {
-            throw new Error("Unknown shader " + passStage.shader);
+            throw new Error("Unknown shader " + pass.shader);
         }
 
         let outputTex: { texture: GPUTexture, view: GPUTextureView };
-        if (passStage.output === -1) {
+        if (pass.output === -1) {
             const canvasTexture = this.ctx.getCurrentTexture();
             outputTex = { texture: canvasTexture, view: canvasTexture.createView() };
         } else {
-            outputTex = this.offscreenTextures[math.clamp(passStage.output, 0, OFFSCREEN_TEXTURES - 1)];
+            outputTex = this.offscreenTextures[math.clamp(pass.output, 0, OFFSCREEN_TEXTURES - 1)];
         }
 
         const uniforms = shaderInfo.builder.getUniforms();
-        const stageUniforms = [{ name: "time", value: this.time }, { name: "resolution", value: [outputTex.texture.width, outputTex.texture.height] }].concat(passStage.uniforms ?? []);
+        const passUniforms = [{ name: "time", value: this.time }, { name: "resolution", value: [outputTex.texture.width, outputTex.texture.height] }].concat(pass.uniforms ?? []);
         const uniformData = new Float32Array(UNIFORMS_MAX_SIZE);
 
         for (let uniform of uniforms) {
-            const stageUniform = stageUniforms.find(elem => elem.name === uniform.name);
-            if (stageUniform) {
-                const value = typeof stageUniform.value === "number" ? [stageUniform.value] : stageUniform.value;
+            const passUniform = passUniforms.find(elem => elem.name === uniform.name);
+            if (passUniform) {
+                const value = typeof passUniform.value === "number" ? [passUniform.value] : passUniform.value;
                 uniformData.set(value, uniform.offset);
             }
         }
 
-        if (!this.renderPassUniformMap.has(passStage)) {
+        if (!this.renderPassUniformMap.has(pass)) {
             const ubo = this.cfg.device.createBuffer({
-                label: "Render Pass \"" + passStage.shader + "\" - Uniform Buffer",
+                label: "Render Pass \"" + pass.shader + "\" - Uniform Buffer",
                 size: 256,
                 usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
             });
             const uniformBindGroup = this.cfg.device.createBindGroup({
-                label: "Render Pass \"" + passStage.shader + "\" - Uniform Bind Group",
+                label: "Render Pass \"" + pass.shader + "\" - Uniform Bind Group",
                 layout: shaderInfo.pipeline!.getBindGroupLayout(0),
                 entries: [{ binding: 0, resource: { buffer: ubo } }]
             });
-            const textureBindGroup = this.renderPassCreateTextureBindGroup(passStage);
+            const textureBindGroup = this.renderPassCreateTextureBindGroup(pass);
 
-            this.renderPassUniformMap.set(passStage, { ubo, uniformBindGroup, textureBindGroup });
+            this.renderPassUniformMap.set(pass, { ubo, uniformBindGroup, textureBindGroup });
         }
 
-        const uniformsInfo = this.renderPassUniformMap.get(passStage)!;
+        const uniformsInfo = this.renderPassUniformMap.get(pass)!;
         this.cfg.device.queue.writeBuffer(uniformsInfo.ubo, 0, uniformData);
 
         const fullscreenPassDescriptor: GPURenderPassDescriptor = {
             colorAttachments: [{
                 view: outputTex.view,
-                loadOp: passStage.clearColor ? "clear" : "load",
-                clearValue: passStage.clearColor,
+                loadOp: pass.clearColor ? "clear" : "load",
+                clearValue: pass.clearColor,
                 storeOp: "store"
             }]
         };
         const fullscreenPass = encoder.beginRenderPass(fullscreenPassDescriptor);
 
-        if (passStage.scissor) {
-            const x = math.clamp(passStage.scissor[0], 0, outputTex.texture.width);
-            const y = math.clamp(passStage.scissor[1], 0, outputTex.texture.height);
-            const width = math.clamp(passStage.scissor[2], 0, outputTex.texture.width - x);
-            const height = math.clamp(passStage.scissor[3], 0, outputTex.texture.height - y);
+        if (pass.scissor) {
+            const x = math.clamp(pass.scissor[0], 0, outputTex.texture.width);
+            const y = math.clamp(pass.scissor[1], 0, outputTex.texture.height);
+            const width = math.clamp(pass.scissor[2], 0, outputTex.texture.width - x);
+            const height = math.clamp(pass.scissor[3], 0, outputTex.texture.height - y);
             fullscreenPass.setScissorRect(x, y, width, height);
         }
 
@@ -1053,12 +1053,11 @@ export class WebgpuRenderer implements Renderer {
         );
 
         this.renderLights(encoder, scene, camera);
-        this.renderScene(encoder, this.pipeline, this.offscreenTextures[TEXID_SCENE].view, this.clearColor, layers);
+        this.renderScene(encoder, this.mainPipeline, this.offscreenTextures[TEXID_SCENE].view, this.clearColor, layers);
         this.renderScene(encoder, this.maskPipeline, this.offscreenTextures[TEXID_MASK].view, maskClearColor, layers);
 
-        for (let i = 0; i < this.pass.length; ++i) {
-            const passStage = this.pass[i];
-            this.renderFullscreenPass(encoder, passStage);
+        for (const pass of this.pipeline) {
+            this.renderFullscreenPass(encoder, pass);
         }
 
         this.lineRenderer.render(encoder, camera);
@@ -1157,8 +1156,8 @@ export class WebgpuRenderer implements Renderer {
         return texInfo;
     }
 
-    public getPipeline() {
-        return this.pipeline;
+    public getMainPipeline() {
+        return this.mainPipeline;
     }
 
     public getSampler() {
@@ -1208,7 +1207,7 @@ class WebgpuRendererLayer {
 
     public uploadSprites(sprites: Sprite[]) {
         const device = this.renderer.getConfig().device;
-        const pipeline = this.renderer.getPipeline();
+        const pipeline = this.renderer.getMainPipeline();
         const sampler = this.renderer.getSampler();
 
         device.queue.writeBuffer(this.instanceBuffer, 0, geometry.createSpritesData(sprites, true));

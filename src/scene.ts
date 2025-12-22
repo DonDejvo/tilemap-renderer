@@ -1,7 +1,7 @@
 import { Animator } from "./Animator";
 import { Collider } from "./Collider";
 import { Color } from "./Color";
-import { Bounds } from "./common";
+import { Bounds } from "./bounds";
 import { Light } from "./Light";
 import { RigidBody } from "./RigidBody";
 import { SceneNode } from "./SceneNode";

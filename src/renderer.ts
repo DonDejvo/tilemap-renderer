@@ -21,7 +21,7 @@ export const TEXID_SCENE = 0;
 export const TEXID_MASK = 1;
 export const TEXID_LIGHTMAP = 2;
 
-export const defaultPassStage: RenderPassStage = { shader: "default", inputs: [0], output: -1 };
+export const defaultPass: RenderPass = { shader: "default", inputs: [0], output: -1 };
 
 export const getOffscreenTextureSizeFactor = (idx: number) => {
     return 1 / (1 << Math.max(0, Math.floor((idx - 2) * 0.5)));
@@ -37,7 +37,7 @@ export interface TextureInfo {
     idx: number;
 }
 
-export interface RenderPassStage {
+export interface RenderPass {
     shader: string;
     inputs: number[];
     output: number;
@@ -77,7 +77,7 @@ export interface Renderer {
     clearColor: Color;
     getBuilderOptions(): RendererBuilderOptions;
     registerShader(name: string, builder: ShaderBuilder, blendMode?: BlendMode): void;
-    pass: RenderPassStage[];
+    pipeline: RenderPass[];
     getLineRenderer(): LineRenderer;
     getGpuTimer(): GPUTimer;
 }

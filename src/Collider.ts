@@ -1,4 +1,4 @@
-import { Bounds } from "./common";
+import { Bounds } from "./bounds";
 import { RigidBody } from "./RigidBody";
 import { SceneNode } from "./SceneNode";
 import { SpatialHashGridClient } from "./SpatialHashGrid";

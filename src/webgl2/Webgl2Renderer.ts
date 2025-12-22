@@ -1,10 +1,10 @@
 import { Camera } from "../Camera";
 import { Color } from "../Color";
-import { getHeight, getWidth, overlaps } from "../common";
+import { getHeight, getWidth, overlaps } from "../bounds";
 import { geometry } from "../geometry";
 import { LineRenderer } from "../LineRenderer";
 import { math } from "../math";
-import { BlendMode, defaultPassStage, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, GPUTimer, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPassStage, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo } from "../Renderer";
+import { BlendMode, defaultPass, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, GPUTimer, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPass, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
 import { ShaderBuilderOutput, defaultShaderBuilder, ShaderBuilder, lightShaderBuilder, blurHorizontalBuilder, blurVerticalBuilder } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
@@ -235,7 +235,7 @@ export class Webgl2Renderer implements Renderer {
     private shaderMap: Map<string, { shader?: ShaderProgram, builder: ShaderBuilder, blendMode: BlendMode }>;
     public clearColor: Color;
     private initialized: boolean;
-    public pass: RenderPassStage[];
+    public pipeline: RenderPass[];
     private time: number;
     private lightVao!: WebGLVertexArrayObject;
     private shadowsVao!: WebGLVertexArrayObject;
@@ -253,7 +253,7 @@ export class Webgl2Renderer implements Renderer {
         this.clearColor = new Color(0, 0, 0, 0);
         this.shaderMap = new Map();
         this.initialized = false;
-        this.pass = [defaultPassStage];
+        this.pipeline = [defaultPass];
         this.framebuffers = [];
         this.time = 0;
         this.shaderCache = new Map();
@@ -543,13 +543,13 @@ export class Webgl2Renderer implements Renderer {
         }
     }
 
-    private renderFullscreenPass(passStage: RenderPassStage) {
-        const shaderInfo = this.shaderMap.get(passStage.shader);
+    private renderFullscreenPass(pass: RenderPass) {
+        const shaderInfo = this.shaderMap.get(pass.shader);
         if (!shaderInfo) {
-            throw new Error("Unknown shader " + passStage.shader);
+            throw new Error("Unknown shader " + pass.shader);
         }
 
-        if (passStage.clearColor) {
+        if (pass.clearColor) {
             this.gl.clearColor(this.clearColor.r, this.clearColor.g, this.clearColor.b, this.clearColor.a);
             this.gl.clear(this.gl.COLOR_BUFFER_BIT);
         }
@@ -557,8 +557,8 @@ export class Webgl2Renderer implements Renderer {
         const shader = shaderInfo.shader!;
 
         let sw = this.canvas.width, sh = this.canvas.height;
-        if (passStage.output !== -1) {
-            const outFbo = this.framebuffers[math.clamp(passStage.output, 0, OFFSCREEN_TEXTURES - 1)];
+        if (pass.output !== -1) {
+            const outFbo = this.framebuffers[math.clamp(pass.output, 0, OFFSCREEN_TEXTURES - 1)];
             sw = outFbo.width;
             sh = outFbo.height;
             outFbo.bind();
@@ -566,22 +566,22 @@ export class Webgl2Renderer implements Renderer {
             this.gl.viewport(0, 0, sw, sh);
         }
 
-        if (passStage.scissor) {
+        if (pass.scissor) {
             this.gl.enable(this.gl.SCISSOR_TEST);
-            this.gl.scissor(passStage.scissor[0], sh - passStage.scissor[1] - passStage.scissor[3], passStage.scissor[2], passStage.scissor[3]);
+            this.gl.scissor(pass.scissor[0], sh - pass.scissor[1] - pass.scissor[3], pass.scissor[2], pass.scissor[3]);
         }
 
         this.blend(shaderInfo.blendMode);
 
         shader.use();
 
-        const stageUniforms = [{ name: "time", value: this.time }, { name: "resolution", value: [sw, sh] }].concat(passStage.uniforms ?? []);
+        const passUniforms = [{ name: "time", value: this.time }, { name: "resolution", value: [sw, sh] }].concat(pass.uniforms ?? []);
 
         const uniforms = shaderInfo.builder.getUniforms();
         for (let uniform of uniforms) {
-            const stageUniform = stageUniforms.find(elem => elem.name === uniform.name);
-            if (stageUniform) {
-                const value = typeof stageUniform.value === "number" ? [stageUniform.value] : stageUniform.value;
+            const passUniform = passUniforms.find(elem => elem.name === uniform.name);
+            if (passUniform) {
+                const value = typeof passUniform.value === "number" ? [passUniform.value] : passUniform.value;
                 const loc = shader.getUniform("uniforms." + uniform.name);
                 switch (uniform.type) {
                     case "float":
@@ -601,7 +601,7 @@ export class Webgl2Renderer implements Renderer {
         }
 
         for (let c = 0; c < MAX_CHANNELS; c++) {
-            const texIndex = passStage.inputs[c] ?? passStage.inputs[0];
+            const texIndex = pass.inputs[c] ?? pass.inputs[0];
             const texture = this.framebuffers[math.clamp(texIndex, 0, OFFSCREEN_TEXTURES - 1)].texture;
 
             this.gl.activeTexture(this.gl.TEXTURE0 + c);
@@ -618,11 +618,11 @@ export class Webgl2Renderer implements Renderer {
             this.gl.bindTexture(this.gl.TEXTURE_2D, null);
         }
 
-        if (passStage.output !== -1) {
-            this.framebuffers[math.clamp(passStage.output, 0, OFFSCREEN_TEXTURES - 1)].unbind();
+        if (pass.output !== -1) {
+            this.framebuffers[math.clamp(pass.output, 0, OFFSCREEN_TEXTURES - 1)].unbind();
         }
 
-        if (passStage.scissor) {
+        if (pass.scissor) {
             this.gl.disable(this.gl.SCISSOR_TEST);
         }
     }
@@ -665,9 +665,8 @@ export class Webgl2Renderer implements Renderer {
         this.renderScene(this.framebuffers[TEXID_SCENE], this.shaderProgram, camera, this.clearColor, layers);
         this.renderScene(this.framebuffers[TEXID_MASK], this.maskShaderProgram, camera, maskClearColor, layers);
 
-        for (let i = 0; i < this.pass.length; ++i) {
-            const passStage = this.pass[i];
-            this.renderFullscreenPass(passStage);
+        for (const pass of this.pipeline) {
+            this.renderFullscreenPass(pass);
         }
 
         this.lineRenderer.render(camera);

@@ -1,4 +1,4 @@
-import { Bounds } from "./common";
+import { Bounds } from "./bounds";
 import { LineRenderer } from "./LineRenderer";
 import { LinkedList, LinkedListNode } from "./LinkedList";
 import { math } from "./math";

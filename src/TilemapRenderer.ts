@@ -1,5 +1,6 @@
 import { Animator } from "./Animator";
 import { assets } from "./assets";
+import { bounds } from "./bounds";
 import { Camera } from "./Camera";
 import { colliders } from "./Collider";
 import { Color } from "./Color";
@@ -18,4 +19,4 @@ import { Tilemap } from "./Tilemap";
 import { Tileset } from "./Tileset";
 import { Vector } from "./Vector";
 
-export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, Animator, ShaderBuilder, Light, RigidBody, PhysicsWorld, SceneNode, EMATimer, colliders, assets, matrix, math, createRenderer, TEXID_SCENE, TEXID_MASK, TEXID_LIGHTMAP };
+export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, Animator, ShaderBuilder, Light, RigidBody, PhysicsWorld, SceneNode, EMATimer, colliders, assets, matrix, math, bounds, createRenderer, TEXID_SCENE, TEXID_MASK, TEXID_LIGHTMAP };

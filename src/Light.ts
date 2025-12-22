@@ -1,5 +1,5 @@
 import { Color } from "./Color";
-import { Bounds } from "./common";
+import { Bounds } from "./bounds";
 import { SceneNode } from "./SceneNode";
 import { Vector } from "./Vector";
 
