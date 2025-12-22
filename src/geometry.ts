@@ -95,7 +95,7 @@ export const geometry = (() => {
         return data;
     }
 
-    const createCircleShadow = (light: Light, collider: CircleCollider): number[] => {
+    const createCircleShadow = (out: number[], light: Light, collider: CircleCollider): number => {
         const center = collider.worldPosition;
         const lightWorldPos = light.worldPosition;
 
@@ -113,27 +113,27 @@ export const geometry = (() => {
         const p3 = p1.clone().add(dir1.scale(shadowLength));
         const p4 = p2.clone().add(dir2.scale(shadowLength));
 
-        return [
-            // Triangle 1
+        out.push(
             p1.x, p1.y,
             p2.x, p2.y,
             p3.x, p3.y,
 
-            // Triangle 2
             p3.x, p3.y,
             p2.x, p2.y,
             p4.x, p4.y
-        ];
+        );
+
+        return 12;
     }
 
-    const createPolygonShadow = (light: Light, collider: PolygonCollider): number[] => {
-        const vertices: number[] = [];
+    const createPolygonShadow = (out: number[], light: Light, collider: PolygonCollider): number => {
         const shadowLength = light.radius * 2;
 
         const lightWorldPos = light.worldPosition;
 
         const worldPoints = collider.getWorldPoints();
 
+        let count = 0;
         for (let i = 0; i < worldPoints.length; ++i) {
             const p0 = worldPoints[i];
             const p1 = worldPoints[(i + 1) % worldPoints.length];
@@ -143,7 +143,7 @@ export const geometry = (() => {
             const edgeDir = p1.clone().sub(p0).normalize();
 
             const normal = new Vector(edgeDir.y, -edgeDir.x);
-            
+
             const cosAngle = Vector.dot(normal, toLight);
             if (cosAngle <= 0) continue;
 
@@ -153,7 +153,7 @@ export const geometry = (() => {
             const p2 = p0.clone().add(dir0.scale(shadowLength));
             const p3 = p1.clone().add(dir1.scale(shadowLength));
 
-            vertices.push(
+            out.push(
                 p0.x, p0.y,
                 p1.x, p1.y,
                 p2.x, p2.y,
@@ -162,24 +162,24 @@ export const geometry = (() => {
                 p1.x, p1.y,
                 p3.x, p3.y
             );
+            count += 12;
         }
 
-        return vertices;
+        return count;
     }
 
-    const createShadowsGeometry = (out: Float32Array, light: Light, colliders: Collider[], offset: number = 0) => {
+    const createShadowsGeometry = (out: number[], light: Light, colliders: Collider[], offset: number = 0) => {
         for (let collider of colliders.filter(collider => collider.castShadow)) {
-            let vertices: number[] = [];
+            let count: number;
             switch (collider.getType()) {
                 case ColliderType.CIRCLE:
-                    vertices = createCircleShadow(light, collider as CircleCollider);
+                    count = createCircleShadow(out, light, collider as CircleCollider);
                     break;
                 case ColliderType.POLYGON:
-                    vertices = createPolygonShadow(light, collider as PolygonCollider);
+                    count = createPolygonShadow(out, light, collider as PolygonCollider);
                     break;
             }
-            out.set(vertices, offset);
-            offset += vertices.length;
+            offset += count;
         }
         return offset;
     }

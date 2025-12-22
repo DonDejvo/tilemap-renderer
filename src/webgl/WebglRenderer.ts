@@ -420,7 +420,7 @@ export class WebglRenderer implements Renderer {
             return overlaps(cameraBounds, light.getBounds());
         });
 
-        const shadowVertices = new Float32Array(sceneLights.length * SHADOW_MAX_VERTICES * 2);
+        const shadowVertices: number[] = [];
         const shadowsDrawCalls: { offset: number; count: number; }[] = [];
         let offset = 0;
         for (let light of sceneLights) {
@@ -432,7 +432,7 @@ export class WebglRenderer implements Renderer {
 
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shadowsVbo);
 
-        this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, shadowVertices);
+        this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, new Float32Array(shadowVertices));
 
         this.framebuffers[TEXID_LIGHTMAP].bind();
         this.gl.clearColor(

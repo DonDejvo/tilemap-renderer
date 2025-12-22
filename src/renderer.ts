@@ -9,7 +9,7 @@ import { Webgl2Renderer } from "./webgl2/Webgl2Renderer";
 import { WebgpuRenderer } from "./webgpu/WebgpuRenderer";
 
 export const STATIC_LAYER_MAX_SPRITES = 100000;
-export const DYNAMIC_LAYER_MAX_SPRITES = 20000;
+export const DYNAMIC_LAYER_MAX_SPRITES = 25000;
 export const LAYER_LIFETIME = 30;
 export const OFFSCREEN_TEXTURES = 12;
 export const MAX_CHANNELS = 8;

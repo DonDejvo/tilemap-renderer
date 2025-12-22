@@ -116,7 +116,8 @@
                 for (let i = 0; i < numSprites; ++i) {
                     const sprite = new Sprite({
                         tileset: myTileset,
-                        tilesetRegion: { x: math.randRange(0, 1), y: math.randRange(0, 1) }
+                        tilesetRegion: { x: math.randRange(0, 1), y: math.randRange(0, 1) },
+                        isStatic: false
                     });
                     sprite.position.set(math.randRange(minPos.x, maxPos.x), math.randRange(minPos.y, maxPos.y));
                     scene.addNode(sprite);
