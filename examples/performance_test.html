@@ -172,6 +172,8 @@
 
                     scene.update(dt);
 
+                    scene.syncColliders();
+
                     const ctx = renderer.getLineRenderer();
                     for (let collider of scene.getColliders()) {
                         if (collider.getType() === "polygon") {

@@ -25,8 +25,8 @@ export abstract class Collider extends SceneNode {
     castShadow: boolean;
     body: RigidBody | null;
     isTrigger: boolean;
-    _hashGridClient: SpatialHashGridClient<Collider> | null;
-    _processed: boolean;
+    _hashGridClient!: SpatialHashGridClient<Collider>;
+    _processed: boolean = false;
 
     constructor(params: ColliderParams) {
         super();
@@ -35,21 +35,12 @@ export abstract class Collider extends SceneNode {
         this.mask = params.mask !== undefined ? params.mask : 0xFFFFFFFF;
         this.body = null;
         this.isTrigger = params.isTrigger !== undefined ? params.isTrigger : false;
-        this._hashGridClient = null;
-        this._processed = false;
     }
 
 
     public start(): void {
         this.scene.getColliders().push(this);
         this._hashGridClient = this.scene.getColliderHashGrid().createClient(this, this.getBounds());
-    }
-
-    public fixedUpdate(): void {
-        if (this._hashGridClient) {
-            this._hashGridClient.bounds = this.getBounds();
-            this._hashGridClient.update();
-        }
     }
 
     public destroy(): void {

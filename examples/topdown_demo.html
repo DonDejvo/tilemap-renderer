@@ -566,6 +566,8 @@
                     emitter.update(dt);
                     scene.update(dt);
 
+                    scene.syncColliders();
+
                     const ctx = renderer.getLineRenderer();
 
                     ctx.strokeColor = Color.YELLOW;

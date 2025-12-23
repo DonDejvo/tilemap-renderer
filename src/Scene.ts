@@ -194,6 +194,13 @@ export class Scene {
         return this.rigidBodies;
     }
 
+    public syncColliders() {
+        for(let collider of this.colliders) {
+            collider._hashGridClient.bounds = collider.getBounds();
+            collider._hashGridClient.update();
+        }
+    }
+
     public update(dt: number) {
         for (const node of this.nodes) {
             node.update(dt);

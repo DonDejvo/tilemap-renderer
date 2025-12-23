@@ -275,6 +275,7 @@
                     while (accTime >= fixedDeltaTime) {
                         accTime -= fixedDeltaTime;
                         scene.fixedUpdate(fixedDeltaTime);
+                        scene.syncColliders();    
                         physicsWorld.step(fixedDeltaTime);
                     }
 
@@ -317,6 +318,8 @@
                     // }
 
                     scene.update(dt);
+
+                    scene.syncColliders();
 
                     const ctx = renderer.getLineRenderer();
 
