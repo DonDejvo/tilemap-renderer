@@ -20,10 +20,6 @@ export class SpatialHashGridClient<T> {
         this.data = data;
         this.queryId = 0;
     }
-
-    update() {
-        this.hashGrid.updateClient(this);
-    }
 }
 
 export interface SpatialHashGridParams {

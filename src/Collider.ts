@@ -36,7 +36,10 @@ export abstract class Collider extends SceneNode {
         this.body = null;
         this.isTrigger = params.isTrigger !== undefined ? params.isTrigger : false;
     }
-
+    
+    public getHashGridClient() {
+        return this._hashGridClient;
+    }
 
     public start(): void {
         this.scene.getColliders().push(this);

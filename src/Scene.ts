@@ -196,8 +196,9 @@ export class Scene {
 
     public syncColliders() {
         for(let collider of this.colliders) {
-            collider._hashGridClient.bounds = collider.getBounds();
-            collider._hashGridClient.update();
+            const client = collider.getHashGridClient();
+            client.bounds = collider.getBounds();
+            this.colliderHashGrid.updateClient(client);
         }
     }
 
