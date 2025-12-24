@@ -148,7 +148,7 @@
         ShaderBuilder.LOG_SHADERS = true;
 
         const assetsUrl = "";
-        const rendererContext = "webgl2";
+        const rendererContext = "webgpu";
         let k = 6;
 
         class KeyboardInput {
@@ -510,10 +510,10 @@
                 { shader: "blurVertical", inputs: [k], output: k + 1 },
 
                 // Light color cut
-                { shader: "colorCut", inputs: [TEXID_LIGHTMAP], output: 3, uniforms: [{ name: "interval", value: 6 }] },
+                { shader: "colorCut", inputs: [TEXID_LIGHTMAP], output: TEXID_LIGHTMAP + 1, uniforms: [{ name: "interval", value: 6 }] },
 
                 // Light
-                { shader: "light", inputs: [TEXID_SCENE, 3], output: TEXID_LIGHTMAP },
+                { shader: "light", inputs: [TEXID_SCENE, TEXID_LIGHTMAP + 1], output: TEXID_LIGHTMAP },
 
                 // composite with original full scene
                 { shader: "neonComposite", inputs: [TEXID_LIGHTMAP, k + 1], output: -1 }

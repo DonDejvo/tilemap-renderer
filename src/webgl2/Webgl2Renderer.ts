@@ -245,6 +245,7 @@ export class Webgl2Renderer implements Renderer {
     private lineRenderer!: WebglLineRenderer;
     private nextTextureIdx: number = 0;
     private gpuTimer!: WebglGPUTimer;
+    private fbo: Framebuffer | null = null;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -313,7 +314,7 @@ export class Webgl2Renderer implements Renderer {
         }
     }
 
-    private blend(blendMode: BlendMode) {
+    private setBlendMode(blendMode: BlendMode) {
         switch (blendMode) {
             case "alpha":
                 this.gl.enable(this.gl.BLEND);
@@ -326,6 +327,25 @@ export class Webgl2Renderer implements Renderer {
             default:
                 this.gl.disable(this.gl.BLEND);
         }
+    }
+
+    private setScissor(rect: [number, number, number, number] | null) {
+        if (rect) {
+            this.gl.enable(this.gl.SCISSOR_TEST);
+            const sh = this.fbo ? this.fbo.height : this.canvas.height;
+            this.gl.scissor(rect[0], sh - rect[1] - rect[3], rect[2], rect[3]);
+        } else {
+            this.gl.disable(this.gl.SCISSOR_TEST);
+        }
+    }
+
+    private bindFbo(fbo: Framebuffer | null) {
+        if (fbo) {
+            fbo.bind();
+        } else {
+            this.fbo?.unbind();
+        }
+        this.fbo = fbo;
     }
 
     public async init() {
@@ -408,7 +428,7 @@ export class Webgl2Renderer implements Renderer {
     private renderScene(framebuffer: Framebuffer, shaderProgram: ShaderProgram, camera: Camera, clearColor: Color | null, layers: WebglRendererLayer[]) {
         framebuffer.bind();
 
-        this.blend("alpha");
+        this.setBlendMode("alpha");
 
         if (clearColor) {
             this.gl.clearColor(clearColor.r, clearColor.g, clearColor.b, clearColor.a);
@@ -449,7 +469,7 @@ export class Webgl2Renderer implements Renderer {
 
         this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, new Float32Array(shadowVertices), 0, offset);
 
-        this.framebuffers[TEXID_LIGHTMAP].bind();
+        this.bindFbo(this.framebuffers[TEXID_LIGHTMAP]);
         this.gl.clearColor(
             scene.ambientColor.r * scene.ambientIntensity,
             scene.ambientColor.g * scene.ambientIntensity,
@@ -457,21 +477,33 @@ export class Webgl2Renderer implements Renderer {
             1.0
         );
         this.gl.clear(this.gl.COLOR_BUFFER_BIT);
-        this.framebuffers[TEXID_LIGHTMAP].unbind();
 
         for (let i = 0; i < sceneLights.length; ++i) {
             const light = sceneLights[i];
             const shadowDrawCall = shadowsDrawCalls[i];
 
-            this.framebuffers[TEXID_LIGHTMAP + 1].bind();
+            const lightBounds = light.getBounds();
 
-            this.blend("none");
+            const lightScissor: [number, number, number, number] = [
+                lightBounds.min.x - cameraBounds.min.x,
+                lightBounds.min.y - cameraBounds.min.y,
+                getWidth(lightBounds),
+                getHeight(lightBounds)
+            ];
+
+            const lightScissorHalf = lightScissor.map(v => v / 2) as [number, number, number, number];
+
+            this.bindFbo(this.framebuffers[TEXID_LIGHTMAP + 1]);
 
             this.gl.enable(this.gl.STENCIL_TEST);
 
             this.gl.clearColor(0, 0, 0, 1);
             this.gl.clearStencil(0);
             this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.STENCIL_BUFFER_BIT);
+
+            this.setBlendMode("none");
+
+            this.setScissor(lightScissor);
 
             // Shadows
 
@@ -519,27 +551,13 @@ export class Webgl2Renderer implements Renderer {
             this.gl.colorMask(true, true, true, true);
             this.gl.disable(this.gl.STENCIL_TEST);
 
-            this.framebuffers[TEXID_LIGHTMAP + 1].unbind();
+            this.setScissor(null);
 
-            const lightBounds = light.getBounds();
+            this.bindFbo(this.framebuffers[TEXID_LIGHTMAP + 1]);
 
-            const scissor: [number, number, number, number] = [
-                lightBounds.min.x - cameraBounds.min.x,
-                lightBounds.min.y - cameraBounds.min.y,
-                getWidth(lightBounds),
-                getHeight(lightBounds)
-            ];
-
-            const scissorHalf: [number, number, number, number] = [
-                (lightBounds.min.x - cameraBounds.min.x) * 0.5 - 4,
-                (lightBounds.min.y - cameraBounds.min.y) * 0.5 - 4,
-                getWidth(lightBounds) * 0.5 + 8,
-                getHeight(lightBounds) * 0.5 + 8
-            ];
-
-            this.renderFullscreenPass({ shader: "blurHorizontal", inputs: [TEXID_LIGHTMAP + 1], output: 4, scissor: scissorHalf });
-            this.renderFullscreenPass({ shader: "blurVertical", inputs: [4], output: 5, scissor: scissorHalf });
-            this.renderFullscreenPass({ shader: "default_additive", inputs: [5], output: TEXID_LIGHTMAP, scissor });
+            this.renderFullscreenPass({ shader: "blurHorizontal", inputs: [TEXID_LIGHTMAP + 1], output: 5, scissor: lightScissorHalf, clearColor: new Color(0, 0, 0, 1) });
+            this.renderFullscreenPass({ shader: "blurVertical", inputs: [5], output: 4, scissor: lightScissorHalf, clearColor: new Color(0, 0, 0, 1) });
+            this.renderFullscreenPass({ shader: "default_additive", inputs: [4], output: TEXID_LIGHTMAP, scissor: lightScissor });
         }
     }
 
@@ -549,11 +567,6 @@ export class Webgl2Renderer implements Renderer {
             throw new Error("Unknown shader " + pass.shader);
         }
 
-        if (pass.clearColor) {
-            this.gl.clearColor(this.clearColor.r, this.clearColor.g, this.clearColor.b, this.clearColor.a);
-            this.gl.clear(this.gl.COLOR_BUFFER_BIT);
-        }
-
         const shader = shaderInfo.shader!;
 
         let sw = this.canvas.width, sh = this.canvas.height;
@@ -561,17 +574,21 @@ export class Webgl2Renderer implements Renderer {
             const outFbo = this.framebuffers[math.clamp(pass.output, 0, OFFSCREEN_TEXTURES - 1)];
             sw = outFbo.width;
             sh = outFbo.height;
-            outFbo.bind();
+            this.bindFbo(outFbo);
         } else {
             this.gl.viewport(0, 0, sw, sh);
         }
 
-        if (pass.scissor) {
-            this.gl.enable(this.gl.SCISSOR_TEST);
-            this.gl.scissor(pass.scissor[0], sh - pass.scissor[1] - pass.scissor[3], pass.scissor[2], pass.scissor[3]);
+        if (pass.clearColor) {
+            this.gl.clearColor(pass.clearColor.r, pass.clearColor.g, pass.clearColor.b, pass.clearColor.a);
+            this.gl.clear(this.gl.COLOR_BUFFER_BIT);
         }
 
-        this.blend(shaderInfo.blendMode);
+        if (pass.scissor) {
+            this.setScissor(pass.scissor);
+        }
+
+        this.setBlendMode(shaderInfo.blendMode);
 
         shader.use();
 
@@ -618,12 +635,10 @@ export class Webgl2Renderer implements Renderer {
             this.gl.bindTexture(this.gl.TEXTURE_2D, null);
         }
 
+        this.setScissor(null);
+
         if (pass.output !== -1) {
             this.framebuffers[math.clamp(pass.output, 0, OFFSCREEN_TEXTURES - 1)].unbind();
-        }
-
-        if (pass.scissor) {
-            this.gl.disable(this.gl.SCISSOR_TEST);
         }
     }
 

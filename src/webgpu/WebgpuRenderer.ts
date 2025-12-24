@@ -358,8 +358,8 @@ export class WebgpuRenderer implements Renderer {
         this.shaderCache = new Map();
         this.renderPassUniformMap = new Map();
         this.fullscreenPasses = {
-            lightBlurHorizontal: { shader: "blurHorizontal", inputs: [TEXID_LIGHTMAP + 1], output: 4 },
-            lightBlurVertical: { shader: "blurVertical", inputs: [4], output: 5 },
+            lightBlurHorizontal: { shader: "blurHorizontal", inputs: [TEXID_LIGHTMAP + 1], output: 4, clearColor: new Color(0, 0, 0, 1) },
+            lightBlurVertical: { shader: "blurVertical", inputs: [4], output: 5, clearColor: new Color(0, 0, 0, 1) },
             lightAdditive: { shader: "default_additive", inputs: [5], output: TEXID_LIGHTMAP }
         };
         this.resizeRequested = false;
@@ -449,6 +449,14 @@ export class WebgpuRenderer implements Renderer {
         for (let [pass, info] of this.renderPassUniformMap) {
             info.textureBindGroup = this.renderPassCreateTextureBindGroup(pass);
         }
+    }
+
+    private setScissor(pass: GPURenderPassEncoder, outTex: GPUTexture, rect: [number, number, number, number]) {
+        const x = math.clamp(rect[0], 0, outTex.width);
+        const y = math.clamp(rect[1], 0, outTex.height);
+        const width = math.clamp(rect[2], 0, outTex.width - x);
+        const height = math.clamp(rect[3], 0, outTex.height - y);
+        pass.setScissorRect(x, y, width, height);
     }
 
     private getBlendOptions(blendMode: BlendMode): GPUBlendState | undefined {
@@ -848,6 +856,17 @@ export class WebgpuRenderer implements Renderer {
         for (let i = 0; i < sceneLights.length; ++i) {
             const shadowDrawCall = shadowsDrawCalls[i];
 
+            const lightBounds = sceneLights[i].getBounds();
+
+            const lightScissor: [number, number, number, number] = [
+                lightBounds.min.x - cameraBounds.min.x,
+                lightBounds.min.y - cameraBounds.min.y,
+                getWidth(lightBounds),
+                getHeight(lightBounds)
+            ];
+
+            const lightScissorHalf = lightScissor.map(v => v / 2) as [number, number, number, number];
+
             const lightPassDescriptor: GPURenderPassDescriptor = {
                 colorAttachments: [{
                     view: texView,
@@ -863,6 +882,8 @@ export class WebgpuRenderer implements Renderer {
                 }
             };
             const lightPass = encoder.beginRenderPass(lightPassDescriptor);
+
+            this.setScissor(lightPass, this.offscreenTextures[TEXID_LIGHTMAP + 1].texture, lightScissor);
 
             if (shadowDrawCall.count !== 0) {
                 lightPass.setPipeline(this.shadowPipeline);
@@ -881,25 +902,9 @@ export class WebgpuRenderer implements Renderer {
 
             lightPass.end();
 
-            const lightBounds = sceneLights[i].getBounds();
-
-            const scissor: [number, number, number, number] = [
-                lightBounds.min.x - cameraBounds.min.x,
-                lightBounds.min.y - cameraBounds.min.y,
-                getWidth(lightBounds),
-                getHeight(lightBounds)
-            ];
-
-            const scissorHalf: [number, number, number, number] = [
-                (lightBounds.min.x - cameraBounds.min.x) * 0.5 - 4,
-                (lightBounds.min.y - cameraBounds.min.y) * 0.5 - 4,
-                getWidth(lightBounds) * 0.5 + 8,
-                getHeight(lightBounds) * 0.5 + 8
-            ];
-
-            this.fullscreenPasses.lightBlurHorizontal.scissor = scissorHalf;
-            this.fullscreenPasses.lightBlurVertical.scissor = scissorHalf;
-            this.fullscreenPasses.lightAdditive.scissor = scissor;
+            this.fullscreenPasses.lightBlurHorizontal.scissor = lightScissorHalf;
+            this.fullscreenPasses.lightBlurVertical.scissor = lightScissorHalf;
+            this.fullscreenPasses.lightAdditive.scissor = lightScissor;
 
             this.renderFullscreenPass(encoder, this.fullscreenPasses.lightBlurHorizontal);
             this.renderFullscreenPass(encoder, this.fullscreenPasses.lightBlurVertical);
@@ -991,11 +996,7 @@ export class WebgpuRenderer implements Renderer {
         const fullscreenPass = encoder.beginRenderPass(fullscreenPassDescriptor);
 
         if (pass.scissor) {
-            const x = math.clamp(pass.scissor[0], 0, outputTex.texture.width);
-            const y = math.clamp(pass.scissor[1], 0, outputTex.texture.height);
-            const width = math.clamp(pass.scissor[2], 0, outputTex.texture.width - x);
-            const height = math.clamp(pass.scissor[3], 0, outputTex.texture.height - y);
-            fullscreenPass.setScissorRect(x, y, width, height);
+            this.setScissor(fullscreenPass, outputTex.texture, pass.scissor);
         }
 
         fullscreenPass.setPipeline(shaderInfo.pipeline!);

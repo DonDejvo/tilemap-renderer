@@ -100,7 +100,8 @@ export const geometry = (() => {
         const center = collider.worldPosition;
         const lightWorldPos = light.worldPosition;
 
-        const dir = center.sub(lightWorldPos).normalize();
+        const toLight = center.sub(lightWorldPos);
+        const dir = toLight.clone().normalize();
         const tangent = new Vector(-dir.y, dir.x).scale(collider.radius);
 
         const p1 = center.clone().sub(tangent);
@@ -109,7 +110,7 @@ export const geometry = (() => {
         const dir1 = p1.clone().sub(lightWorldPos).normalize();
         const dir2 = p2.clone().sub(lightWorldPos).normalize();
 
-        const shadowLength = light.radius;
+        const shadowLength = Math.max(light.radius - toLight.len()) * 100;
 
         const p3 = p1.clone().add(dir1.scale(shadowLength));
         const p4 = p2.clone().add(dir2.scale(shadowLength));
@@ -128,8 +129,6 @@ export const geometry = (() => {
     }
 
     const createPolygonShadow = (out: number[], light: Light, collider: PolygonCollider): number => {
-        const shadowLength = light.radius * 2;
-
         const lightWorldPos = light.worldPosition;
 
         const worldPoints = collider.getWorldPoints();
@@ -140,16 +139,18 @@ export const geometry = (() => {
             const p1 = worldPoints[(i + 1) % worldPoints.length];
 
             const edgeCenter = p0.clone().add(p1).scale(0.5);
-            const toLight = lightWorldPos.clone().sub(edgeCenter).normalize();
+            const toLight = lightWorldPos.clone().sub(edgeCenter);
             const edgeDir = p1.clone().sub(p0).normalize();
 
             const normal = new Vector(edgeDir.y, -edgeDir.x);
 
-            const cosAngle = Vector.dot(normal, toLight);
+            const cosAngle = Vector.dot(normal, toLight.clone().normalize());
             if (cosAngle <= 0) continue;
 
             const dir0 = p0.clone().sub(lightWorldPos).normalize();
             const dir1 = p1.clone().sub(lightWorldPos).normalize();
+
+            const shadowLength = Math.max(light.radius - toLight.len(), 0) * 100;
 
             const p2 = p0.clone().add(dir0.scale(shadowLength));
             const p3 = p1.clone().add(dir1.scale(shadowLength));
