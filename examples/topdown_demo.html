@@ -148,7 +148,7 @@
         ShaderBuilder.LOG_SHADERS = true;
 
         const assetsUrl = "";
-        const rendererContext = "webgl2";
+        const rendererContext = "webgpu";
         let k = 6;
 
         class KeyboardInput {
@@ -417,7 +417,7 @@
                         case "light":
                             const light = new Light({
                                 radius: 240,
-                                innerCutoff: 0.7,
+                                innerCutoff: 0.75,
                                 outerCutoff: 0.7,
                                 direction: Vector.fromAngle(math.degToRad(obj.getProperty("angle") || 0))
                             });
@@ -499,24 +499,17 @@
             observer.observe(renderer.getCanvas());
 
             renderer.pipeline = [
-                // downscale to quarter
+                // Player Neon Glow
                 { shader: "default", inputs: [TEXID_MASK], output: k },
-
-                // neon glow extraction
-                { shader: "neonExtract", inputs: [k], output: k + 1, uniforms: [{ name: "threshold", value: 0.5 }] },
-
-                // blur
+                { shader: "neonExtract", inputs: [k], output: k + 1, uniforms: [{ name: "threshold", value: 0.25 }] },
                 { shader: "blurX", inputs: [k + 1], output: k },
                 { shader: "blurY", inputs: [k], output: k + 1 },
-
-                // Light color cut
-                { shader: "colorCut", inputs: [TEXID_LIGHTMAP], output: TEXID_LIGHTMAP + 1, uniforms: [{ name: "interval", value: 6 }] },
-
+                { shader: "neonComposite", inputs: [TEXID_SCENE, k + 1], output: TEXID_MASK },
                 // Light
-                { shader: "light", inputs: [TEXID_SCENE, TEXID_LIGHTMAP + 1], output: TEXID_LIGHTMAP },
-
-                // composite with original full scene
-                { shader: "neonComposite", inputs: [TEXID_LIGHTMAP, k + 1], output: -1 }
+                { shader: "colorCut", inputs: [TEXID_LIGHTMAP], output: TEXID_LIGHTMAP + 1, uniforms: [{ name: "interval", value: 6 }] },
+                // { shader: "blurX", inputs: [TEXID_LIGHTMAP + 1], output: 4 },
+                // { shader: "blurY", inputs: [4], output: 5 },
+                { shader: "light", inputs: [TEXID_MASK, TEXID_LIGHTMAP + 1], output: -1 },
             ];
 
             const cpuTimer = new EMATimer();
