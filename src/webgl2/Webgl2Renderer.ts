@@ -6,7 +6,7 @@ import { LineRenderer } from "../LineRenderer";
 import { math } from "../math";
 import { BlendMode, defaultPass, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, GPUTimer, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPass, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
-import { ShaderBuilderOutput, defaultShaderBuilder, ShaderBuilder, lightShaderBuilder, blurHorizontalBuilder, blurVerticalBuilder } from "../ShaderBuilder";
+import { ShaderBuilderOutput, ShaderBuilder, shaders } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 import { Framebuffer } from "../webgl/Framebuffer";
@@ -364,11 +364,9 @@ export class Webgl2Renderer implements Renderer {
 
         this.initFramebuffers();
 
-        this.registerShader("default", defaultShaderBuilder);
-        this.registerShader("default_additive", defaultShaderBuilder, "additive");
-        this.registerShader("light", lightShaderBuilder);
-        this.registerShader("blurHorizontal", blurHorizontalBuilder);
-        this.registerShader("blurVertical", blurVerticalBuilder);
+        for (let shader of shaders) {
+            this.registerShader(shader.name, shader.builder, shader.blendMode);
+        }
 
         for (const shaderInfo of this.shaderMap.values()) {
             if (!this.shaderCache.has(shaderInfo.builder)) {
@@ -454,13 +452,19 @@ export class Webgl2Renderer implements Renderer {
         const sceneLights = scene.getLights().filter(light => {
             return overlaps(cameraBounds, light.getBounds());
         });
+        const sceneColliders = scene.getColliders(cameraBounds).filter(c => c.castShadow);
+        for (let i = 0; i < sceneColliders.length; ++i) {
+            sceneColliders[i]._index = i;
+        }
 
         const shadowVertices: number[] = [];
         const shadowsDrawCalls: { offset: number; count: number; }[] = [];
         let offset = 0;
         for (let light of sceneLights) {
-            const sceneColliders = scene.getColliders(light.getBounds());
-            const newOffset = geometry.createShadowsGeometry(shadowVertices, light, sceneColliders, offset);
+            const lightColliderIndices = scene.getColliders(light.getBounds())
+                .map(c => c._index)
+                .filter(idx => idx !== null);
+            const newOffset = geometry.createShadowsGeometry(shadowVertices, light, lightColliderIndices, sceneColliders, offset);
             shadowsDrawCalls.push({ count: (newOffset - offset) / 2, offset: offset / 2 });
             offset = newOffset;
         }
@@ -491,8 +495,6 @@ export class Webgl2Renderer implements Renderer {
                 getHeight(lightBounds)
             ];
 
-            const lightScissorHalf = lightScissor.map(v => v / 2) as [number, number, number, number];
-
             this.bindFbo(this.framebuffers[TEXID_LIGHTMAP + 1]);
 
             this.gl.enable(this.gl.STENCIL_TEST);
@@ -518,8 +520,6 @@ export class Webgl2Renderer implements Renderer {
                 this.gl.uniform2f(this.shadowShaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
                 this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uCameraPos"), camera.position.toArray());
 
-                this.gl.uniform2fv(this.shadowShaderProgram.getUniform("uLightPos"), light.position.toArray());
-
                 this.gl.bindVertexArray(this.shadowsVao);
                 this.gl.drawArrays(this.gl.TRIANGLES, shadowDrawCall.offset, shadowDrawCall.count);
                 this.gl.bindVertexArray(null);
@@ -536,11 +536,11 @@ export class Webgl2Renderer implements Renderer {
             this.gl.uniform2f(this.lightShaderProgram.getUniform("uViewportDimensions"), camera.vw, camera.vh);
             this.gl.uniform2f(this.lightShaderProgram.getUniform("uCameraPos"), camera.position.x, camera.position.y);
 
-            this.gl.uniform2f(this.lightShaderProgram.getUniform("light.center"), light.position.x, light.position.y);
+            this.gl.uniform2fv(this.lightShaderProgram.getUniform("light.center"), light.worldPosition.toArray());
             this.gl.uniform1f(this.lightShaderProgram.getUniform("light.radius"), light.radius);
             this.gl.uniform3f(this.lightShaderProgram.getUniform("light.color"), light.color.r, light.color.g, light.color.b);
             this.gl.uniform1f(this.lightShaderProgram.getUniform("light.intensity"), light.intensity);
-            this.gl.uniform2f(this.lightShaderProgram.getUniform("light.direction"), light.direction.x, light.direction.y);
+            this.gl.uniform2fv(this.lightShaderProgram.getUniform("light.direction"), light.direction.toArray());
             this.gl.uniform1f(this.lightShaderProgram.getUniform("light.outerCutoff"), light.outerCutoff);
             this.gl.uniform1f(this.lightShaderProgram.getUniform("light.innerCutoff"), light.innerCutoff);
 
@@ -555,9 +555,11 @@ export class Webgl2Renderer implements Renderer {
 
             this.bindFbo(this.framebuffers[TEXID_LIGHTMAP + 1]);
 
-            this.renderFullscreenPass({ shader: "blurHorizontal", inputs: [TEXID_LIGHTMAP + 1], output: 5, scissor: lightScissorHalf, clearColor: new Color(0, 0, 0, 1) });
-            this.renderFullscreenPass({ shader: "blurVertical", inputs: [5], output: 4, scissor: lightScissorHalf, clearColor: new Color(0, 0, 0, 1) });
-            this.renderFullscreenPass({ shader: "default_additive", inputs: [4], output: TEXID_LIGHTMAP, scissor: lightScissor });
+            this.renderFullscreenPass({ shader: "default_additive", inputs: [TEXID_LIGHTMAP + 1], output: TEXID_LIGHTMAP, scissor: lightScissor });
+        }
+
+        for (let i = 0; i < sceneColliders.length; ++i) {
+            sceneColliders[i]._index = null;
         }
     }
 

@@ -6,7 +6,7 @@ import { LineRenderer } from "../LineRenderer";
 import { math } from "../math";
 import { BlendMode, defaultPass, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, GPUTimer, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPass, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo, UNIFORMS_MAX_SIZE } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
-import { blurHorizontalBuilder, blurVerticalBuilder, defaultShaderBuilder, lightShaderBuilder, ShaderBuilder, ShaderBuilderOutput } from "../ShaderBuilder";
+import { ShaderBuilder, ShaderBuilderOutput, shaders } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 import { GPUConfig, requestConfig, worldToClipVertex } from "./common";
@@ -334,8 +334,6 @@ export class WebgpuRenderer implements Renderer {
     private shaderCache: Map<ShaderBuilder, GPUShaderModule>;
     private renderPassUniformMap: Map<RenderPass, { ubo: GPUBuffer, uniformBindGroup: GPUBindGroup, textureBindGroup: GPUBindGroup }>;
     private fullscreenPasses: {
-        lightBlurHorizontal: RenderPass;
-        lightBlurVertical: RenderPass;
         lightAdditive: RenderPass;
     };
     private resizeRequested: boolean;
@@ -358,9 +356,7 @@ export class WebgpuRenderer implements Renderer {
         this.shaderCache = new Map();
         this.renderPassUniformMap = new Map();
         this.fullscreenPasses = {
-            lightBlurHorizontal: { shader: "blurHorizontal", inputs: [TEXID_LIGHTMAP + 1], output: 4, clearColor: new Color(0, 0, 0, 1) },
-            lightBlurVertical: { shader: "blurVertical", inputs: [4], output: 5, clearColor: new Color(0, 0, 0, 1) },
-            lightAdditive: { shader: "default_additive", inputs: [5], output: TEXID_LIGHTMAP }
+            lightAdditive: { shader: "default_additive", inputs: [TEXID_LIGHTMAP + 1], output: TEXID_LIGHTMAP }
         };
         this.resizeRequested = false;
     }
@@ -528,11 +524,9 @@ export class WebgpuRenderer implements Renderer {
             addressModeV: "clamp-to-edge",
         });
 
-        this.registerShader("default", defaultShaderBuilder);
-        this.registerShader("default_additive", defaultShaderBuilder, "additive");
-        this.registerShader("light", lightShaderBuilder);
-        this.registerShader("blurHorizontal", blurHorizontalBuilder);
-        this.registerShader("blurVertical", blurVerticalBuilder);
+        for (let shader of shaders) {
+            this.registerShader(shader.name, shader.builder, shader.blendMode);
+        }
 
         for (const [name, shaderInfo] of this.shaderMap.entries()) {
 
@@ -817,13 +811,19 @@ export class WebgpuRenderer implements Renderer {
         const sceneLights = scene.getLights().filter(light => {
             return overlaps(cameraBounds, light.getBounds());
         });
+        const sceneColliders = scene.getColliders(cameraBounds).filter(c => c.castShadow);
+        for (let i = 0; i < sceneColliders.length; ++i) {
+            sceneColliders[i]._index = i;
+        }
 
         const shadowVertices: number[] = [];
         const shadowsDrawCalls: { offset: number; count: number; }[] = [];
         let offset = 0;
         for (let light of sceneLights) {
-            const sceneColliders = scene.getColliders(light.getBounds());
-            const newOffset = geometry.createShadowsGeometry(shadowVertices, light, sceneColliders, offset);
+            const lightColliderIndices = scene.getColliders(light.getBounds())
+                .map(c => c._index)
+                .filter(idx => idx !== null);
+            const newOffset = geometry.createShadowsGeometry(shadowVertices, light, lightColliderIndices, sceneColliders, offset);
             shadowsDrawCalls.push({ count: (newOffset - offset) / 2, offset: offset / 2 });
             offset = newOffset;
         }
@@ -865,8 +865,6 @@ export class WebgpuRenderer implements Renderer {
                 getHeight(lightBounds)
             ];
 
-            const lightScissorHalf = lightScissor.map(v => v / 2) as [number, number, number, number];
-
             const lightPassDescriptor: GPURenderPassDescriptor = {
                 colorAttachments: [{
                     view: texView,
@@ -902,13 +900,13 @@ export class WebgpuRenderer implements Renderer {
 
             lightPass.end();
 
-            this.fullscreenPasses.lightBlurHorizontal.scissor = lightScissorHalf;
-            this.fullscreenPasses.lightBlurVertical.scissor = lightScissorHalf;
             this.fullscreenPasses.lightAdditive.scissor = lightScissor;
 
-            this.renderFullscreenPass(encoder, this.fullscreenPasses.lightBlurHorizontal);
-            this.renderFullscreenPass(encoder, this.fullscreenPasses.lightBlurVertical);
             this.renderFullscreenPass(encoder, this.fullscreenPasses.lightAdditive);
+        }
+
+        for (let i = 0; i < sceneColliders.length; ++i) {
+            sceneColliders[i]._index = null;
         }
     }
 

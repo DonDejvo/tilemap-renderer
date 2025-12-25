@@ -1,4 +1,4 @@
-import { CircleCollider, Collider, ColliderType, PolygonCollider } from "./Collider";
+import { Collider } from "./Collider";
 import { Light } from "./Light";
 import { Line } from "./LineRenderer";
 import { Sprite } from "./Sprite";
@@ -96,42 +96,8 @@ export const geometry = (() => {
         return data;
     }
 
-    const createCircleShadow = (out: number[], light: Light, collider: CircleCollider): number => {
-        const center = collider.worldPosition;
+    const createShadow = (out: number[], light: Light, worldPoints: Vector[]): number => {
         const lightWorldPos = light.worldPosition;
-
-        const toLight = center.sub(lightWorldPos);
-        const dir = toLight.clone().normalize();
-        const tangent = new Vector(-dir.y, dir.x).scale(collider.radius);
-
-        const p1 = center.clone().sub(tangent);
-        const p2 = center.clone().add(tangent);
-
-        const dir1 = p1.clone().sub(lightWorldPos).normalize();
-        const dir2 = p2.clone().sub(lightWorldPos).normalize();
-
-        const shadowLength = Math.max(light.radius - toLight.len()) * 100;
-
-        const p3 = p1.clone().add(dir1.scale(shadowLength));
-        const p4 = p2.clone().add(dir2.scale(shadowLength));
-
-        out.push(
-            p1.x, p1.y,
-            p2.x, p2.y,
-            p3.x, p3.y,
-
-            p3.x, p3.y,
-            p2.x, p2.y,
-            p4.x, p4.y
-        );
-
-        return 12;
-    }
-
-    const createPolygonShadow = (out: number[], light: Light, collider: PolygonCollider): number => {
-        const lightWorldPos = light.worldPosition;
-
-        const worldPoints = collider.getWorldPoints();
 
         let count = 0;
         for (let i = 0; i < worldPoints.length; ++i) {
@@ -170,18 +136,10 @@ export const geometry = (() => {
         return count;
     }
 
-    const createShadowsGeometry = (out: number[], light: Light, colliders: Collider[], offset: number = 0) => {
-        for (let collider of colliders.filter(collider => collider.castShadow)) {
-            let count: number;
-            switch (collider.getType()) {
-                case ColliderType.CIRCLE:
-                    count = createCircleShadow(out, light, collider as CircleCollider);
-                    break;
-                case ColliderType.POLYGON:
-                    count = createPolygonShadow(out, light, collider as PolygonCollider);
-                    break;
-            }
-            offset += count;
+    const createShadowsGeometry = (out: number[], light: Light, colliderIndices: number[], colliders: Collider[], offset: number = 0) => {
+        for (let idx of colliderIndices) {
+            const c = colliders[idx];
+            offset += createShadow(out, light, c.getWorldPoints());
         }
         return offset;
     }

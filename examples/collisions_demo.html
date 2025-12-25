@@ -18,7 +18,7 @@
             height: 100%;
         }
 
-        #fps {
+        #fpsinfo {
             position: fixed;
             left: 10px;
             top: 10px;
@@ -45,22 +45,25 @@
 </head>
 
 <body>
-    <div id="fps">FPS: 0</div>
+    <div id="fpsinfo">FPS: 0</div>
     <div id="sceneinfo"></div>
 
     <script type="module">
         import {
             createRenderer,
+            TEXID_SCENE,
+            TEXID_LIGHTMAP,
             Vector,
             Camera,
             Scene,
             Color,
             RigidBody,
             PhysicsWorld,
+            Light,
             colliders
         } from "../src/TilemapRenderer.ts";
 
-        const rendererContext = "webgpu";
+        const rendererContext = "webgl2";
 
         class Input {
             constructor() {
@@ -160,6 +163,7 @@
             let frameCount = 0;
             let lastRAF = 0;
             let lastFPSUpdate = 0;
+            let fps = 0;
 
             let accTime = 0;
             const fixedDeltaTime = 0.02;
@@ -173,6 +177,7 @@
                     dimensions: [5, 5]
                 }
             });
+            scene.ambientIntensity = 0.5;
 
             const physicsWorld = new PhysicsWorld(scene);
 
@@ -181,6 +186,12 @@
 
             camera.updateProjection(w, h);
             renderer.setSize(w, h);
+
+            renderer.pipeline = [
+                { shader: "blurX", inputs: [TEXID_LIGHTMAP], output: 4 },
+                { shader: "blurY", inputs: [4], output: 5 },
+                { shader: "light", inputs: [TEXID_SCENE, 5], output: -1 }
+            ];
 
             await renderer.init();
             renderer.clearColor = new Color(0.5, 0.5, 0.5);
@@ -221,6 +232,11 @@
                 scene.addNode(shape.body);
             }
 
+            const light = new Light({
+                radius: 300,
+                intensity: 0.5
+            });
+
             let activeIndex = 0;
             let ctrlPrev = false;
             const speed = 300;
@@ -233,6 +249,7 @@
                     activeBody.removeMessageHandler("collisionenter", onCollisionEnter);
                     activeBody.removeMessageHandler("collisionstay", onCollisionEnter);
                     activeBody.removeMessageHandler("collisionexit", onCollisionExit);
+                    activeBody.removeNode(light);
                 }
 
                 activeCollisions.clear();
@@ -242,6 +259,7 @@
                 activeBody.addMessageHandler("collisionenter", onCollisionEnter);
                 activeBody.addMessageHandler("collisionstay", onCollisionEnter);
                 activeBody.addMessageHandler("collisionexit", onCollisionExit);
+                activeBody.addNode(light);
             };
 
 
@@ -265,7 +283,7 @@
 
                     frameCount++;
                     if (now - lastFPSUpdate >= 1) {
-                        fpsElem.textContent = `${rendererContext.toUpperCase()} - FPS: ${frameCount}`;
+                        fps = frameCount;
                         frameCount = 0;
                         lastFPSUpdate = now;
                     }
@@ -275,7 +293,7 @@
                     while (accTime >= fixedDeltaTime) {
                         accTime -= fixedDeltaTime;
                         scene.fixedUpdate(fixedDeltaTime);
-                        scene.syncColliders();    
+                        scene.syncColliders();
                         physicsWorld.step(fixedDeltaTime);
                     }
 
@@ -311,11 +329,6 @@
                     }
 
                     ctrlPrev = ctrl;
-
-                    sceneinfo.innerHTML = `<pre>${JSON.stringify(scene.getInfo(), null, 2)}</pre>`;
-                    // for(let collider of scene.getColliders()) {
-                    //     console.log("ID: " + collider.id, collider._hashGridClient.cells.min, collider._hashGridClient.cells.max);
-                    // }
 
                     scene.update(dt);
 
@@ -356,6 +369,22 @@
             };
 
             draw();
+
+            setInterval(() => {
+                const formatSceneInfo = (info) => {
+                    const format = (elem, depth = 0) => {
+                        if (typeof elem === "object") {
+                            return "\n" + Object.entries(elem).map(([key, val]) => "\t".repeat(depth) + key + ": " + format(val, depth + 1)).join("")
+                        }
+                        return ("" + elem).padEnd(6) + "\n";
+                    }
+                    return format(info);
+                }
+
+                fpsinfo.textContent = `${rendererContext.toUpperCase()} - FPS: ${fps}`;
+
+                sceneinfo.innerHTML = `<pre>${formatSceneInfo(scene.getInfo())}</pre>`;
+            }, 100);
         };
 
         main();

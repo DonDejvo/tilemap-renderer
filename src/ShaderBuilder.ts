@@ -1,4 +1,4 @@
-import { MAX_CHANNELS, Renderer } from "./Renderer";
+import { BlendMode, MAX_CHANNELS, Renderer } from "./Renderer";
 
 export enum ShaderOp {
     DECLARE_VAR,
@@ -267,13 +267,13 @@ export class ShaderBuilder {
     }
 }
 
-export const defaultShaderBuilder = new ShaderBuilder()
+const defaultShaderBuilder = new ShaderBuilder()
     .mainImage()
     .declareVar("uv", "vec2")
     .set("uv", "fragCoord / uniforms.resolution")
     .add("fragColor", "texture(0, uv)")
 
-export const lightShaderBuilder = new ShaderBuilder()
+const lightShaderBuilder = new ShaderBuilder()
     .mainImage()
     .declareVar("uv", "vec2")
     .declareVar("baseColor", "vec4")
@@ -281,7 +281,7 @@ export const lightShaderBuilder = new ShaderBuilder()
     .set("baseColor", "texture(0, uv)")
     .add("fragColor", "vec4(baseColor.rgb * texture(1, uv).rgb, baseColor.a)");
 
-export const blurHorizontalBuilder = new ShaderBuilder()
+const blurHorizontalBuilder = new ShaderBuilder()
     .mainImage()
     .declareVar("uv", "vec2")
     .declareVar("w", "float")
@@ -301,7 +301,7 @@ export const blurHorizontalBuilder = new ShaderBuilder()
     )
     .set("fragColor", "sum");
 
-export const blurVerticalBuilder = new ShaderBuilder()
+const blurVerticalBuilder = new ShaderBuilder()
     .mainImage()
     .declareVar("uv", "vec2")
     .declareVar("h", "float")
@@ -320,3 +320,11 @@ export const blurVerticalBuilder = new ShaderBuilder()
 )`
     )
     .set("fragColor", "sum");
+
+export const shaders: { name: string, builder: ShaderBuilder, blendMode?: BlendMode }[] = [
+    { name: "default", builder: defaultShaderBuilder },
+    { name: "default_additive", builder: defaultShaderBuilder, blendMode: "additive" },
+    { name: "light", builder: lightShaderBuilder },
+    { name: "blurX", builder: blurHorizontalBuilder },
+    { name: "blurY", builder: blurVerticalBuilder }
+];

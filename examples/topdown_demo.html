@@ -148,7 +148,7 @@
         ShaderBuilder.LOG_SHADERS = true;
 
         const assetsUrl = "";
-        const rendererContext = "webgpu";
+        const rendererContext = "webgl2";
         let k = 6;
 
         class KeyboardInput {
@@ -506,8 +506,8 @@
                 { shader: "neonExtract", inputs: [k], output: k + 1, uniforms: [{ name: "threshold", value: 0.5 }] },
 
                 // blur
-                { shader: "blurHorizontal", inputs: [k + 1], output: k },
-                { shader: "blurVertical", inputs: [k], output: k + 1 },
+                { shader: "blurX", inputs: [k + 1], output: k },
+                { shader: "blurY", inputs: [k], output: k + 1 },
 
                 // Light color cut
                 { shader: "colorCut", inputs: [TEXID_LIGHTMAP], output: TEXID_LIGHTMAP + 1, uniforms: [{ name: "interval", value: 6 }] },

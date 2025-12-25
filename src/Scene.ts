@@ -199,6 +199,7 @@ export class Scene {
             const client = collider.getHashGridClient();
             client.bounds = collider.getBounds();
             this.colliderHashGrid.updateClient(client);
+            collider.caluclateWorldPoints();
         }
     }
 

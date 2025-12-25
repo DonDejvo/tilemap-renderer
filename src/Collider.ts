@@ -27,6 +27,7 @@ export abstract class Collider extends SceneNode {
     isTrigger: boolean;
     _hashGridClient!: SpatialHashGridClient<Collider>;
     _processed: boolean = false;
+    _index: number | null = null;
 
     constructor(params: ColliderParams) {
         super();
@@ -36,7 +37,7 @@ export abstract class Collider extends SceneNode {
         this.body = null;
         this.isTrigger = params.isTrigger !== undefined ? params.isTrigger : false;
     }
-    
+
     public getHashGridClient() {
         return this._hashGridClient;
     }
@@ -59,13 +60,13 @@ export abstract class Collider extends SceneNode {
         }
     }
 
-    abstract getBounds(): Bounds;
+    public abstract getBounds(): Bounds;
 
-    abstract getType(): ColliderType;
+    public abstract getType(): ColliderType;
 
-    protected calculatePositions() { }
+    public abstract getWorldPoints(): Vector[];
 
-    protected calculateNormals() { }
+    abstract caluclateWorldPoints(): void;
 }
 
 interface CircleColliderParams extends ColliderParams {
@@ -74,17 +75,19 @@ interface CircleColliderParams extends ColliderParams {
 
 export class CircleCollider extends Collider {
     radius: number;
+    worldPoints: Vector[];
 
     constructor(params: CircleColliderParams) {
         super(params);
         this.radius = params.radius;
+        this.worldPoints = [];
     }
 
-    getType(): ColliderType {
+    public getType(): ColliderType {
         return ColliderType.CIRCLE;
     }
 
-    getBounds(): Bounds {
+    public getBounds(): Bounds {
         const center = this.worldPosition;
         const r = this.radius;
 
@@ -92,6 +95,21 @@ export class CircleCollider extends Collider {
             min: center.clone().sub(new Vector(r, r)),
             max: center.clone().add(new Vector(r, r))
         };
+    }
+
+    public getWorldPoints(): Vector[] {
+        return this.worldPoints;
+    }
+
+    public caluclateWorldPoints(): void {
+        const worldPos = this.worldPosition;
+        for (let i = 0; i < 8; ++i) {
+            const angle = i / 8 * 2 * Math.PI;
+            this.worldPoints[i] = new Vector(
+                worldPos.x + Math.sin(angle) * this.radius,
+                worldPos.y + -Math.cos(angle) * this.radius
+            );
+        }
     }
 }
 
@@ -101,17 +119,19 @@ interface PolygonColliderParams extends ColliderParams {
 
 export class PolygonCollider extends Collider {
     points: Vector[];
+    worldPoints: Vector[];
 
     constructor(params: PolygonColliderParams) {
         super(params);
         this.points = params.points;
+        this.worldPoints = [];
     }
 
-    getType(): ColliderType {
+    public getType(): ColliderType {
         return ColliderType.POLYGON;
     }
 
-    getBounds() {
+    public getBounds() {
         let minX = Infinity, minY = Infinity;
         let maxX = -Infinity, maxY = -Infinity;
 
@@ -129,16 +149,22 @@ export class PolygonCollider extends Collider {
         };
     }
 
-    getWorldPoints() {
+    public getWorldPoints(): Vector[] {
+        return this.worldPoints;
+    }
+
+    public caluclateWorldPoints() {
         const worldPos = this.worldPosition;
         const worldAngle = this.worldAngle;
 
-        return this.points.map(p => p.clone()
-            .rot(-worldAngle)
-            .add(worldPos));
+        for (let i = 0; i < this.points.length; ++i) {
+            this.worldPoints[i] = this.points[i].clone()
+                .rot(-worldAngle)
+                .add(worldPos);
+        }
     }
 
-    getNormals() {
+    public getNormals() {
         const worldPoints = this.getWorldPoints();
         return worldPoints.map((p0, i) => {
             const p1 = worldPoints[(i + 1) % worldPoints.length];
