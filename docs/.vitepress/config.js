@@ -22,6 +22,7 @@ export default defineConfig({
                 text: 'Rendering Basics',
                 collapsible: true,
                 items: [
+                    { text: 'Scene', link: '/scene' },
                     { text: 'Sprite Rendering', link: '/sprite-rendering' },
                     { text: 'Vectors', link: '/vectors' },
                     { text: 'Camera', link: '/camera' }

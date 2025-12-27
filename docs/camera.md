@@ -2,7 +2,7 @@
 
 The Camera defines the visible region of the scene and controls how the world is projected onto the screen. It does not render anything itself — instead, it provides the viewport through which the scene is viewed.
 
-**Scene coordinate system:**  
+**Coordinate system:**  
 The origin `(0,0)` is at the **top-left** corner.  
 - **x** increases to the **right**  
 - **y** increases **downward**

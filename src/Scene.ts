@@ -194,6 +194,13 @@ export class Scene {
         return this.rigidBodies;
     }
 
+    public findNode(name: string): SceneNode | null {
+        for (const node of this.nodes) {
+            if (node.name === name) return node;
+        }
+        return null;
+    }
+
     public syncColliders() {
         for(let collider of this.colliders) {
             collider.calculateWorldPoints();

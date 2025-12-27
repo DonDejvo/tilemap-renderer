@@ -63,18 +63,20 @@ A sprite can then reference a **specific tile** within this grid using `tilesetR
 In the snippet below, `tilesetRegion: { x: 1, y: 1 }` selects the tile at second column, second row.
 
 ```ts
-const { createRenderer, Camera, Scene, Color, Sprite, Tileset, assets } = TilemapRenderer;
+const { initWasm, createRenderer, Camera, Scene, Color, Sprite, Tileset, assets } = TilemapRenderer;
 
 const main = async () => {
     const width = 300;
     const height = 400;
+
+    await initWasm();
 
     const playerImage = await assets.loadImage("../images/player.png");
 
     // Create renderer
     const renderer = createRenderer("webgl2");
     renderer.setSize(width, height);
-    renderer.setClearColor(new Color(0, 0, 0, 1));
+    renderer.clearColor = new Color(0, 0, 0, 1);
 
     // Create camera and scene
     const camera = new Camera(width, height);
@@ -98,7 +100,7 @@ const main = async () => {
     });
     sprite.position.set(50, 50);
     sprite.scale.scale(2);
-    scene.addSprite(sprite);
+    scene.addNode(sprite);
 
     // Add canvas to document
     const canvas = renderer.getCanvas();

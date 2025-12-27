@@ -79,20 +79,6 @@ export abstract class SceneNode {
         return [];
     }
 
-    public findNode(name: string) {
-        for (const node of this._nodes) {
-            if (node.name === name) return node;
-        }
-        return null;
-    }
-
-    public findNodeFromParent(name: string) {
-        if (this._parent) {
-            return this._parent.findNode(name);
-        }
-        return null;
-    }
-
     public get worldAngle(): number {
         if (this._parent) {
             return this._parent.worldAngle + this.angle;
