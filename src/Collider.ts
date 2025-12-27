@@ -66,7 +66,7 @@ export abstract class Collider extends SceneNode {
 
     public abstract getWorldPoints(): Vector[];
 
-    abstract caluclateWorldPoints(): void;
+    abstract calculateWorldPoints(): void;
 }
 
 interface CircleColliderParams extends ColliderParams {
@@ -101,7 +101,7 @@ export class CircleCollider extends Collider {
         return this.worldPoints;
     }
 
-    public caluclateWorldPoints(): void {
+    public calculateWorldPoints(): void {
         const worldPos = this.worldPosition;
         for (let i = 0; i < 8; ++i) {
             const angle = i / 8 * 2 * Math.PI;
@@ -135,7 +135,7 @@ export class PolygonCollider extends Collider {
         let minX = Infinity, minY = Infinity;
         let maxX = -Infinity, maxY = -Infinity;
 
-        for (const transformed of this.getWorldPoints()) {
+        for (const transformed of this.worldPoints) {
 
             if (transformed.x < minX) minX = transformed.x;
             if (transformed.y < minY) minY = transformed.y;
@@ -153,7 +153,7 @@ export class PolygonCollider extends Collider {
         return this.worldPoints;
     }
 
-    public caluclateWorldPoints() {
+    public calculateWorldPoints() {
         const worldPos = this.worldPosition;
         const worldAngle = this.worldAngle;
 

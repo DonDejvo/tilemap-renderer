@@ -62,7 +62,7 @@
     <div id="frametimeinfo"></div>
 
     <script type="module">
-        import { createRenderer, Vector, math, colliders, Sprite, Light, Camera, Scene, assets, Color, EMATimer, Tileset, TEXID_SCENE, TEXID_LIGHTMAP } from "../src/TilemapRenderer.ts";
+        import { createRenderer, initWasm, Vector, math, colliders, Sprite, Light, Camera, Scene, assets, Color, EMATimer, Tileset, TEXID_SCENE, TEXID_LIGHTMAP } from "../src/TilemapRenderer.ts";
 
         const assetsUrl = "";
         const rendererContext = "webgpu";
@@ -82,6 +82,8 @@
             const myTilesetImage = await assets.loadImage(assetsUrl + "/textures/tileset.png");
 
             const myTileset = Tileset.fromImage("MyTileset", myTilesetImage, 2, 2);
+
+            await initWasm();
 
             const scene = new Scene();
             scene.ambientIntensity = 0.1;

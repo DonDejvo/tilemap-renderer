@@ -96,50 +96,44 @@ export const geometry = (() => {
         return data;
     }
 
-    const createShadow = (out: number[], light: Light, worldPoints: Vector[]): number => {
+    const createShadowsGeometry = (out: number[], light: Light, colliderIndices: number[], colliders: Collider[], offset: number = 0) => {
         const lightWorldPos = light.worldPosition;
 
-        let count = 0;
-        for (let i = 0; i < worldPoints.length; ++i) {
-            const p0 = worldPoints[i];
-            const p1 = worldPoints[(i + 1) % worldPoints.length];
-
-            const edgeCenter = p0.clone().add(p1).scale(0.5);
-            const toLight = lightWorldPos.clone().sub(edgeCenter);
-            const edgeDir = p1.clone().sub(p0).normalize();
-
-            const normal = new Vector(edgeDir.y, -edgeDir.x);
-
-            const cosAngle = Vector.dot(normal, toLight.clone().normalize());
-            if (cosAngle <= 0) continue;
-
-            const dir0 = p0.clone().sub(lightWorldPos).normalize();
-            const dir1 = p1.clone().sub(lightWorldPos).normalize();
-
-            const shadowLength = Math.max(light.radius - toLight.len(), 0) * 100;
-
-            const p2 = p0.clone().add(dir0.scale(shadowLength));
-            const p3 = p1.clone().add(dir1.scale(shadowLength));
-
-            out.push(
-                p0.x, p0.y,
-                p1.x, p1.y,
-                p2.x, p2.y,
-
-                p2.x, p2.y,
-                p1.x, p1.y,
-                p3.x, p3.y
-            );
-            count += 12;
-        }
-
-        return count;
-    }
-
-    const createShadowsGeometry = (out: number[], light: Light, colliderIndices: number[], colliders: Collider[], offset: number = 0) => {
         for (let idx of colliderIndices) {
-            const c = colliders[idx];
-            offset += createShadow(out, light, c.getWorldPoints());
+            const worldPoints = colliders[idx].getWorldPoints();
+
+            for (let i = 0; i < worldPoints.length; ++i) {
+                const p0 = worldPoints[i];
+                const p1 = worldPoints[(i + 1) % worldPoints.length];
+
+                const edgeCenter = p0.clone().add(p1).scale(0.5);
+                const toLight = lightWorldPos.clone().sub(edgeCenter);
+                const edgeDir = p1.clone().sub(p0).normalize();
+
+                const normal = new Vector(edgeDir.y, -edgeDir.x);
+
+                const cosAngle = Vector.dot(normal, toLight.clone().normalize());
+                if (cosAngle <= 0) continue;
+
+                const dir0 = p0.clone().sub(lightWorldPos).normalize();
+                const dir1 = p1.clone().sub(lightWorldPos).normalize();
+
+                const shadowLength = Math.max(light.radius - toLight.len(), 0) * 100;
+
+                const p2 = p0.clone().add(dir0.scale(shadowLength));
+                const p3 = p1.clone().add(dir1.scale(shadowLength));
+
+                out.push(
+                    p0.x, p0.y,
+                    p1.x, p1.y,
+                    p2.x, p2.y,
+
+                    p2.x, p2.y,
+                    p1.x, p1.y,
+                    p3.x, p3.y
+                );
+                offset += 6;
+            }
         }
         return offset;
     }

@@ -196,10 +196,11 @@ export class Scene {
 
     public syncColliders() {
         for(let collider of this.colliders) {
+            collider.calculateWorldPoints();
+
             const client = collider.getHashGridClient();
             client.bounds = collider.getBounds();
             this.colliderHashGrid.updateClient(client);
-            collider.caluclateWorldPoints();
         }
     }
 

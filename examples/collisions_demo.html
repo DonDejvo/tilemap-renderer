@@ -51,6 +51,7 @@
     <script type="module">
         import {
             createRenderer,
+            initWasm,
             TEXID_SCENE,
             TEXID_LIGHTMAP,
             Vector,
@@ -167,6 +168,8 @@
 
             let accTime = 0;
             const fixedDeltaTime = 0.02;
+
+            await initWasm();
 
             const input = new Input();
             const camera = new Camera(w, h);

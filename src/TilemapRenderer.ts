@@ -17,5 +17,6 @@ import { Sprite } from "./Sprite";
 import { Tilemap } from "./Tilemap";
 import { Tileset } from "./Tileset";
 import { Vector } from "./Vector";
+import { initWasm } from "./wasmLoader";
 
-export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, Animator, ShaderBuilder, Light, RigidBody, PhysicsWorld, SceneNode, EMATimer, colliders, assets, math, bounds, createRenderer, TEXID_SCENE, TEXID_MASK, TEXID_LIGHTMAP };
+export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, Animator, ShaderBuilder, Light, RigidBody, PhysicsWorld, SceneNode, EMATimer, colliders, assets, math, bounds, createRenderer, initWasm, TEXID_SCENE, TEXID_MASK, TEXID_LIGHTMAP };

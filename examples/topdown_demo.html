@@ -143,12 +143,12 @@
     </div>
 
     <script type="module">
-        import { createRenderer, Tileset, Tilemap, Vector, math, colliders, Sprite, Light, ShaderBuilder, Camera, Scene, assets, Animator, Color, EMATimer, TEXID_SCENE, TEXID_MASK, TEXID_LIGHTMAP } from "../src/TilemapRenderer.ts";
+        import { createRenderer, initWasm, Tileset, Tilemap, Vector, math, colliders, Sprite, Light, ShaderBuilder, Camera, Scene, assets, Animator, Color, EMATimer, TEXID_SCENE, TEXID_MASK, TEXID_LIGHTMAP } from "../src/TilemapRenderer.ts";
 
         ShaderBuilder.LOG_SHADERS = true;
 
         const assetsUrl = "";
-        const rendererContext = "webgpu";
+        const rendererContext = "webgl2";
         let k = 6;
 
         class KeyboardInput {
@@ -358,6 +358,8 @@
             const camera = new Camera(w, h);
             const input = new KeyboardInput();
 
+            await initWasm();
+
             const myTilesetImage = await assets.loadImage(assetsUrl + "/textures/tileset.png");
             const snowyLandsImage = await assets.loadImage(assetsUrl + "/textures/RPGW_SnowyLands_v2.0/MainLev2.0_extruded.png");
             const snowyLandsDecorativeImage = await assets.loadImage(assetsUrl + "/textures/RPGW_SnowyLands_v2.0/decorative.png");
@@ -535,10 +537,10 @@
 
                     accTime += dt;
 
-                    while (accTime >= fixedDeltaTime) {
-                        accTime -= fixedDeltaTime;
-                        scene.fixedUpdate(fixedDeltaTime);
-                    }
+                    // while (accTime >= fixedDeltaTime) {
+                    //     accTime -= fixedDeltaTime;
+                    //     scene.fixedUpdate(fixedDeltaTime);
+                    // }
 
                     input.update();
 

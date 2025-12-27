@@ -12,6 +12,7 @@ import { Tileset } from "../Tileset";
 import { GPUConfig, requestConfig, worldToClipVertex } from "./common";
 import { WebgpuGPUTimer } from "./WebgpuGPUTimer";
 import { WebgpuLineRendrer } from "./WebgpuLineRenderer";
+import { initShadowBuffer } from "../wasm/shadowGeometryModule";
 
 const mainVertex = `
 struct VSInput {
@@ -816,19 +817,10 @@ export class WebgpuRenderer implements Renderer {
             sceneColliders[i]._index = i;
         }
 
-        const shadowVertices: number[] = [];
-        const shadowsDrawCalls: { offset: number; count: number; }[] = [];
-        let offset = 0;
-        for (let light of sceneLights) {
-            const lightColliderIndices = scene.getColliders(light.getBounds())
-                .map(c => c._index)
-                .filter(idx => idx !== null);
-            const newOffset = geometry.createShadowsGeometry(shadowVertices, light, lightColliderIndices, sceneColliders, offset);
-            shadowsDrawCalls.push({ count: (newOffset - offset) / 2, offset: offset / 2 });
-            offset = newOffset;
-        }
+        const colliderIndices = sceneLights.map(light => scene.getColliders(light.getBounds()).map(c => c._index).filter(idx => idx !== null));
+        const { drawCalls, vertices } = initShadowBuffer(sceneLights, sceneColliders, colliderIndices);
 
-        this.cfg.device.queue.writeBuffer(this.shadowsVbo, 0, new Float32Array(shadowVertices));
+        this.cfg.device.queue.writeBuffer(this.shadowsVbo, 0, vertices);
 
         const clearColor = new Color(
             scene.ambientColor.r * scene.ambientIntensity,
@@ -854,7 +846,7 @@ export class WebgpuRenderer implements Renderer {
         const texView = this.offscreenTextures[TEXID_LIGHTMAP + 1].view;
 
         for (let i = 0; i < sceneLights.length; ++i) {
-            const shadowDrawCall = shadowsDrawCalls[i];
+            const shadowDrawCall = drawCalls[i];
 
             const lightBounds = sceneLights[i].getBounds();
 

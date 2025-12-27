@@ -13,6 +13,7 @@ import { Framebuffer } from "./Framebuffer";
 import { WebglGPUTimer } from "./WebglGPUTimer";
 import { lightStruct, ShaderProgram, worldToClipVertex } from "./ShaderProgram";
 import { WebglLineRenderer } from "./WebglLineRenderer";
+import { initShadowBuffer } from "../wasm/shadowGeometryModule";
 
 const mainVertex = `
 
@@ -348,7 +349,7 @@ export class WebglRenderer implements Renderer {
             }
         }
 
-        for(let shader of shaders) {
+        for (let shader of shaders) {
             this.registerShader(shader.name, shader.builder, shader.blendMode);
         }
 
@@ -444,21 +445,12 @@ export class WebglRenderer implements Renderer {
             sceneColliders[i]._index = i;
         }
 
-        const shadowVertices: number[] = [];
-        const shadowsDrawCalls: { offset: number; count: number; }[] = [];
-        let offset = 0;
-        for (let light of sceneLights) {
-            const lightColliderIndices = scene.getColliders(light.getBounds())
-                .map(c => c._index)
-                .filter(idx => idx !== null);
-            const newOffset = geometry.createShadowsGeometry(shadowVertices, light, lightColliderIndices, sceneColliders, offset);
-            shadowsDrawCalls.push({ count: (newOffset - offset) / 2, offset: offset / 2 });
-            offset = newOffset;
-        }
+        const colliderIndices = sceneLights.map(light => scene.getColliders(light.getBounds()).map(c => c._index).filter(idx => idx !== null));
+        const { drawCalls, vertices } = initShadowBuffer(sceneLights, sceneColliders, colliderIndices);
 
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shadowsVbo);
 
-        this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, new Float32Array(shadowVertices));
+        this.gl.bufferSubData(this.gl.ARRAY_BUFFER, 0, vertices);
 
         this.bindFbo(this.framebuffers[TEXID_LIGHTMAP]);
         this.gl.clearColor(
@@ -474,7 +466,7 @@ export class WebglRenderer implements Renderer {
 
         for (let i = 0; i < sceneLights.length; ++i) {
             const light = sceneLights[i];
-            const shadowDrawCall = shadowsDrawCalls[i];
+            const shadowDrawCall = drawCalls[i];
 
             const lightBounds = light.getBounds();
 
