@@ -13,7 +13,7 @@ import { Framebuffer } from "../webgl/Framebuffer";
 import { lightStruct, ShaderProgram, worldToClipVertex } from "../webgl/ShaderProgram";
 import { WebglGPUTimer } from "../webgl/WebglGPUTimer";
 import { WebglLineRenderer } from "../webgl/WebglLineRenderer";
-import { initShadowBuffer } from "../wasm/shadowGeometryModule";
+import { shadowGeometryModule } from "../wasm/shadowGeometryModule";
 
 const mainVertex = `#version 300 es
 
@@ -459,7 +459,7 @@ export class Webgl2Renderer implements Renderer {
         }
 
         const colliderIndices = sceneLights.map(light => scene.getColliders(light.getBounds()).map(c => c._index).filter(idx => idx !== null));
-        const { drawCalls, vertices } = initShadowBuffer(sceneLights, sceneColliders, colliderIndices);
+        const { drawCalls, vertices } = shadowGeometryModule.initShadowBuffer(sceneLights, sceneColliders, colliderIndices);
 
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.shadowsVbo);
 
@@ -638,7 +638,7 @@ export class Webgl2Renderer implements Renderer {
 
     public render(scene: Scene, camera: Camera) {
         if (!this.initialized) {
-            throw new Error("Renderer is not initialized");
+            throw new Error("Renderer not initialized. Call renderer.init() first.");
         }
 
         if (this.resizeRequested) {

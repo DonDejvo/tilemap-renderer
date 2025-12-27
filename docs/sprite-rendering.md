@@ -96,13 +96,16 @@ const main = async () => {
     const width = 300;
     const height = 400;
 
+    // Init wasm modules
+    await initWasm();
+
     // Load image
     const image = await assets.loadImage("../images/white_square.png");
 
     // Create renderer
     const renderer = createRenderer("webgl2");
     renderer.setSize(width, height);
-    renderer.setClearColor(new Color(0, 0, 0, 1)); // White background
+    renderer.clearColor = new Color(0, 0, 0, 1); // White background
 
     // Create camera and scene
     const camera = new Camera(width, height);
@@ -133,14 +136,14 @@ const main = async () => {
         sprite.angle = (i * Math.PI) / 8;
         sprite.tintColor = colors[i];
 
-        scene.addSprite(sprite);
+        scene.addNode(sprite);
     }
 
     // Attach canvas to document
     document.body.appendChild(renderer.getCanvas());
 
     // Add textures (required before init)
-    renderer.addTextures([tileset], { WhiteSquare: image });
+    renderer.addTextures([tileset], { ["WhiteSquare"]: image });
 
     // Initialize renderer
     await renderer.init();

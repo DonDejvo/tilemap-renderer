@@ -13,16 +13,19 @@ You can include TilemapRenderer via a **CDN script**. Specify a **version** to e
 <!-- UMD build from CDN -->
 <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@latest/build/tilemap-renderer.min.js"></script>
 <script>
-    const { createRenderer, Camera, Scene, Color } = TilemapRenderer;
+    const { initWasm, createRenderer, Camera, Scene, Color } = TilemapRenderer;
 
     const main = async () => {
         const width = 300;
         const height = 400;
 
+        // Init wasm modules
+        await initWasm();
+
         // Create renderer
         const renderer = createRenderer("webgpu");
         renderer.setSize(width, height);
-        renderer.setClearColor(new Color(0, 0, 1, 1)); // blue background
+        renderer.clearColor = new Color(0, 0, 1, 1); // blue background
         document.body.appendChild(renderer.getCanvas());
 
         // Create camera and scene

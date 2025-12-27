@@ -21,16 +21,19 @@
 </head>
 
 <body>
-    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@1.7.0/build/tilemap-renderer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@2.0.1/build/tilemap-renderer.min.js"></script>
     <script>
-        const { createRenderer, Camera, Scene, Color, Sprite, Tileset, assets } = TilemapRenderer;
+        const { initWasm, createRenderer, Camera, Scene, Color, Sprite, Tileset, assets } = TilemapRenderer;
 
         const main = async () => {
+            // Init wasm modules
+            await initWasm();
+
             const whiteSquareImage = await assets.loadImage("../images/white_square.png");
 
             // Create renderer
             const renderer = createRenderer("webgl2");
-            renderer.setClearColor(new Color(0, 0, 0, 1));
+            renderer.clearColor = new Color(0, 0, 0, 1);
 
             // Create camera and scene
             const camera = new Camera(0, 0);
@@ -57,7 +60,7 @@
                 sprite.angle = i * Math.PI / 8;
                 sprite.tintColor = colors[i];
 
-                scene.addSprite(sprite);
+                scene.addNode(sprite);
             }
 
             const canvas = renderer.getCanvas();

@@ -3,7 +3,7 @@ import { Light } from '../Light';
 import { WasmModule } from '../WasmModule';
 import shadowWasmUrl from './shadowGeometry.wasm?url';
 
-interface ShadowGeometryModule {
+interface IShadowGeometryModule {
     createShadowsGeometry(
         lightIdx: number,
         colliders: number,
@@ -13,69 +13,71 @@ interface ShadowGeometryModule {
     ): number;
 }
 
-export const shadowGeometryModule = new WasmModule<ShadowGeometryModule>(shadowWasmUrl, 64);
+class ShadowGeometryModule extends WasmModule<IShadowGeometryModule> {
+    public initShadowBuffer(lights: Light[], colliders: Collider[], lightColliderIndices: number[][]) {
 
-export const initShadowBuffer = (lights: Light[], colliders: Collider[], lightColliderIndices: number[][]) => {
+        const shadowsBufferView = new DataView(this.memory.buffer);
+        let shadowsBufferOffset = 0;
 
-    const shadowsBufferView = new DataView(shadowGeometryModule.memory.buffer);
-    let shadowsBufferOffset = 0;
+        for (const light of lights) {
 
-    for (const light of lights) {
+            const lightWorldPos = light.worldPosition;
 
-        const lightWorldPos = light.worldPosition;
+            shadowsBufferView.setFloat32(shadowsBufferOffset, lightWorldPos.x, true);
+            shadowsBufferView.setFloat32(shadowsBufferOffset + 4, lightWorldPos.y, true);
+            shadowsBufferView.setFloat32(shadowsBufferOffset + 8, light.radius, true);
 
-        shadowsBufferView.setFloat32(shadowsBufferOffset, lightWorldPos.x, true);
-        shadowsBufferView.setFloat32(shadowsBufferOffset + 4, lightWorldPos.y, true);
-        shadowsBufferView.setFloat32(shadowsBufferOffset + 8, light.radius, true);
-
-        shadowsBufferOffset += 16;
-    }
-
-    const shadowsCollidersPtr = shadowsBufferOffset;
-
-    for (const collider of colliders) {
-        const worldPoints = collider.getWorldPoints();
-
-        shadowsBufferView.setUint32(shadowsBufferOffset, worldPoints.length, true);
-
-        for (let i = 0; i < worldPoints.length; ++i) {
-            const p = worldPoints[i];
-
-            shadowsBufferView.setFloat32(shadowsBufferOffset + 4 + i * 8, p.x, true);
-            shadowsBufferView.setFloat32(shadowsBufferOffset + 4 + i * 8 + 4, p.y, true);
+            shadowsBufferOffset += 16;
         }
 
-        shadowsBufferOffset += 68;
-    }
+        const shadowsCollidersPtr = shadowsBufferOffset;
 
-    const shadowsColliderIndicesPtr = shadowsBufferOffset;
-    const outPtr = shadowsBufferOffset + 4 * colliders.length;
+        for (const collider of colliders) {
+            const worldPoints = collider.getWorldPoints();
 
-    const drawCalls: { offset: number; count: number; }[] = [];
-    let shadowsOffset = 0;
+            shadowsBufferView.setUint32(shadowsBufferOffset, worldPoints.length, true);
 
-    for (let i = 0; i < lights.length; ++i) {
+            for (let i = 0; i < worldPoints.length; ++i) {
+                const p = worldPoints[i];
 
-        for (let j = 0; j < lightColliderIndices[i].length; ++j) {
-            shadowsBufferView.setUint32(shadowsBufferOffset + j * 4, lightColliderIndices[i][j], true);
+                shadowsBufferView.setFloat32(shadowsBufferOffset + 4 + i * 8, p.x, true);
+                shadowsBufferView.setFloat32(shadowsBufferOffset + 4 + i * 8 + 4, p.y, true);
+            }
+
+            shadowsBufferOffset += 68;
         }
 
-        const numVertices = shadowGeometryModule.exports.createShadowsGeometry(
-            i,
-            shadowsCollidersPtr,
-            shadowsColliderIndicesPtr,
-            lightColliderIndices[i].length,
-            outPtr + shadowsOffset * 8
-        );
+        const shadowsColliderIndicesPtr = shadowsBufferOffset;
+        const outPtr = shadowsBufferOffset + 4 * colliders.length;
 
-        drawCalls.push({ count: numVertices, offset: shadowsOffset });
-        shadowsOffset += numVertices;
+        const drawCalls: { offset: number; count: number; }[] = [];
+        let shadowsOffset = 0;
+
+        for (let i = 0; i < lights.length; ++i) {
+
+            for (let j = 0; j < lightColliderIndices[i].length; ++j) {
+                shadowsBufferView.setUint32(shadowsBufferOffset + j * 4, lightColliderIndices[i][j], true);
+            }
+
+            const numVertices = this.exports.createShadowsGeometry(
+                i,
+                shadowsCollidersPtr,
+                shadowsColliderIndicesPtr,
+                lightColliderIndices[i].length,
+                outPtr + shadowsOffset * 8
+            );
+
+            drawCalls.push({ count: numVertices, offset: shadowsOffset });
+            shadowsOffset += numVertices;
+        }
+
+        const vertices = new Float32Array(this.memory.buffer, outPtr, shadowsOffset * 2);
+
+        return {
+            vertices,
+            drawCalls
+        };
     }
-
-    const vertices = new Float32Array(shadowGeometryModule.memory.buffer, outPtr, shadowsOffset * 2);
-
-    return {
-        vertices,
-        drawCalls
-    };
 }
+
+export const shadowGeometryModule = new ShadowGeometryModule(shadowWasmUrl, 64);

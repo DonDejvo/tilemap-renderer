@@ -12,7 +12,7 @@ import { Tileset } from "../Tileset";
 import { GPUConfig, requestConfig, worldToClipVertex } from "./common";
 import { WebgpuGPUTimer } from "./WebgpuGPUTimer";
 import { WebgpuLineRendrer } from "./WebgpuLineRenderer";
-import { initShadowBuffer } from "../wasm/shadowGeometryModule";
+import { shadowGeometryModule } from "../wasm/shadowGeometryModule";
 
 const mainVertex = `
 struct VSInput {
@@ -818,7 +818,7 @@ export class WebgpuRenderer implements Renderer {
         }
 
         const colliderIndices = sceneLights.map(light => scene.getColliders(light.getBounds()).map(c => c._index).filter(idx => idx !== null));
-        const { drawCalls, vertices } = initShadowBuffer(sceneLights, sceneColliders, colliderIndices);
+        const { drawCalls, vertices } = shadowGeometryModule.initShadowBuffer(sceneLights, sceneColliders, colliderIndices);
 
         this.cfg.device.queue.writeBuffer(this.shadowsVbo, 0, vertices);
 
@@ -1000,7 +1000,7 @@ export class WebgpuRenderer implements Renderer {
 
     public render(scene: Scene, camera: Camera) {
         if (!this.initialized) {
-            throw new Error("Renderer is not initialized");
+            throw new Error("Renderer not initialized. Call renderer.init() first.");
         }
 
         if (this.resizeRequested) {
