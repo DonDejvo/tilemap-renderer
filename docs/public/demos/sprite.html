@@ -21,7 +21,7 @@
 </head>
 
 <body>
-    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@2.0.1/build/tilemap-renderer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@2.0.3/build/tilemap-renderer.min.js"></script>
     <script>
         const { initWasm, createRenderer, Camera, Scene, Color, Sprite, Tileset, assets } = TilemapRenderer;
 
@@ -40,28 +40,6 @@
             const scene = new Scene();
 
             const tileset = Tileset.fromImage("WhiteSquare", whiteSquareImage);
-
-            const colors = [
-                new Color(1, 0, 0), // Red
-                new Color(0, 1, 0), // Green
-                new Color(0, 0, 1) // Blue
-            ]
-
-            for (let i = 0; i < 3; ++i) {
-                const sprite = new Sprite({
-                    tileset,
-                    zIndex: 3 - i
-                });
-
-                sprite.position.set(100, 100);
-                sprite.scale.scale(i + 1);
-                // Offseting by negative half of scale sets sprite rotation origin at the center
-                sprite.offset.copy(sprite.scale.clone().scale(-0.5));
-                sprite.angle = i * Math.PI / 8;
-                sprite.tintColor = colors[i];
-
-                scene.addNode(sprite);
-            }
 
             const canvas = renderer.getCanvas();
 
@@ -84,6 +62,28 @@
 
             // Initialize renderer
             await renderer.init();
+
+            const colors = [
+                new Color(1, 0, 0), // Red
+                new Color(0, 1, 0), // Green
+                new Color(0, 0, 1) // Blue
+            ];
+
+            for (let i = 0; i < 3; ++i) {
+                const sprite = new Sprite({
+                    tileset,
+                    zIndex: 3 - i
+                });
+
+                sprite.position.set(100, 100);
+                sprite.scale.scale(i + 1);
+                // Offseting by negative half of scale sets sprite rotation origin at the center
+                sprite.offset.copy(sprite.scale.clone().scale(-0.5));
+                sprite.angle = i * Math.PI / 8;
+                sprite.tintColor = colors[i];
+
+                scene.addNode(sprite);
+            }
 
             observer.observe(canvas);
         }

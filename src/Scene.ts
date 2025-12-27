@@ -124,9 +124,10 @@ export class Scene {
 
                             if (tile.animation) {
                                 const animator = new Animator(s);
+
+                                animators.push(s.addNode(animator));
+
                                 animator.play([tile.x, tile.y], { repeat: true });
-                                animators.push(animator);
-                                this.addNode(animator);
                             }
                         }
                     }

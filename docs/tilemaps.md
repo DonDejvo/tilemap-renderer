@@ -43,11 +43,13 @@ In the example below:
 - Run a **render loop** to update animated tiles and render the scene.
 
 ```ts
-const { createRenderer, Camera, Scene, Color, Sprite, Tileset, Animator, Tilemap, Vector, assets } = TilemapRenderer;
+const { initWasm, createRenderer, Camera, Scene, Color, Sprite, Tileset, Animator, Tilemap, Vector, assets } = TilemapRenderer;
 
 const main = async () => {
     const width = 300;
     const height = 400;
+
+    await initWasm();
 
     const environmentImage = await assets.loadImage("../images/environment.png");
     
@@ -57,7 +59,7 @@ const main = async () => {
 
     // Create renderer
     const renderer = createRenderer("webgl2");
-    renderer.setClearColor(new Color(0, 0, 0, 1));
+    renderer.clearColor = new Color(0, 0, 0, 1);
 
     // Create camera and scene
     const camera = new Camera(0, 0);
@@ -76,7 +78,7 @@ const main = async () => {
         }
     };
 
-    const { sprites, animators } = scene.addTilemap(tilemap, {
+    scene.addTilemap(tilemap, {
         tileWidth: tileSize,
         tileHeight: tileSize,
         onObject
@@ -102,10 +104,7 @@ const main = async () => {
             dt = t - (prevTime || t);
             prevTime = t;
 
-            // Update animated tiles
-            for (let animator of animators) {
-                animator.update(dt);
-            }
+            scene.update(dt);
 
             renderer.render(scene, camera);
         });

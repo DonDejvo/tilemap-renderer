@@ -21,7 +21,7 @@
 </head>
 
 <body>
-    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@2.0.2/build/tilemap-renderer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@2.0.3/build/tilemap-renderer.min.js"></script>
     <script>
         const { initWasm, createRenderer, Camera, Scene, Color, Sprite, Tileset, Animator, assets } = TilemapRenderer;
 
@@ -77,7 +77,7 @@
             scene.addNode(sprite);
 
             const animator = new Animator(sprite);
-            animator.play({ x: 0, y: 0 }, { repeat: true });
+            animator.play([0, 0], { repeat: true });
 
             sprite.addNode(animator);
 

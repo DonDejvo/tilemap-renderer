@@ -114,6 +114,15 @@ const main = async () => {
     // Create tileset from loaded image
     const tileset = Tileset.fromImage("WhiteSquare", image);
 
+    // Attach canvas to document
+    document.body.appendChild(renderer.getCanvas());
+
+    // Add textures (required before init)
+    renderer.addTextures([tileset], { ["WhiteSquare"]: image });
+
+    // Initialize renderer
+    await renderer.init();
+
     const colors = [
         new Color(1, 0, 0), // Red
         new Color(0, 1, 0), // Green
@@ -138,15 +147,6 @@ const main = async () => {
 
         scene.addNode(sprite);
     }
-
-    // Attach canvas to document
-    document.body.appendChild(renderer.getCanvas());
-
-    // Add textures (required before init)
-    renderer.addTextures([tileset], { ["WhiteSquare"]: image });
-
-    // Initialize renderer
-    await renderer.init();
 
     // Render the scene
     renderer.render(scene, camera);

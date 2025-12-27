@@ -5,31 +5,21 @@ import { TileAnimation } from "./Tileset";
 class Animation {
     static animationLabels = new Map<string, [number, number]>();
 
-    label: string | [number, number];
+    label: [number, number];
     frames: TileAnimation;
 
     static createLabel(label: string, tileXY: [number, number]) {
         this.animationLabels.set(label, tileXY);
     }
 
-    constructor(label: string | [number, number], frames: TileAnimation) {
+    constructor(label: [number, number], frames: TileAnimation) {
         this.label = label;
         this.frames = frames;
     }
 
     equals(other: Animation) {
-        const tileXY = typeof this.label === "string" ?
-            Animation.animationLabels.get(this.label)! :
-            this.label;
-
-        const otherTileXY = typeof other.label === "string" ?
-            Animation.animationLabels.get(other.label)! :
-            other.label;
-
-        return tileXY &&
-            otherTileXY &&
-            tileXY[0] === otherTileXY[0] &&
-            tileXY[1] === otherTileXY[1];
+        return this.label[0] === other.label[0] &&
+            this.label[1] === other.label[1];
     }
 }
 
@@ -53,19 +43,11 @@ export class Animator extends SceneNode {
     }
 
     public play(
-        label: [number, number] | string,
+        label: [number, number],
         options: { repeat?: boolean; restart?: boolean } = {}
     ) {
-        if(!this.sprite) return;
-
-        let tileXY: [number, number];
-        if (typeof label === "string") {
-            if (!Animation.animationLabels.has(label)) throw new Error("Animation not found: " + label);
-            tileXY = Animation.animationLabels.get(label)!;
-        } else {
-            tileXY = label;
-        }
-        const tile = this.sprite.tileset.getTile(...tileXY);
+        if (!this.sprite) return;
+        const tile = this.sprite.tileset.getTile(...label);
 
         if (!tile) return;
 

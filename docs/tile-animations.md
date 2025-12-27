@@ -24,16 +24,14 @@ Here is the tileset image used for the animation:
 
 The **Player Run** animation uses a sequence of tiles in the following order: 0 → 1 → 2 → 1.
 
-Next, create an **Animator** for the sprite you want to animate. The Animator controls which frame is displayed at each moment.
+Next, create an **Animator** node for the sprite you want to animate. The Animator controls which frame is displayed at each moment.
 
 Use the `play` method to start an animation sequence:
 
 - **tileXY** – the coordinates of the tile in the tileset grid where the animation begins.  
 - **options** – optional configuration:  
   - `repeat`: whether the animation should loop continuously  
-  - `restart`: whether to restart the animation if it is already playing  
-
-Finally, in your game loop, call the Animator's `update` method with the elapsed time (`dt`) to advance the animation frames. Then render the scene to display the updated sprite.
+  - `restart`: whether to restart the animation if it is already playing
 
 ```ts
 const { createRenderer, Camera, Scene, Color, Sprite, Tileset, Animator, assets } = TilemapRenderer;
@@ -75,16 +73,6 @@ const main = async () => {
         ]
     });
 
-    // Create sprite and assign tileset
-    const sprite = new Sprite({ tileset });
-    sprite.position.set(50, 50);
-    sprite.scale.scale(2);
-    scene.addSprite(sprite);
-
-    // Create Animator and play animation
-    const animator = new Animator(sprite);
-    animator.play({ x: 0, y: 0 }, { repeat: true });
-
     // Add canvas to document
     const canvas = renderer.getCanvas();
     document.body.appendChild(canvas);
@@ -94,6 +82,19 @@ const main = async () => {
 
     // Initialize renderer
     await renderer.init();
+
+    // Create sprite and assign tileset
+    const sprite = new Sprite({ tileset });
+    sprite.position.set(50, 50);
+    sprite.scale.scale(2);
+    scene.addNode(sprite);
+
+    // Create Animator and play animation
+    const animator = new Animator(sprite);
+
+    sprite.addNode(animator);
+
+    animator.play([0, 0], { repeat: true });
 
     // Animation loop
     let dt = 0;
