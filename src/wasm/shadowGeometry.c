@@ -54,7 +54,7 @@ static inline vec_t vec_normalize(vec_t v)
 
 static inline float vec_dot(vec_t v1, vec_t v2)
 {
-    return v1.x * v2.x + v1.x * v2.y;
+    return v1.x * v2.x + v1.y * v2.y;
 }
 
 __attribute__((export_name("createShadowsGeometry")))
@@ -91,14 +91,14 @@ createShadowsGeometry(
 
             float cosAngle = vec_dot(normal, vec_normalize(toLight));
 
-            if (cosAngle <= 0)
+            if (cosAngle <= 0.0f)
                 continue;
 
             vec_t dir0 = vec_normalize(vec_sub(p0, light.worldPos));
             vec_t dir1 = vec_normalize(vec_sub(p1, light.worldPos));
 
             float dist = light.radius - vec_len(toLight);
-            float shadowLength = (dist < 0 ? 0 : dist) * 100;
+            float shadowLength = (dist < light.radius * 0.01f ? light.radius * 0.01f : dist) * 100.0f;
 
             vec_t p2 = vec_add(p0, vec_scale(dir0, shadowLength));
             vec_t p3 = vec_add(p1, vec_scale(dir1, shadowLength));

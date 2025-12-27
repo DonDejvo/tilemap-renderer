@@ -21,47 +21,50 @@
 </head>
 
 <body>
-    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@2.0.3/build/tilemap-renderer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@2.0.4/build/tilemap-renderer.min.js"></script>
     <script>
-        const { initWasm, createRenderer, Camera, Scene, Color, Sprite, Tileset, Animator, Tilemap, Vector, Light, colliders, assets } = TilemapRenderer;
+        const { initWasm, createRenderer, TEXID_SCENE, TEXID_LIGHTMAP, Camera, Scene, Color, Sprite, Tileset, Animator, Tilemap, Vector, Light, SceneNode, colliders, assets } = TilemapRenderer;
 
-        class Slime {
+        class Slime extends SceneNode {
             constructor(tileset, x, y, zIndex, scene) {
-                this.position = new Vector(x, y);
+                super();
+
+                this.position.set(x, y);
                 this.speed = 80;
 
                 this.x0 = x;
                 this.x1 = x + 32 * 7;
                 this.directionX = 1;
 
+                scene.addNode(this);
+
                 this.sprite = new Sprite({
                     tileset,
                     zIndex
                 });
+
                 this.sprite.scale.scale(2);
                 this.sprite.offset.set(-16, -32);
-                scene.addSprite(this.sprite);
+                this.addNode(this.sprite);
 
                 this.animator = new Animator(this.sprite);
 
-                this.sprite.addNode(this.animator);
+                this.addNode(this.animator);
 
-                this.animator.play({ x: 0, y: 0 }, { repeat: true });
+                this.animator.play([0, 0], { repeat: true });
             }
 
             update(dt) {
-                if(this.position.x > this.x1) {
+                if (this.position.x > this.x1) {
                     this.position.x = this.x1;
                     this.directionX *= -1;
                     this.sprite.scale.x *= -1;
-                } else if(this.position.x < this.x0) {
+                } else if (this.position.x < this.x0) {
                     this.position.x = this.x0;
                     this.directionX *= -1;
                     this.sprite.scale.x *= -1;
                 }
                 this.position.x += this.directionX * this.speed * dt;
-
-                this.sprite.position.copy(this.position);
             }
         }
 
@@ -78,7 +81,7 @@
 
             // Create renderer
             const renderer = createRenderer("webgl2");
-            
+
             renderer.clearColor = new Color(0, 0, 0, 1);
 
             // Create camera and scene
@@ -96,18 +99,18 @@
 
             const moveCamera = (dt) => {
 
-                if(camera.position.x > tilemap.width * tileSize - 0.5 * camera.vw) {
+                if (camera.position.x > tilemap.width * tileSize - 0.5 * camera.vw) {
                     camera.position.x = tilemap.width * tileSize - 0.5 * camera.vw;
                     cameraDir.x *= -1;
-                } else if(camera.position.x < -0.5 * camera.vw) {
+                } else if (camera.position.x < -0.5 * camera.vw) {
                     camera.position.x = -0.5 * camera.vw;
                     cameraDir.x *= -1;
                 }
 
-                if(camera.position.y > tilemap.height * tileSize - 0.5 * camera.vh) {
+                if (camera.position.y > tilemap.height * tileSize - 0.5 * camera.vh) {
                     camera.position.y = tilemap.height * tileSize - 0.5 * camera.vh;
                     cameraDir.y *= -1;
-                } else if(camera.position.y < -0.5 * camera.vh) {
+                } else if (camera.position.y < -0.5 * camera.vh) {
                     camera.position.y = -0.5 * camera.vh;
                     cameraDir.y *= -1;
                 }
@@ -127,7 +130,9 @@
             await renderer.init();
 
             renderer.pipeline = [
-                { shader: "light", inputs: [TEXID_SCENE, TEXID_LIGHTMAP], output: -1 }
+                { shader: "blurX", inputs: [TEXID_LIGHTMAP], output: 4 },
+                { shader: "blurY", inputs: [4], output: 5 },
+                { shader: "light", inputs: [TEXID_SCENE, 5], output: -1 }
             ];
 
             const observer = new ResizeObserver(entries => {
@@ -144,7 +149,7 @@
             observer.observe(canvas);
 
             const onObject = (obj, x, y, w, h, zIndex, tilemap, layer) => {
-                switch(obj.name) {
+                switch (obj.name) {
                     case "slime": {
                         enemies.push(new Slime(enemiesTileset, x, y, zIndex, scene));
                         break;
@@ -154,7 +159,7 @@
                             radius: 120
                         });
                         light.position.set(x, y);
-                        scene.addLight(light);
+                        scene.addNode(light);
                         break;
                     }
                     case "lava_light": {
@@ -163,13 +168,17 @@
                             color: new Color(1.0, 0.85, 0.55)
                         });
                         light.position.set(x, y);
-                        scene.addLight(light);
+                        scene.addNode(light);
                         break;
                     }
-                    case "collider":{
-                        const box = new colliders.BoxCollider(w, h);
+                    case "collider": {
+                        const box = new colliders.BoxCollider({
+                            width: w,
+                            height: h,
+                            castShadow: true
+                        });
                         box.position.set(x, y);
-                        scene.addCollider(box);
+                        scene.addNode(box);
                         break;
                     }
                 }
@@ -195,6 +204,8 @@
                     scene.update(dt);
 
                     moveCamera(dt);
+
+                    scene.syncColliders();
 
                     renderer.render(scene, camera);
                 });

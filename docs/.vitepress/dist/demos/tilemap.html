@@ -21,31 +21,36 @@
 </head>
 
 <body>
-    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@2.0.3/build/tilemap-renderer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@2.0.4/build/tilemap-renderer.min.js"></script>
     <script>
-        const { initWasm, createRenderer, Camera, Scene, Color, Sprite, Tileset, Animator, Tilemap, Vector, assets } = TilemapRenderer;
+        const { initWasm, createRenderer, Camera, Scene, Color, Sprite, Tileset, Animator, Tilemap, Vector, SceneNode, assets } = TilemapRenderer;
 
-        class Slime {
+        class Slime extends SceneNode {
             constructor(tileset, x, y, zIndex, scene) {
-                this.position = new Vector(x, y);
+                super();
+                this.position.set(x, y);
                 this.speed = 80;
 
                 this.x0 = x;
                 this.x1 = x + 32 * 7;
                 this.directionX = 1;
 
+                scene.addNode(this);
+
                 this.sprite = new Sprite({
                     tileset,
                     zIndex
                 });
+
                 this.sprite.scale.scale(2);
                 this.sprite.offset.set(-16, -32);
-                scene.addSprite(this.sprite);
+                this.addNode(this.sprite);
 
                 this.animator = new Animator(this.sprite);
-                this.animator.play({ x: 0, y: 0 }, { repeat: true });
 
-                this.sprite.addNode(this.animator);
+                this.addNode(this.animator);
+
+                this.animator.play([0, 0], { repeat: true });
             }
 
             update(dt) {
@@ -59,8 +64,6 @@
                     this.sprite.scale.x *= -1;
                 }
                 this.position.x += this.directionX * this.speed * dt;
-
-                this.sprite.position.copy(this.position);
             }
         }
 
