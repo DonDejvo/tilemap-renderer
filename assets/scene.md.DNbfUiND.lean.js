@@ -1,0 +1,1 @@
+import{_ as a,c as o,o as n,ae as d}from"./chunks/framework.CgamhPRR.js";const u=JSON.parse('{"title":"Scene","description":"","frontmatter":{},"headers":[],"relativePath":"scene.md","filePath":"scene.md"}'),s={name:"scene.md"};function r(t,e,l,i,c,h){return n(),o("div",null,[...e[0]||(e[0]=[d("",76)])])}const m=a(s,[["render",r]]);export{u as __pageData,m as default};

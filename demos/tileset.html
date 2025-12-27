@@ -21,16 +21,18 @@
 </head>
 
 <body>
-    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@1.7.0/build/tilemap-renderer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@2.0.4/build/tilemap-renderer.min.js"></script>
     <script>
-        const { createRenderer, Camera, Scene, Color, Sprite, Tileset, assets } = TilemapRenderer;
+        const { initWasm, createRenderer, Camera, Scene, Color, Sprite, Tileset, assets } = TilemapRenderer;
 
         const main = async () => {
+            await initWasm();
+
             const playerImage = await assets.loadImage("../images/player.png");
 
             // Create renderer
             const renderer = createRenderer("webgl2");
-            renderer.setClearColor(new Color(0, 0, 0, 1));
+            renderer.clearColor = new Color(0, 0, 0, 1);
 
             // Create camera and scene
             const camera = new Camera(0, 0);
@@ -46,17 +48,23 @@
                 tileheight: 16
             });
 
+            const canvas = renderer.getCanvas();
+
+            document.body.appendChild(canvas);
+
+            // Add textures (must be done before calling init!)
+            renderer.addTextures([tileset], { ["Player"]: playerImage });
+
+            // Initialize renderer
+            await renderer.init();
+
             const sprite = new Sprite({
                 tileset,
                 tilesetRegion: { x: 1, y: 1 }
             });
             sprite.position.set(50, 50);
             sprite.scale.scale(2);
-            scene.addSprite(sprite);
-
-            const canvas = renderer.getCanvas();
-
-            document.body.appendChild(canvas);
+            scene.addNode(sprite);
 
             const observer = new ResizeObserver(entries => {
                 for (const entry of entries) {
@@ -69,12 +77,6 @@
                 }
                 renderer.render(scene, camera);
             });
-
-            // Add textures (must be done before calling init!)
-            renderer.addTextures([tileset], { ["Player"]: playerImage });
-
-            // Initialize renderer
-            await renderer.init();
 
             observer.observe(canvas);
         }

@@ -20,14 +20,18 @@
 </head>
 
 <body>
-    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@1.7.0/build/tilemap-renderer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/dondejvo/tilemap-renderer@2.0.4/build/tilemap-renderer.min.js"></script>
     <script>
-        const { createRenderer, Camera, Scene, Color } = TilemapRenderer;
+        const { initWasm, createRenderer, Camera, Scene, Color } = TilemapRenderer;
 
         const main = async () => {
+
+            // Init wasm modules
+            await initWasm();
+
             // Create renderer
             const renderer = createRenderer("webgl2");
-            renderer.setClearColor(new Color(0, 0, 1, 1)); // blue background
+            renderer.clearColor = new Color(0, 0, 1, 1); // blue background
             document.body.appendChild(renderer.getCanvas());
 
             // Create camera and scene
