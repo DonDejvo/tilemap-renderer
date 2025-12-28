@@ -23,10 +23,9 @@ emcc "%SRC%" -O3 -ffast-math -fno-math-errno ^
     -Wl,--no-entry -Wl,--import-memory ^
     -o "%OUT%"
 
-IF %ERRORLEVEL% NEQ 0 (
+IF ERRORLEVEL 1 (
     ECHO Build failed.
     EXIT /B 1
 )
 
-ECHO Built "%OUT%"
 ENDLOCAL
