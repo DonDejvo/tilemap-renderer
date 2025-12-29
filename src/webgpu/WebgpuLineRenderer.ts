@@ -4,7 +4,23 @@ import { geometry } from "../geometry";
 import { LineRenderer, MAX_LINES } from "../LineRenderer";
 import { GPUConfig, worldToClipVertex } from "./common";
 
-const linesSource = `
+export class WebgpuLineRendrer extends LineRenderer {
+    private ctx: GPUCanvasContext;
+    private cfg: GPUConfig;
+    private pipeline!: GPURenderPipeline;
+    private vbo!: GPUBuffer;
+    private cameraBuffer!: GPUBuffer;
+    private cameraBindGroup!: GPUBindGroup;
+
+    constructor(ctx: GPUCanvasContext, cfg: GPUConfig) {
+        super();
+        this.ctx = ctx;
+        this.cfg = cfg;
+        this.strokeColor = Color.BLACK;
+    }
+
+    init() {
+        const linesSource = `
 struct VSInput {
     @location(0) pos: vec2f,
     @location(1) color: vec4f
@@ -42,22 +58,6 @@ fn fs_main(input: VSOutput) -> @location(0) vec4f {
 }
 `;
 
-export class WebgpuLineRendrer extends LineRenderer {
-    private ctx: GPUCanvasContext;
-    private cfg: GPUConfig;
-    private pipeline!: GPURenderPipeline;
-    private vbo!: GPUBuffer;
-    private cameraBuffer!: GPUBuffer;
-    private cameraBindGroup!: GPUBindGroup;
-
-    constructor(ctx: GPUCanvasContext, cfg: GPUConfig) {
-        super();
-        this.ctx = ctx;
-        this.cfg = cfg;
-        this.strokeColor = Color.BLACK;
-    }
-
-    init() {
         this.vbo = this.cfg.device.createBuffer({
             label: "Lines Vertex Buffer",
             size: MAX_LINES * geometry.lineStride * 2 * 4,
@@ -110,7 +110,7 @@ export class WebgpuLineRendrer extends LineRenderer {
     }
 
     render(encoder: GPUCommandEncoder, camera: Camera) {
-        if(this.lines.length === 0) return;
+        if (this.lines.length === 0) return;
 
         this.cfg.device.queue.writeBuffer(this.vbo, 0, geometry.createLinesGeometry(this.lines));
         this.cfg.device.queue.writeBuffer(

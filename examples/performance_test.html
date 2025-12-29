@@ -62,7 +62,10 @@
     <div id="frametimeinfo"></div>
 
     <script type="module">
-        import { createRenderer, initWasm, Vector, math, colliders, Sprite, Light, Camera, Scene, assets, Color, EMATimer, Tileset, TEXID_SCENE, TEXID_LIGHTMAP } from "../src/TilemapRenderer.ts";
+        import { limits, createRenderer, initWasm, Vector, math, colliders, Sprite, Light, Camera, Scene, assets, Color, EMATimer, Tileset, TextureID } from "../src/TilemapRenderer.ts";
+
+        limits.dynamicLayerMaxSprites = 20000;
+        limits.maxLights = 500;
 
         const assetsUrl = "";
         const rendererContext = "webgpu";
@@ -113,7 +116,7 @@
             });
 
             renderer.pipeline = [
-                { shader: "light", inputs: [TEXID_SCENE, TEXID_LIGHTMAP], output: -1 }
+                { shader: "light", inputs: [TextureID.SCENE, TextureID.LIGHTMAP], output: -1 }
             ];
 
             observer.observe(renderer.getCanvas());

@@ -41,19 +41,31 @@
             padding: 2px 6px;
             border-radius: 4px;
         }
+
+        #frametimeinfo {
+            position: fixed;
+            left: 10px;
+            top: 40px;
+            color: white;
+            font: 14px monospace;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            z-index: 9999;
+        }
     </style>
 </head>
 
 <body>
     <div id="fpsinfo">FPS: 0</div>
     <div id="sceneinfo"></div>
+    <div id="frametimeinfo"></div>
 
     <script type="module">
         import {
             createRenderer,
             initWasm,
-            TEXID_SCENE,
-            TEXID_LIGHTMAP,
+            TextureID,
             Vector,
             Camera,
             Scene,
@@ -61,6 +73,7 @@
             RigidBody,
             PhysicsWorld,
             Light,
+            EMATimer,
             colliders
         } from "../src/TilemapRenderer.ts";
 
@@ -191,9 +204,9 @@
             renderer.setSize(w, h);
 
             renderer.pipeline = [
-                { shader: "blurX", inputs: [TEXID_LIGHTMAP], output: 4 },
+                { shader: "blurX", inputs: [TextureID.LIGHTMAP], output: 4 },
                 { shader: "blurY", inputs: [4], output: 5 },
-                { shader: "light", inputs: [TEXID_SCENE, 5], output: -1 }
+                { shader: "light", inputs: [TextureID.SCENE, 5], output: -1 }
             ];
 
             await renderer.init();
@@ -275,6 +288,11 @@
             };
 
             setActiveShape(shapes[activeIndex]);
+
+            const cpuTimer = new EMATimer();
+            const gpuTimer = renderer.getGpuTimer();
+
+            gpuTimer.enable();
 
             const draw = () => {
                 requestAnimationFrame(now => {
@@ -367,7 +385,14 @@
                         }
                     }
 
+                    cpuTimer.begin();
+
                     renderer.render(scene, camera);
+
+                    cpuTimer.end();
+
+                    cpuTimer.poll();
+                    gpuTimer.poll();
                 });
             };
 
@@ -387,6 +412,16 @@
                 fpsinfo.textContent = `${rendererContext.toUpperCase()} - FPS: ${fps}`;
 
                 sceneinfo.innerHTML = `<pre>${formatSceneInfo(scene.getInfo())}</pre>`;
+
+                const avgGPU = gpuTimer.getAverage();
+                const peakGPU = gpuTimer.getPeak();
+                const avgCPU = cpuTimer.getAverage();
+                const peakCPU = cpuTimer.getPeak();
+
+                frametimeinfo.innerHTML = `
+<div>GPU: avg: ${avgGPU?.toFixed(2) ?? "-"} ms, peak: ${peakGPU.toFixed(2)}</div>
+<div>CPU: avg: ${avgCPU?.toFixed(2) ?? "-"} ms, peak: ${peakCPU.toFixed(2)}</div>
+`;
             }, 100);
         };
 

@@ -143,7 +143,7 @@
     </div>
 
     <script type="module">
-        import { createRenderer, initWasm, Tileset, Tilemap, Vector, math, colliders, Sprite, Light, ShaderBuilder, Camera, Scene, assets, Animator, Color, EMATimer, TEXID_SCENE, TEXID_MASK, TEXID_LIGHTMAP } from "../src/TilemapRenderer.ts";
+        import { createRenderer, initWasm, Tileset, Tilemap, Vector, math, colliders, Sprite, Light, ShaderBuilder, Camera, Scene, assets, Animator, Color, EMATimer, TextureID } from "../src/TilemapRenderer.ts";
 
         ShaderBuilder.LOG_SHADERS = true;
 
@@ -501,16 +501,16 @@
 
             renderer.pipeline = [
                 // Player Neon Glow
-                { shader: "default", inputs: [TEXID_MASK], output: k },
+                { shader: "default", inputs: [TextureID.MASK], output: k },
                 { shader: "neonExtract", inputs: [k], output: k + 1, uniforms: [{ name: "threshold", value: 0.25 }] },
                 { shader: "blurX", inputs: [k + 1], output: k },
                 { shader: "blurY", inputs: [k], output: k + 1 },
-                { shader: "neonComposite", inputs: [TEXID_SCENE, k + 1], output: TEXID_MASK },
+                { shader: "neonComposite", inputs: [TextureID.SCENE, k + 1], output: TextureID.MASK },
                 // Light
-                { shader: "colorCut", inputs: [TEXID_LIGHTMAP], output: TEXID_LIGHTMAP + 1, uniforms: [{ name: "interval", value: 6 }] },
+                { shader: "colorCut", inputs: [TextureID.LIGHTMAP], output: TextureID.LIGHTMAP + 1, uniforms: [{ name: "interval", value: 6 }] },
                 // { shader: "blurX", inputs: [TEXID_LIGHTMAP + 1], output: 4 },
                 // { shader: "blurY", inputs: [4], output: 5 },
-                { shader: "light", inputs: [TEXID_MASK, TEXID_LIGHTMAP + 1], output: -1 },
+                { shader: "light", inputs: [TextureID.MASK, TextureID.LIGHTMAP + 1], output: -1 },
             ];
 
             const cpuTimer = new EMATimer();

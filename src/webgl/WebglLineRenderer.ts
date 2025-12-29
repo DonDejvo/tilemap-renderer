@@ -1,9 +1,21 @@
 import { Camera } from "../Camera";
 import { geometry } from "../geometry";
 import { LineRenderer, MAX_LINES } from "../LineRenderer";
-import { ShaderProgram, worldToClipVertex } from "./ShaderProgram";
+import { worldToClipVertex } from "./common";
+import { ShaderProgram } from "./ShaderProgram";
 
-const lineVertex = `
+export class WebglLineRenderer extends LineRenderer {
+    private gl: WebGLRenderingContext | WebGL2RenderingContext;
+    private vbo!: WebGLBuffer;
+    private shaderProgram!: ShaderProgram;
+
+    constructor(gl: WebGLRenderingContext | WebGL2RenderingContext) {
+        super();
+        this.gl = gl;
+    }
+
+    init() {
+        const lineVertex = `
 attribute vec2 aPos;
 attribute vec4 aColor;
 
@@ -20,7 +32,7 @@ void main() {
 }
 `;
 
-const lineFragment = `
+        const lineFragment = `
 precision mediump float;
 
 varying vec4 color;
@@ -30,17 +42,6 @@ void main() {
 }
 `;
 
-export class WebglLineRenderer extends LineRenderer {
-    private gl: WebGLRenderingContext | WebGL2RenderingContext;
-    private vbo!: WebGLBuffer;
-    private shaderProgram!: ShaderProgram;
-
-    constructor(gl: WebGLRenderingContext | WebGL2RenderingContext) {
-        super();
-        this.gl = gl;
-    }
-
-    init() {
         this.shaderProgram = new ShaderProgram(this.gl, lineVertex, lineFragment);
 
         this.vbo = this.gl.createBuffer();
@@ -49,7 +50,7 @@ export class WebglLineRenderer extends LineRenderer {
     }
 
     render(camera: Camera) {
-        if(this.lines.length === 0) return;
+        if (this.lines.length === 0) return;
 
         this.shaderProgram.use();
 

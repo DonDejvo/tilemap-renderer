@@ -4,285 +4,17 @@ import { getHeight, getWidth, overlaps } from "../bounds";
 import { geometry } from "../geometry";
 import { LineRenderer } from "../LineRenderer";
 import { math } from "../math";
-import { BlendMode, defaultPass, DYNAMIC_LAYER_MAX_SPRITES, getOffscreenTextureSizeFactor, GPUTimer, LAYER_LIFETIME, maskClearColor, MAX_CHANNELS, MAX_LIGHTS, OFFSCREEN_TEXTURES, Renderer, RendererBuilderOptions, RendererType, RenderPass, SHADOW_MAX_VERTICES, STATIC_LAYER_MAX_SPRITES, TEXID_LIGHTMAP, TEXID_MASK, TEXID_SCENE, TextureInfo, UNIFORMS_MAX_SIZE } from "../Renderer";
+import { BlendMode, defaultPass, getOffscreenTextureSizeFactor, GPUTimer, LAYER_LIFETIME, maskClearColor, Renderer, RendererBuilderOptions, RendererType, RenderPass, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
 import { ShaderBuilder, ShaderBuilderOutput, shaders } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
-import { GPUConfig, requestConfig, worldToClipVertex } from "./common";
+import { GPUConfig, requestConfig, textureChannels, worldToClipVertex } from "./common";
 import { WebgpuGPUTimer } from "./WebgpuGPUTimer";
 import { WebgpuLineRendrer } from "./WebgpuLineRenderer";
 import { shadowGeometryModule } from "../wasm/shadowGeometryModule";
-
-const mainVertex = `
-struct VSInput {
-    @location(0) vertexPos: vec2f,
-    @location(1) texCoord: vec2f,
-    
-    @location(2) tilePos: vec2f,
-    @location(3) tileScale: vec2f,
-    @location(4) tileAngle: f32,
-    @location(5) tileRegion: vec2u,
-
-    @location(6) tintColor: vec4f,
-    @location(7) maskColor: vec4f,
-
-    @location(8) tileOffset: vec2f
-}
-
-struct Camera {
-    pos: vec2f,
-    viewportDimensions: vec2f
-}
-
-@group(0) @binding(0)
-var<uniform> camera: Camera;
-
-@group(1) @binding(2)
-var<uniform> tilesetDimensions: vec2f;
-
-struct VSOutput {
-    @builtin(position) pos: vec4f,
-    @location(0) uv: vec2f,
-    @location(1) tintColor: vec4f,
-    @location(2) maskColor: vec4f
-}
-
-${worldToClipVertex}
-
-@vertex
-fn vs_main(input: VSInput) -> VSOutput {
-    var out: VSOutput;
-
-    out.tintColor = input.tintColor;
-    out.maskColor = input.maskColor;
-
-    let x = f32(input.tileRegion.x & 0xFFFFu);
-    let y = f32(input.tileRegion.x >> 16);
-    let w = f32(input.tileRegion.y & 0xFFFFu);
-    let h = f32(input.tileRegion.y >> 16);
-
-    let tileRegion = vec4f(x, y, w, h);
-
-    let flippedTexCoord = vec2f(input.texCoord.x, 1.0 - input.texCoord.y);
-    out.uv = (tileRegion.xy + flippedTexCoord * tileRegion.zw) / tilesetDimensions;
-
-    let c = cos(input.tileAngle);
-    let s = sin(input.tileAngle);
-    let offsetPos = (input.vertexPos * abs(input.tileScale) + input.tileOffset) * sign(input.tileScale);
-    let rotatedPos = vec2f(
-        offsetPos.x * c - offsetPos.y * s,
-        offsetPos.x * s + offsetPos.y * c
-    );
-    let worldPos = rotatedPos + input.tilePos;
-
-    out.pos = worldToClip(worldPos, camera.pos, camera.viewportDimensions);
-    return out;
-}`;
-
-const mainFragment = `
-
-@group(1) @binding(0)
-var spriteSampler: sampler;
-
-@group(1) @binding(1)
-var spriteTexture: texture_2d<f32>;
-
-@fragment
-fn fs_main(input: VSOutput) -> @location(0) vec4f {
-    return textureSample(spriteTexture, spriteSampler, input.uv) * input.tintColor;
-}
-`;
-
-const maskFragment = `
-@group(1) @binding(0)
-var spriteSampler: sampler;
-
-@group(1) @binding(1)
-var spriteTexture: texture_2d<f32>;
-
-@fragment
-fn fs_main(input: VSOutput) -> @location(0) vec4f {
-    let texColor: vec4f = textureSample(spriteTexture, spriteSampler, input.uv);
-    return vec4f(input.maskColor.xyz, texColor.w * input.maskColor.a);
-}
-`;
-
-const mainSource = mainVertex + mainFragment;
-const maskSource = mainVertex + maskFragment;
-
-const lightSource = `
-struct VSInput {
-    @location(0) pos: vec2f
-}
-
-struct VSOutput {
-    @builtin(position) pos: vec4f,
-    @location(0) worldPos: vec2f
-}
-
-struct Camera {
-    pos: vec2f,
-    viewportDimensions: vec2f
-}
-
-struct Light {
-    center: vec2f,
-    radius: f32,
-    color: vec3f,
-    intensity: f32,
-    direction: vec2f,
-    outerCutoff: f32,
-    innerCutoff: f32
-}
-
-@group(0) @binding(0)
-var<uniform> camera: Camera;
-
-@group(1) @binding(0)
-var<uniform> light: Light;
-
-${worldToClipVertex}
-
-@vertex
-fn vs_main(input: VSInput) -> VSOutput {
-    var out: VSOutput;
-
-    out.worldPos = light.center + (input.pos - 0.5) * 2.0 * light.radius;
-
-    out.pos = worldToClip(out.worldPos, camera.pos, camera.viewportDimensions);
-    return out;
-}
-
-@fragment
-fn fs_main(input: VSOutput) -> @location(0) vec4f {
-    let toPixel = input.worldPos - light.center;
-    let dist = length(toPixel);
-
-    let attenuation = clamp(1.0 - pow(dist / light.radius, 2.0), 0.0, 1.0);
-
-    var spotFactor = 1.0;
-    if (light.outerCutoff > 0.0) {
-        let cosAngle = dot(normalize(toPixel), normalize(light.direction));
-        spotFactor = smoothstep(
-            light.outerCutoff,
-            light.innerCutoff,
-            cosAngle
-        );
-    }
-
-    return vec4f(light.color * light.intensity * attenuation * spotFactor, 1.0);
-}
-`;
-
-const shadowSource = `
-struct VSInput {
-    @location(0) pos: vec2f
-}
-
-struct VSOutput {
-    @builtin(position) pos: vec4f
-}
-
-struct Camera {
-    pos: vec2f,
-    viewportDimensions: vec2f
-}
-
-@group(0) @binding(0)
-var<uniform> camera: Camera;
-
-${worldToClipVertex}
-
-@vertex
-fn vs_main(input: VSInput) -> VSOutput {
-    var out: VSOutput;
-
-    out.pos = worldToClip(input.pos, camera.pos, camera.viewportDimensions);
-    return out;
-}
-
-@fragment
-fn fs_main(input: VSOutput) {
-}
-`;
-
-const fullscreenSource = (input: ShaderBuilderOutput) => `
-
-struct VSOutput {
-    @builtin(position) pos: vec4f,
-    @location(0) uv: vec2f
-}
-
-@vertex
-fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VSOutput {
-    var out: VSOutput;
-
-    let x = f32((vertexIndex & 1) << 2);
-    let y = f32((vertexIndex & 2) << 1);
-
-    out.uv = vec2f(x, 2.0 - y) / 2.0;
-    out.pos = vec4f(x - 1.0, y - 1.0, 0.0, 1.0);
-    return out;
-}
-
-struct Uniforms {
-${input.uniforms.map(line => "    " + line).join(",\n")}
-}
-
-@group(0) @binding(0)
-var<uniform> uniforms: Uniforms;
-
-@group(1) @binding(0)
-var defaultSampler: sampler;
-
-@group(1) @binding(1)
-var channel0: texture_2d<f32>;
-
-@group(1) @binding(2)
-var channel1: texture_2d<f32>;
-
-@group(1) @binding(3)
-var channel2: texture_2d<f32>;
-
-@group(1) @binding(4)
-var channel3: texture_2d<f32>;
-
-@group(1) @binding(5)
-var channel4: texture_2d<f32>;
-
-@group(1) @binding(6)
-var channel5: texture_2d<f32>;
-
-@group(1) @binding(7)
-var channel6: texture_2d<f32>;
-
-@group(1) @binding(8)
-var channel7: texture_2d<f32>;
-
-fn texture(ch: i32, uv: vec2f) -> vec4f {
-    let scaledUV = uv;
-
-    switch (ch) {
-        case 1:  { return textureSample(channel1, defaultSampler, scaledUV); }
-        case 2:  { return textureSample(channel2, defaultSampler, scaledUV); }
-        case 3:  { return textureSample(channel3, defaultSampler, scaledUV); }
-        case 4:  { return textureSample(channel4, defaultSampler, scaledUV); }
-        case 5:  { return textureSample(channel5, defaultSampler, scaledUV); }
-        case 6:  { return textureSample(channel6, defaultSampler, scaledUV); }
-        case 7:  { return textureSample(channel7, defaultSampler, scaledUV); }
-        default: { return textureSample(channel0, defaultSampler, scaledUV); }
-    }
-}
-
-${input.functions.join("\n\n")}
-
-@fragment
-fn fs_main(input: VSOutput) -> @location(0) vec4f {
-    let fragCoord = input.uv * uniforms.resolution;
-    return mainImage(fragCoord);
-}
-`;
+import { TextureID } from "../TextureID";
+import { limits } from "../Limits";
 
 interface FullscreenShaderInfo {
     pipeline?: GPURenderPipeline;
@@ -357,7 +89,7 @@ export class WebgpuRenderer implements Renderer {
         this.shaderCache = new Map();
         this.renderPassUniformMap = new Map();
         this.fullscreenPasses = {
-            lightAdditive: { shader: "default_additive", inputs: [TEXID_LIGHTMAP + 1], output: TEXID_LIGHTMAP }
+            lightAdditive: { shader: "default_additive", inputs: [TextureID.LIGHTMAP + 1], output: TextureID.LIGHTMAP }
         };
         this.resizeRequested = false;
     }
@@ -422,7 +154,7 @@ export class WebgpuRenderer implements Renderer {
     }
 
     private initOffscreenTextures() {
-        for (let i = 0; i < OFFSCREEN_TEXTURES; ++i) {
+        for (let i = 0; i < limits.offscreenTextures; ++i) {
             this.offscreenTextures[i]?.texture.destroy();
             const n = getOffscreenTextureSizeFactor(i);
             const width = Math.ceil(this.canvas.width * n);
@@ -487,6 +219,236 @@ export class WebgpuRenderer implements Renderer {
     }
 
     public async init() {
+        const mainVertex = `
+struct VSInput {
+    @location(0) vertexPos: vec2f,
+    @location(1) texCoord: vec2f,
+    
+    @location(2) tilePos: vec2f,
+    @location(3) tileScale: vec2f,
+    @location(4) tileAngle: f32,
+    @location(5) tileRegion: vec2u,
+
+    @location(6) tintColor: vec4f,
+    @location(7) maskColor: vec4f,
+
+    @location(8) tileOffset: vec2f
+}
+
+struct Camera {
+    pos: vec2f,
+    viewportDimensions: vec2f
+}
+
+@group(0) @binding(0)
+var<uniform> camera: Camera;
+
+@group(1) @binding(2)
+var<uniform> tilesetDimensions: vec2f;
+
+struct VSOutput {
+    @builtin(position) pos: vec4f,
+    @location(0) uv: vec2f,
+    @location(1) tintColor: vec4f,
+    @location(2) maskColor: vec4f
+}
+
+${worldToClipVertex}
+
+@vertex
+fn vs_main(input: VSInput) -> VSOutput {
+    var out: VSOutput;
+
+    out.tintColor = input.tintColor;
+    out.maskColor = input.maskColor;
+
+    let x = f32(input.tileRegion.x & 0xFFFFu);
+    let y = f32(input.tileRegion.x >> 16);
+    let w = f32(input.tileRegion.y & 0xFFFFu);
+    let h = f32(input.tileRegion.y >> 16);
+
+    let tileRegion = vec4f(x, y, w, h);
+
+    let flippedTexCoord = vec2f(input.texCoord.x, 1.0 - input.texCoord.y);
+    out.uv = (tileRegion.xy + flippedTexCoord * tileRegion.zw) / tilesetDimensions;
+
+    let c = cos(input.tileAngle);
+    let s = sin(input.tileAngle);
+    let offsetPos = (input.vertexPos * abs(input.tileScale) + input.tileOffset) * sign(input.tileScale);
+    let rotatedPos = vec2f(
+        offsetPos.x * c - offsetPos.y * s,
+        offsetPos.x * s + offsetPos.y * c
+    );
+    let worldPos = rotatedPos + input.tilePos;
+
+    out.pos = worldToClip(worldPos, camera.pos, camera.viewportDimensions);
+    return out;
+}`;
+
+        const mainFragment = `
+
+@group(1) @binding(0)
+var spriteSampler: sampler;
+
+@group(1) @binding(1)
+var spriteTexture: texture_2d<f32>;
+
+@fragment
+fn fs_main(input: VSOutput) -> @location(0) vec4f {
+    return textureSample(spriteTexture, spriteSampler, input.uv) * input.tintColor;
+}
+`;
+
+        const maskFragment = `
+@group(1) @binding(0)
+var spriteSampler: sampler;
+
+@group(1) @binding(1)
+var spriteTexture: texture_2d<f32>;
+
+@fragment
+fn fs_main(input: VSOutput) -> @location(0) vec4f {
+    let texColor: vec4f = textureSample(spriteTexture, spriteSampler, input.uv);
+    return vec4f(input.maskColor.xyz, texColor.w * input.maskColor.a);
+}
+`;
+
+        const mainSource = mainVertex + mainFragment;
+        const maskSource = mainVertex + maskFragment;
+
+        const lightSource = `
+struct VSInput {
+    @location(0) pos: vec2f
+}
+
+struct VSOutput {
+    @builtin(position) pos: vec4f,
+    @location(0) worldPos: vec2f
+}
+
+struct Camera {
+    pos: vec2f,
+    viewportDimensions: vec2f
+}
+
+struct Light {
+    center: vec2f,
+    radius: f32,
+    color: vec3f,
+    intensity: f32,
+    direction: vec2f,
+    outerCutoff: f32,
+    innerCutoff: f32
+}
+
+@group(0) @binding(0)
+var<uniform> camera: Camera;
+
+@group(1) @binding(0)
+var<uniform> light: Light;
+
+${worldToClipVertex}
+
+@vertex
+fn vs_main(input: VSInput) -> VSOutput {
+    var out: VSOutput;
+
+    out.worldPos = light.center + (input.pos - 0.5) * 2.0 * light.radius;
+
+    out.pos = worldToClip(out.worldPos, camera.pos, camera.viewportDimensions);
+    return out;
+}
+
+@fragment
+fn fs_main(input: VSOutput) -> @location(0) vec4f {
+    let toPixel = input.worldPos - light.center;
+    let dist = length(toPixel);
+
+    let attenuation = clamp(1.0 - pow(dist / light.radius, 2.0), 0.0, 1.0);
+
+    var spotFactor = 1.0;
+    if (light.outerCutoff > 0.0) {
+        let cosAngle = dot(normalize(toPixel), normalize(light.direction));
+        spotFactor = smoothstep(
+            light.outerCutoff,
+            light.innerCutoff,
+            cosAngle
+        );
+    }
+
+    return vec4f(light.color * light.intensity * attenuation * spotFactor, 1.0);
+}
+`;
+
+        const shadowSource = `
+struct VSInput {
+    @location(0) pos: vec2f
+}
+
+struct VSOutput {
+    @builtin(position) pos: vec4f
+}
+
+struct Camera {
+    pos: vec2f,
+    viewportDimensions: vec2f
+}
+
+@group(0) @binding(0)
+var<uniform> camera: Camera;
+
+${worldToClipVertex}
+
+@vertex
+fn vs_main(input: VSInput) -> VSOutput {
+    var out: VSOutput;
+
+    out.pos = worldToClip(input.pos, camera.pos, camera.viewportDimensions);
+    return out;
+}
+
+@fragment
+fn fs_main(input: VSOutput) {
+}
+`;
+
+        const fullscreenSource = (input: ShaderBuilderOutput) => `
+
+struct VSOutput {
+    @builtin(position) pos: vec4f,
+    @location(0) uv: vec2f
+}
+
+@vertex
+fn vs_main(@builtin(vertex_index) vertexIndex: u32) -> VSOutput {
+    var out: VSOutput;
+
+    let x = f32((vertexIndex & 1) << 2);
+    let y = f32((vertexIndex & 2) << 1);
+
+    out.uv = vec2f(x, 2.0 - y) / 2.0;
+    out.pos = vec4f(x - 1.0, y - 1.0, 0.0, 1.0);
+    return out;
+}
+
+struct Uniforms {
+${input.uniforms.map(line => "    " + line).join(",\n")}
+}
+
+@group(0) @binding(0)
+var<uniform> uniforms: Uniforms;
+
+${textureChannels(limits.textureChannels, 1)}
+
+${input.functions.join("\n\n")}
+
+@fragment
+fn fs_main(input: VSOutput) -> @location(0) vec4f {
+    let fragCoord = input.uv * uniforms.resolution;
+    return mainImage(fragCoord);
+}
+`;
+
         const gpuConfig = await requestConfig();
         if (!gpuConfig) throw new Error("WebGPU not supported");
         this.cfg = gpuConfig;
@@ -589,7 +551,7 @@ export class WebgpuRenderer implements Renderer {
 
         this.lightUniformBuffer = this.cfg.device.createBuffer({
             label: "Light Uniform Buffer",
-            size: MAX_LIGHTS * 256,
+            size: limits.maxLights * 256,
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
 
@@ -718,7 +680,7 @@ export class WebgpuRenderer implements Renderer {
 
         this.shadowsVbo = this.cfg.device.createBuffer({
             label: "Shadows Vertex Buffer",
-            size: MAX_LIGHTS * SHADOW_MAX_VERTICES * 8,
+            size: limits.maxLights * limits.shadowPerLightMaxTriangles * 24,
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
         });
 
@@ -831,7 +793,7 @@ export class WebgpuRenderer implements Renderer {
 
         const lightAmbientPassDescriptor: GPURenderPassDescriptor = {
             colorAttachments: [{
-                view: this.offscreenTextures[TEXID_LIGHTMAP].view,
+                view: this.offscreenTextures[TextureID.LIGHTMAP].view,
                 clearValue: clearColor,
                 loadOp: "clear",
                 storeOp: "store"
@@ -843,7 +805,7 @@ export class WebgpuRenderer implements Renderer {
         const lightsUniformData = geometry.createLightsGeometry(sceneLights, true);
         this.cfg.device.queue.writeBuffer(this.lightUniformBuffer, 0, lightsUniformData);
 
-        const texView = this.offscreenTextures[TEXID_LIGHTMAP + 1].view;
+        const texView = this.offscreenTextures[TextureID.LIGHTMAP + 1].view;
 
         for (let i = 0; i < sceneLights.length; ++i) {
             const shadowDrawCall = drawCalls[i];
@@ -873,7 +835,7 @@ export class WebgpuRenderer implements Renderer {
             };
             const lightPass = encoder.beginRenderPass(lightPassDescriptor);
 
-            this.setScissor(lightPass, this.offscreenTextures[TEXID_LIGHTMAP + 1].texture, lightScissor);
+            this.setScissor(lightPass, this.offscreenTextures[TextureID.LIGHTMAP + 1].texture, lightScissor);
 
             if (shadowDrawCall.count !== 0) {
                 lightPass.setPipeline(this.shadowPipeline);
@@ -911,10 +873,10 @@ export class WebgpuRenderer implements Renderer {
         const entries: GPUBindGroupEntry[] = [
             { binding: 0, resource: this.fullscreenSampler }
         ];
-        for (let i = 0; i < MAX_CHANNELS; i++) {
+        for (let i = 0; i < limits.textureChannels; i++) {
             const texIndex = pass.inputs[i] ?? pass.inputs[0];
 
-            const texture = this.offscreenTextures[math.clamp(texIndex, 0, OFFSCREEN_TEXTURES - 1)];
+            const texture = this.offscreenTextures[texIndex];
 
             entries.push({
                 binding: i + 1,
@@ -941,12 +903,12 @@ export class WebgpuRenderer implements Renderer {
             const canvasTexture = this.ctx.getCurrentTexture();
             outputTex = { texture: canvasTexture, view: canvasTexture.createView() };
         } else {
-            outputTex = this.offscreenTextures[math.clamp(pass.output, 0, OFFSCREEN_TEXTURES - 1)];
+            outputTex = this.offscreenTextures[pass.output];
         }
 
         const uniforms = shaderInfo.builder.getUniforms();
         const passUniforms = [{ name: "time", value: this.time }, { name: "resolution", value: [outputTex.texture.width, outputTex.texture.height] }].concat(pass.uniforms ?? []);
-        const uniformData = new Float32Array(UNIFORMS_MAX_SIZE);
+        const uniformData = new Float32Array(limits.renderPassUniformsMaxFloats);
 
         for (let uniform of uniforms) {
             const passUniform = passUniforms.find(elem => elem.name === uniform.name);
@@ -1044,8 +1006,8 @@ export class WebgpuRenderer implements Renderer {
         );
 
         this.renderLights(encoder, scene, camera);
-        this.renderScene(encoder, this.mainPipeline, this.offscreenTextures[TEXID_SCENE].view, this.clearColor, layers);
-        this.renderScene(encoder, this.maskPipeline, this.offscreenTextures[TEXID_MASK].view, maskClearColor, layers);
+        this.renderScene(encoder, this.mainPipeline, this.offscreenTextures[TextureID.SCENE].view, this.clearColor, layers);
+        this.renderScene(encoder, this.maskPipeline, this.offscreenTextures[TextureID.MASK].view, maskClearColor, layers);
 
         for (const pass of this.pipeline) {
             this.renderFullscreenPass(encoder, pass);
@@ -1178,7 +1140,6 @@ class WebgpuRendererLayer {
     lastTexIdx: number;
     private renderer: WebgpuRenderer;
     private instanceBuffer: GPUBuffer;
-    // private tilesetDimBuffer: GPUBuffer;
     lifetime: number;
 
     constructor(renderer: WebgpuRenderer, isStatic: boolean) {
@@ -1191,7 +1152,7 @@ class WebgpuRendererLayer {
 
         this.instanceBuffer = renderer.getConfig().device.createBuffer({
             label: "Render Layer Vertex Buffer",
-            size: geometry.spriteStride * (isStatic ? STATIC_LAYER_MAX_SPRITES : DYNAMIC_LAYER_MAX_SPRITES),
+            size: geometry.spriteStride * (isStatic ? limits.staticLayerMaxSprites : limits.dynamicLayerMaxSprites),
             usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
         });
     }
