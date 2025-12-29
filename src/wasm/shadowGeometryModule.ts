@@ -80,4 +80,4 @@ class ShadowGeometryModule extends WasmModule<IShadowGeometryModule> {
     }
 }
 
-export const shadowGeometryModule = new ShadowGeometryModule(shadowWasmUrl, 64);
+export const shadowGeometryModule = new ShadowGeometryModule(shadowWasmUrl);

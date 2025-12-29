@@ -5,5 +5,6 @@ export const limits = {
     shadowPerLightMaxTriangles: 128,
     renderPassUniformsMaxFloats: 16,
     offscreenTextures: 8,
-    textureChannels: 4
+    textureChannels: 4,
+    shadowGeometryModulePages: 2
 };

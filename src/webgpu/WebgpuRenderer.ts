@@ -14,7 +14,7 @@ import { WebgpuGPUTimer } from "./WebgpuGPUTimer";
 import { WebgpuLineRendrer } from "./WebgpuLineRenderer";
 import { shadowGeometryModule } from "../wasm/shadowGeometryModule";
 import { TextureID } from "../TextureID";
-import { limits } from "../Limits";
+import { limits } from "../limits";
 
 interface FullscreenShaderInfo {
     pipeline?: GPURenderPipeline;

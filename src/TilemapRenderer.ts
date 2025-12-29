@@ -6,7 +6,7 @@ import { colliders } from "./Collider";
 import { Color } from "./Color";
 import { EMATimer } from "./EMATimer";
 import { Light } from "./Light";
-import { limits } from "./Limits";
+import { limits } from "./limits";
 import { math } from "./math";
 import { PhysicsWorld } from "./PhysicsWorld";
 import { createRenderer } from "./Renderer";

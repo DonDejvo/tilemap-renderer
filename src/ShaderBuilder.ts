@@ -1,4 +1,4 @@
-import { limits } from "./Limits";
+import { limits } from "./limits";
 import { BlendMode, Renderer } from "./Renderer";
 
 export enum ShaderOp {

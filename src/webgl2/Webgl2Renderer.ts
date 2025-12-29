@@ -13,7 +13,7 @@ import { ShaderProgram } from "../webgl/ShaderProgram";
 import { WebglGPUTimer } from "../webgl/WebglGPUTimer";
 import { WebglLineRenderer } from "../webgl/WebglLineRenderer";
 import { shadowGeometryModule } from "../wasm/shadowGeometryModule";
-import { limits } from "../Limits";
+import { limits } from "../limits";
 import { lightStruct, textureChannels, worldToClipVertex } from "../webgl/common";
 import { TextureID } from "../TextureID";
 
