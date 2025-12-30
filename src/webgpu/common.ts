@@ -1,23 +1,36 @@
 export interface GPUConfig {
+    adapter: GPUAdapter;
     device: GPUDevice;
     format: GPUTextureFormat;
 }
 
 export const requestConfig = async (): Promise<GPUConfig | null> => {
-    const adapter = await navigator.gpu?.requestAdapter();
-    const device = await adapter?.requestDevice({
-        requiredFeatures: ["timestamp-query"]
-    });
+    if (!navigator.gpu) return null;
 
-    if (!device) return null;
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) return null;
+
+    let device: GPUDevice;
+
+    try {
+        const requiredFeatures: GPUFeatureName[] = [];
+        if (adapter.features.has("timestamp-query")) {
+            requiredFeatures.push("timestamp-query");
+        }
+        device = await adapter.requestDevice({ requiredFeatures });
+    } catch {
+        device = await adapter.requestDevice();
+    }
 
     const format = navigator.gpu.getPreferredCanvasFormat();
 
     return {
+        adapter,
         device,
         format
     };
-}
+};
+
 
 export const worldToClipVertex = `
 fn worldToClip(worldPos: vec2f, cameraPos: vec2f, viewport: vec2f) -> vec4f {

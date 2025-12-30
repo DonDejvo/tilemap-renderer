@@ -75,6 +75,7 @@ export class WebgpuRenderer implements Renderer {
     private nextTextureIdx: number = 0;
     private spriteBindGroups: Map<string, GPUBindGroup> = new Map();
     private gpuTimer!: WebgpuGPUTimer;
+    public enableSpector: boolean = false;
 
     constructor(canvas: HTMLCanvasElement) {
         this.layersMap = new Map();
@@ -92,6 +93,22 @@ export class WebgpuRenderer implements Renderer {
             lightAdditive: { shader: "default_additive", inputs: [TextureID.LIGHTMAP + 1], output: TextureID.LIGHTMAP }
         };
         this.resizeRequested = false;
+    }
+
+    public getReport() {
+        const mapToObject = (obj: any) => {
+            const copy: any = {};
+            for (let k in obj) {
+                if (obj[k] !== null) {
+                    copy[k] = obj[k];
+                }
+            }
+            return copy;
+        }
+
+        return {
+            limits: mapToObject(this.cfg.device.limits)
+        };
     }
 
     public getGpuTimer(): GPUTimer {
@@ -227,7 +244,7 @@ struct VSInput {
     @location(2) tilePos: vec2f,
     @location(3) tileScale: vec2f,
     @location(4) tileAngle: f32,
-    @location(5) tileRegion: vec2u,
+    @location(5) tileRegion: vec4<u32>,
 
     @location(6) tintColor: vec4f,
     @location(7) maskColor: vec4f,
@@ -262,10 +279,10 @@ fn vs_main(input: VSInput) -> VSOutput {
     out.tintColor = input.tintColor;
     out.maskColor = input.maskColor;
 
-    let x = f32(input.tileRegion.x & 0xFFFFu);
-    let y = f32(input.tileRegion.x >> 16);
-    let w = f32(input.tileRegion.y & 0xFFFFu);
-    let h = f32(input.tileRegion.y >> 16);
+    let x = f32(input.tileRegion.x);
+    let y = f32(input.tileRegion.y);
+    let w = f32(input.tileRegion.z);
+    let h = f32(input.tileRegion.w);
 
     let tileRegion = vec4f(x, y, w, h);
 
@@ -725,7 +742,7 @@ fn fs_main(input: VSOutput) -> @location(0) vec4f {
                             { shaderLocation: 2, offset: 0, format: "float32x2" },
                             { shaderLocation: 3, offset: 8, format: "float32x2" },
                             { shaderLocation: 4, offset: 16, format: "float32" },
-                            { shaderLocation: 5, offset: 20, format: "uint32x2" },
+                            { shaderLocation: 5, offset: 20, format: "uint16x4" },
                             { shaderLocation: 6, offset: 28, format: "float32x4" },
                             { shaderLocation: 7, offset: 44, format: "float32x4" },
                             { shaderLocation: 8, offset: 60, format: "float32x2" }

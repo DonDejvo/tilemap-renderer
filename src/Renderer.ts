@@ -63,12 +63,15 @@ export interface Renderer {
     render(scene: Scene, camera: Camera): void;
     setSize(width: number, height: number): void;
     getCanvas(): HTMLCanvasElement;
-    clearColor: Color;
     getBuilderOptions(): RendererBuilderOptions;
     registerShader(name: string, builder: ShaderBuilder, blendMode?: BlendMode): void;
-    pipeline: RenderPass[];
     getLineRenderer(): LineRenderer;
     getGpuTimer(): GPUTimer;
+    getReport(): any;
+
+    pipeline: RenderPass[];
+    clearColor: Color;
+    enableSpector: boolean;
 }
 
 export const createRenderer = (type: RendererType): Renderer => {

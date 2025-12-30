@@ -14,7 +14,7 @@ import { WebglGPUTimer } from "../webgl/WebglGPUTimer";
 import { WebglLineRenderer } from "../webgl/WebglLineRenderer";
 import { shadowGeometryModule } from "../wasm/shadowGeometryModule";
 import { limits } from "../limits";
-import { lightStruct, textureChannels, worldToClipVertex } from "../webgl/common";
+import { getRendererReport, lightStruct, textureChannels, worldToClipVertex } from "../webgl/common";
 import { TextureID } from "../TextureID";
 
 const builderOptions: RendererBuilderOptions = {
@@ -55,6 +55,7 @@ export class Webgl2Renderer implements Renderer {
     private nextTextureIdx: number = 0;
     private gpuTimer!: WebglGPUTimer;
     private fbo: Framebuffer | null = null;
+    public enableSpector: boolean = false;
 
     constructor(canvas: HTMLCanvasElement) {
         this.canvas = canvas;
@@ -68,6 +69,10 @@ export class Webgl2Renderer implements Renderer {
         this.time = 0;
         this.shaderCache = new Map();
         this.resizeRequested = false;
+    }
+
+    public getReport() {
+        return getRendererReport(this.getType(), this.gl);
     }
 
     public getGpuTimer(): GPUTimer {
@@ -411,7 +416,7 @@ void main() {
 
         this.initialized = true;
 
-        if (import.meta.env.DEV) {
+        if (this.enableSpector && import.meta.env.DEV) {
             import('spectorjs').then(({ Spector }) => {
                 const spector = new Spector();
                 spector.displayUI();

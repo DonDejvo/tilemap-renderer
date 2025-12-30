@@ -126,6 +126,18 @@
             border-radius: 4px;
             z-index: 9999;
         }
+
+        #rendererinfo {
+            position: fixed;
+            left: 10px;
+            top: 80px;
+            color: white;
+            font: 14px monospace;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            z-index: 9999;
+        }
     </style>
 </head>
 
@@ -133,6 +145,7 @@
     <div id="fpsinfo">FPS: 0</div>
     <div id="sceneinfo"></div>
     <div id="frametimeinfo"></div>
+    <div id="rendererinfo"></div>
 
     <div class="controls" id="controls">
         <div class="btn up" data-key="w">▲</div>
@@ -150,6 +163,19 @@
         const assetsUrl = "";
         const rendererContext = "webgpu";
         let k = 6;
+
+        const formatInfoObject = (info) => {
+            const format = (elem, depth = 0) => {
+                if (typeof elem === "object") {
+                    if(Array.isArray(elem)) {
+                        return `[${elem.join(", ")}]`.padEnd(6) + "\n";
+                    }
+                    return "\n" + Object.entries(elem).map(([key, val]) => "    ".repeat(depth) + key + ": " + format(val, depth + 1)).join("")
+                }
+                return ("" + elem).padEnd(6) + "\n";
+            }
+            return `<pre>${format(info)}</pre>`;
+        }
 
         class KeyboardInput {
             constructor() {
@@ -484,6 +510,9 @@
             renderer.registerShader("colorCut", colorCut);
 
             await renderer.init();
+            
+            rendererinfo.innerHTML = formatInfoObject(renderer.getReport());
+
             renderer.clearColor = new Color(0.5, 0.5, 0.5);
 
             const observer = new ResizeObserver(entries => {
@@ -595,19 +624,9 @@
             draw();
 
             setInterval(() => {
-                const formatSceneInfo = (info) => {
-                    const format = (elem, depth = 0) => {
-                        if (typeof elem === "object") {
-                            return "\n" + Object.entries(elem).map(([key, val]) => "\t".repeat(depth) + key + ": " + format(val, depth + 1)).join("")
-                        }
-                        return ("" + elem).padEnd(6) + "\n";
-                    }
-                    return format(info);
-                }
-
                 fpsinfo.textContent = `${rendererContext.toUpperCase()} - FPS: ${fps}`;
 
-                sceneinfo.innerHTML = `<pre>${formatSceneInfo(scene.getInfo())}</pre>`;
+                sceneinfo.innerHTML = formatInfoObject(scene.getInfo());
 
                 const avgGPU = gpuTimer.getAverage();
                 const peakGPU = gpuTimer.getPeak();
