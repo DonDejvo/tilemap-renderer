@@ -848,9 +848,9 @@ class WebglRendererLayer {
             gl.vertexAttribPointer(3, 2, gl.FLOAT, false, stride, 8 + instanceByteOffset);
             gl.vertexAttribPointer(4, 1, gl.FLOAT, false, stride, 16 + instanceByteOffset);
             gl.vertexAttribIPointer(5, 4, gl.UNSIGNED_SHORT, stride, 20 + instanceByteOffset);
-            gl.vertexAttribPointer(6, 4, gl.FLOAT, false, stride, 28 + instanceByteOffset);
-            gl.vertexAttribPointer(7, 4, gl.FLOAT, false, stride, 44 + instanceByteOffset);
-            gl.vertexAttribPointer(8, 2, gl.FLOAT, false, stride, 60 + instanceByteOffset);
+            gl.vertexAttribPointer(6, 4, gl.UNSIGNED_BYTE, true, stride, 28 + instanceByteOffset);
+            gl.vertexAttribPointer(7, 4, gl.UNSIGNED_BYTE, true, stride, 32 + instanceByteOffset);
+            gl.vertexAttribPointer(8, 2, gl.FLOAT, false, stride, 36 + instanceByteOffset);
 
             gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, drawCall.count);
         }

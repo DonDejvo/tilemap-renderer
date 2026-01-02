@@ -113,13 +113,13 @@
             }
 
             draw(ctx) {
-                const { x, y } = this.collider.worldPosition;
-
+                const points = this.collider.getWorldPoints();
                 ctx.beginPath();
-                ctx.moveTo(x, y);
-                ctx.lineTo(x + this.w, y);
-                ctx.lineTo(x + this.w, y + this.h);
-                ctx.lineTo(x, y + this.h);
+                for (let i = 0; i < points.length; ++i) {
+                    const p = points[i];
+                    if (i === 0) ctx.moveTo(p.x, p.y);
+                    else ctx.lineTo(p.x, p.y);
+                }
                 ctx.closePath();
             }
         }
@@ -233,9 +233,11 @@
                     shape = new BoxShape(
                         Math.random() * 900,
                         Math.random() * 900,
-                        20 + Math.random() * 80,
-                        20 + Math.random() * 80
+                        100,
+                        100
                     );
+
+                    shape.body.angle = Math.random() * 6
                 } else {
                     shape = new CircleShape(
                         Math.random() * 900,
@@ -262,9 +264,9 @@
 
             const setActiveShape = (shape) => {
                 if (activeBody) {
-                    activeBody.removeMessageHandler("collisionenter", onCollisionEnter);
-                    activeBody.removeMessageHandler("collisionstay", onCollisionEnter);
-                    activeBody.removeMessageHandler("collisionexit", onCollisionExit);
+                    activeBody.removeMessageHandler("collisionEnter", onCollisionEnter);
+                    activeBody.removeMessageHandler("collisionStay", onCollisionEnter);
+                    activeBody.removeMessageHandler("collisionExit", onCollisionExit);
                     activeBody.removeNode(light);
                 }
 
@@ -272,9 +274,9 @@
 
                 activeBody = shape.body;
 
-                activeBody.addMessageHandler("collisionenter", onCollisionEnter);
-                activeBody.addMessageHandler("collisionstay", onCollisionEnter);
-                activeBody.addMessageHandler("collisionexit", onCollisionExit);
+                activeBody.addMessageHandler("collisionEnter", onCollisionEnter);
+                activeBody.addMessageHandler("collisionStay", onCollisionEnter);
+                activeBody.addMessageHandler("collisionExit", onCollisionExit);
                 activeBody.addNode(light);
             };
 
@@ -377,11 +379,11 @@
                     }
 
                     for (const [key, collision] of activeCollisions) {
-                        for (const p of collision.contactPoints) {
+                        for (const p of collision.contacts) {
                             ctx.strokeColor = Color.RED;
                             drawCross(ctx, p);
                             ctx.strokeColor = Color.MAGENTA;
-                            drawNormal(ctx, p, collision.normal);
+                            drawNormal(ctx, p, collision.dir);
                         }
                     }
 

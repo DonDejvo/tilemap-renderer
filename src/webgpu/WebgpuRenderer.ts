@@ -743,9 +743,9 @@ fn fs_main(input: VSOutput) -> @location(0) vec4f {
                             { shaderLocation: 3, offset: 8, format: "float32x2" },
                             { shaderLocation: 4, offset: 16, format: "float32" },
                             { shaderLocation: 5, offset: 20, format: "uint16x4" },
-                            { shaderLocation: 6, offset: 28, format: "float32x4" },
-                            { shaderLocation: 7, offset: 44, format: "float32x4" },
-                            { shaderLocation: 8, offset: 60, format: "float32x2" }
+                            { shaderLocation: 6, offset: 28, format: "unorm8x4" },
+                            { shaderLocation: 7, offset: 32, format: "unorm8x4" },
+                            { shaderLocation: 8, offset: 36, format: "float32x2" }
                         ]
                     }
                 ]

@@ -824,11 +824,11 @@ class WebglRendererLayer {
         gl.enableVertexAttribArray(attribLocations.tileRegion);
         gl.vertexAttribPointer(attribLocations.tileRegion, 4, gl.UNSIGNED_SHORT, false, stride, 20);
         gl.enableVertexAttribArray(attribLocations.tintColor);
-        gl.vertexAttribPointer(attribLocations.tintColor, 4, gl.FLOAT, false, stride, 28);
+        gl.vertexAttribPointer(attribLocations.tintColor, 4, gl.UNSIGNED_BYTE, true, stride, 28);
         gl.enableVertexAttribArray(attribLocations.maskColor);
-        gl.vertexAttribPointer(attribLocations.maskColor, 4, gl.FLOAT, false, stride, 44);
+        gl.vertexAttribPointer(attribLocations.maskColor, 4, gl.UNSIGNED_BYTE, true, stride, 32);
         gl.enableVertexAttribArray(attribLocations.tileOffset);
-        gl.vertexAttribPointer(attribLocations.tileOffset, 2, gl.FLOAT, false, stride, 60);
+        gl.vertexAttribPointer(attribLocations.tileOffset, 2, gl.FLOAT, false, stride, 36);
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.renderer.getEBO());
 

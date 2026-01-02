@@ -167,8 +167,8 @@
         const formatInfoObject = (info) => {
             const format = (elem, depth = 0) => {
                 if (typeof elem === "object") {
-                    if(Array.isArray(elem)) {
-                        return `[${elem.join(", ")}]`.padEnd(6) + "\n";
+                    if (Array.isArray(elem)) {
+                        return elem.join(", ").padEnd(6) + "\n";
                     }
                     return "\n" + Object.entries(elem).map(([key, val]) => "    ".repeat(depth) + key + ": " + format(val, depth + 1)).join("")
                 }
@@ -510,7 +510,7 @@
             renderer.registerShader("colorCut", colorCut);
 
             await renderer.init();
-            
+
             rendererinfo.innerHTML = formatInfoObject(renderer.getReport());
 
             renderer.clearColor = new Color(0.5, 0.5, 0.5);

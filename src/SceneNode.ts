@@ -79,6 +79,10 @@ export abstract class SceneNode {
         return [];
     }
 
+    public get parent() {
+        return this._parent;
+    }
+
     public get worldAngle(): number {
         if (this._parent) {
             return this._parent.worldAngle + this.angle;

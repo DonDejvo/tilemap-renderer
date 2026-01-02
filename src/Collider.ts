@@ -163,16 +163,6 @@ export class PolygonCollider extends Collider {
                 .add(worldPos);
         }
     }
-
-    public getNormals() {
-        const worldPoints = this.getWorldPoints();
-        return worldPoints.map((p0, i) => {
-            const p1 = worldPoints[(i + 1) % worldPoints.length];
-
-            const edgeDir = p1.clone().sub(p0);
-            return new Vector(edgeDir.y, -edgeDir.x).normalize();
-        });
-    }
 }
 
 interface BoxColliderParams extends ColliderParams {

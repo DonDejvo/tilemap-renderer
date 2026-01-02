@@ -1,6 +1,7 @@
 import { Collider } from "./Collider";
 import { Light } from "./Light";
 import { Line } from "./LineRenderer";
+import { math } from "./math";
 import { Sprite } from "./Sprite";
 import { Vector } from "./Vector";
 
@@ -19,7 +20,7 @@ export const geometry = (() => {
         1, -1, 1, 1,
     ]);
 
-    const spriteStride = 68;
+    const spriteStride = 44;
 
     const createSpritesData = (sprites: Sprite[], instanced: boolean = false) => {
         const count = instanced ? 1 : 4;
@@ -53,18 +54,18 @@ export const geometry = (() => {
                 view.setUint16(offset + 24, regionW, true);
                 view.setUint16(offset + 26, regionH, true);
 
-                view.setFloat32(offset + 28, sprite.tintColor.r, true);
-                view.setFloat32(offset + 32, sprite.tintColor.g, true);
-                view.setFloat32(offset + 36, sprite.tintColor.b, true);
-                view.setFloat32(offset + 40, sprite.tintColor.a, true);
+                view.setUint8(offset + 28, math.clamp(sprite.tintColor.r * 255, 0, 255));
+                view.setUint8(offset + 29, math.clamp(sprite.tintColor.g * 255, 0, 255));
+                view.setUint8(offset + 30, math.clamp(sprite.tintColor.b * 255, 0, 255));
+                view.setUint8(offset + 31, math.clamp(sprite.tintColor.a * 255, 0, 255));
 
-                view.setFloat32(offset + 44, sprite.maskColor.r, true);
-                view.setFloat32(offset + 48, sprite.maskColor.g, true);
-                view.setFloat32(offset + 52, sprite.maskColor.b, true);
-                view.setFloat32(offset + 56, sprite.maskColor.a, true);
+                view.setUint8(offset + 32, math.clamp(sprite.maskColor.r * 255, 0, 255));
+                view.setUint8(offset + 33, math.clamp(sprite.maskColor.g * 255, 0, 255));
+                view.setUint8(offset + 34, math.clamp(sprite.maskColor.b * 255, 0, 255));
+                view.setUint8(offset + 35, math.clamp(sprite.maskColor.a * 255, 0, 255));
 
-                view.setFloat32(offset + 60, sprite.offset.x, true);
-                view.setFloat32(offset + 64, sprite.offset.y, true);
+                view.setFloat32(offset + 36, sprite.offset.x, true);
+                view.setFloat32(offset + 40, sprite.offset.y, true);
 
                 offset += stride;
             }
@@ -77,7 +78,7 @@ export const geometry = (() => {
 
     const createLightsGeometry = (lights: Light[], instanced: boolean = false) => {
         const count = instanced ? 1 : 4;
-        const data = new Float32Array(lights.length * 64); // Uniform alignment constraint
+        const data = new Float32Array(lights.length * 64);
 
         let offset = 0;
         for (let light of lights) {
