@@ -83,8 +83,22 @@ export const getRendererReport = (type: RendererType, gl: WebGLRenderingContext 
         transformFeedback.maxTransformFeedbackSeparateComponents = gl2.getParameter(gl2.MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS);
     }
 
+    const info: any = {
+        glVersion: gl.getParameter(gl.VERSION),
+        shadingLanguageVersion: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+        vendor: gl.getParameter(gl.VENDOR),
+        renderer: gl.getParameter(gl.RENDERER)
+    };
+
+    const dbgRenderInfo = gl.getExtension("WEBGL_debug_renderer_info");
+    if (dbgRenderInfo != null) {
+        info.unMaskedRenderer = gl.getParameter(dbgRenderInfo.UNMASKED_RENDERER_WEBGL);
+        info.unMaskedVendor = gl.getParameter(dbgRenderInfo.UNMASKED_VENDOR_WEBGL);
+    }
+
     return {
-        type,
+        context: type,
+        info,
         limits: {
             ...texture,
             ...vertexShader,
@@ -93,5 +107,5 @@ export const getRendererReport = (type: RendererType, gl: WebGLRenderingContext 
             ...uniformBuffer,
             ...transformFeedback
         }
-    };;
+    };
 }

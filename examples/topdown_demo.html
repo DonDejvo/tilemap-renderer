@@ -35,7 +35,7 @@
             right: 10px;
             top: 10px;
             color: white;
-            font: 14px monospace;
+            font: 12px monospace;
             z-index: 9999;
             background: rgba(0, 0, 0, 0.3);
             padding: 2px 6px;
@@ -120,7 +120,7 @@
             left: 10px;
             top: 40px;
             color: white;
-            font: 14px monospace;
+            font: 12px monospace;
             background: rgba(0, 0, 0, 0.3);
             padding: 2px 6px;
             border-radius: 4px;
@@ -132,7 +132,7 @@
             left: 10px;
             top: 80px;
             color: white;
-            font: 14px monospace;
+            font: 12px monospace;
             background: rgba(0, 0, 0, 0.3);
             padding: 2px 6px;
             border-radius: 4px;
@@ -168,11 +168,11 @@
             const format = (elem, depth = 0) => {
                 if (typeof elem === "object") {
                     if (Array.isArray(elem)) {
-                        return elem.join(", ").padEnd(6) + "\n";
+                        return "\n" + elem.map((e, i) => "    ".repeat(depth) + "[" + i + "]: " + format(e, depth + 1)).join("\n");
                     }
-                    return "\n" + Object.entries(elem).map(([key, val]) => "    ".repeat(depth) + key + ": " + format(val, depth + 1)).join("")
+                    return "\n" + Object.entries(elem).map(([key, val]) => "    ".repeat(depth) + key + ": " + format(val, depth + 1)).join("\n")
                 }
-                return ("" + elem).padEnd(6) + "\n";
+                return elem;
             }
             return `<pre>${format(info)}</pre>`;
         }

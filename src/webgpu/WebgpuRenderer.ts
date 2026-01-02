@@ -96,17 +96,25 @@ export class WebgpuRenderer implements Renderer {
     }
 
     public getReport() {
-        const mapToObject = (obj: any) => {
+        const mapToObject = (obj: any): any => {
+            if (typeof obj !== "object") return obj;
+
+            if (Array.isArray(obj)) {
+                return obj.filter(e => e !== null).map(e => mapToObject(e));
+            }
+
             const copy: any = {};
             for (let k in obj) {
-                if (obj[k] !== null) {
-                    copy[k] = obj[k];
-                }
+                if (obj[k] === null) continue;
+
+                copy[k] = mapToObject(obj[k]);
             }
             return copy;
         }
 
         return {
+            context: this.getType(),
+            info: mapToObject(this.cfg.adapter.info),
             limits: mapToObject(this.cfg.device.limits)
         };
     }
