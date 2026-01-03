@@ -20,5 +20,7 @@ import { Tilemap } from "./Tilemap";
 import { Tileset } from "./Tileset";
 import { Vector } from "./Vector";
 import { initWasm } from "./wasmLoader";
+import { WebglGPUTimer } from "./webgl/WebglGPUTimer";
+import { WebgpuGPUTimer } from "./webgpu/WebgpuGPUTimer";
 
-export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, Animator, ShaderBuilder, Light, RigidBody, PhysicsWorld, SceneNode, EMATimer, limits, colliders, assets, math, bounds, createRenderer, initWasm, TextureID };
+export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, Animator, ShaderBuilder, Light, RigidBody, PhysicsWorld, SceneNode, EMATimer, WebglGPUTimer, WebgpuGPUTimer, limits, colliders, assets, math, bounds, createRenderer, initWasm, TextureID };

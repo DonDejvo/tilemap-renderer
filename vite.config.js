@@ -8,7 +8,7 @@ export default defineConfig({
     emptyOutDir: true,
     minify: true,
     lib: {
-      entry: path.resolve(__dirname, 'src/TilemapRenderer.ts'),
+      entry: path.resolve(__dirname, 'src/index.ts'),
       name: 'TilemapRenderer',
       fileName: (format) => `tilemap-renderer${format === "es" ? ".module" : ""}.min.js`,
       formats: ['es', 'umd']
