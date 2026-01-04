@@ -62,9 +62,9 @@
     <div id="frametimeinfo"></div>
 
     <script type="module">
-        import { limits, createRenderer, initWasm, Vector, math, colliders, Sprite, Light, Camera, Scene, assets, Color, EMATimer, Tileset, TextureID } from "../src/TilemapRenderer.ts";
+        import { limits, createRenderer, initWasm, Vector, math, colliders, Sprite, Light, Camera, Scene, assets, Color, EMATimer, Tileset, TextureID } from "../src/index.ts";
 
-        limits.dynamicLayerMaxSprites = 20000;
+        limits.dynamicLayerMaxSprites = 50000;
         limits.maxLights = 500;
 
         const assetsUrl = "";
@@ -144,7 +144,7 @@
                 }
             }
 
-            genSprites(15000, new Vector(0, 0), new Vector(2000, 2000));
+            genSprites(40000, new Vector(0, 0), new Vector(2000, 2000));
             genLights(400, new Vector(0, 0), new Vector(2000, 2000));
 
             const cpuTimer = new EMATimer();

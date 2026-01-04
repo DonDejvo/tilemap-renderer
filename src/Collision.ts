@@ -129,7 +129,7 @@ const polygonCollisionHelper = (result: CollisionResult, pointsA: Vector[], poin
             let p1 = pointsB[projResultB.minidx];
             let p2 = pointsB[projResultB.min2idx];
 
-            if ((projResultB.min2 - projResultB.min) / Vector.distance(p1, p2) > 0.01) {
+            if ((projResultB.min2 - projResultB.min) / Vector.distance(p1, p2) > 0.05) {
 
                 result.contacts[result.contactsCount++] = p1.clone();
 

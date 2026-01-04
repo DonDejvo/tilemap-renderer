@@ -1,5 +1,4 @@
-import { limits } from "./limits";
-import { BlendMode, Renderer } from "./Renderer";
+import { BlendMode, Renderer, TEXTURE_CHANNELS } from "./Renderer";
 
 export enum ShaderOp {
     DECLARE_VAR,
@@ -239,7 +238,7 @@ export class ShaderBuilder {
 
     private replaceExpression(renderer: Renderer, expr: string) {
         if (renderer.getType() !== "webgpu") {
-            for (let i = 0; i < limits.textureChannels; ++i) {
+            for (let i = 0; i < TEXTURE_CHANNELS; ++i) {
                 expr = expr
                     .replace(new RegExp("texture\\s*\\(\\s*" + i + "\\s*,", "g"), "texture(uChannel" + i + ", ")
                     .replaceAll("float", renderer.getBuilderOptions().replaceType("float"))

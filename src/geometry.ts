@@ -22,11 +22,10 @@ export const geometry = (() => {
 
     const spriteStride = 44;
 
-    const createSpritesData = (sprites: Sprite[], instanced: boolean = false) => {
+    const createSpritesData = (out: ArrayBuffer, sprites: Sprite[], instanced: boolean = false) => {
         const count = instanced ? 1 : 4;
         const stride = spriteStride;
-        const buffer = new ArrayBuffer(sprites.length * count * stride);
-        const view = new DataView(buffer);
+        const view = new DataView(out);
 
         let offset = 0;
         for (const sprite of sprites) {
@@ -70,8 +69,6 @@ export const geometry = (() => {
                 offset += stride;
             }
         }
-
-        return buffer;
     }
 
     const lightStride = 48;
@@ -97,7 +94,7 @@ export const geometry = (() => {
         return data;
     }
 
-    const createShadowsGeometry = (out: number[], light: Light, colliderIndices: number[], colliders: Collider[], offset: number = 0) => {
+    const createShadowsGeometry = (out: Float32Array, light: Light, colliderIndices: number[], colliders: Collider[], offset: number = 0) => {
         const lightWorldPos = light.worldPosition;
 
         for (let idx of colliderIndices) {
@@ -124,7 +121,8 @@ export const geometry = (() => {
                 const p2 = p0.clone().add(dir0.scale(shadowLength));
                 const p3 = p1.clone().add(dir1.scale(shadowLength));
 
-                out.push(
+                out.set([
+
                     p0.x, p0.y,
                     p1.x, p1.y,
                     p2.x, p2.y,
@@ -132,7 +130,9 @@ export const geometry = (() => {
                     p2.x, p2.y,
                     p1.x, p1.y,
                     p3.x, p3.y
-                );
+
+                ], offset);
+
                 offset += 6;
             }
         }

@@ -9,6 +9,7 @@ import { Webgl2Renderer } from "./webgl2/Webgl2Renderer";
 import { WebgpuRenderer } from "./webgpu/WebgpuRenderer";
 
 export const LAYER_LIFETIME = 60;
+export const TEXTURE_CHANNELS = 8;
 
 export const defaultPass: RenderPass = { shader: "default", inputs: [0], output: -1 };
 

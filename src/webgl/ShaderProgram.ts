@@ -1,6 +1,6 @@
 class ShaderError extends Error {
-    constructor(message: string) {
-        super("Shader Error: " + message);
+    constructor(label: string, message: string) {
+        super(label + ": " + message);
     }
 }
 
@@ -9,11 +9,14 @@ export class ShaderProgram {
     private program: WebGLProgram;
     private uniforms: Map<string, WebGLUniformLocation | null>;
     private attribs: Map<string, number>;
+    public readonly label: string;
 
-    constructor(gl: WebGL2RenderingContext | WebGLRenderingContext, vertSource: string, fragSource: string) {
+    constructor(gl: WebGL2RenderingContext | WebGLRenderingContext, vertSource: string, fragSource: string, label: string = "Unlabeled Shader Program") {
         this.gl = gl;
         this.uniforms = new Map();
         this.attribs = new Map();
+
+        this.label = label;
 
         const vertexShader = this.compileShader(gl.VERTEX_SHADER, vertSource);
         const fragmentShader = this.compileShader(gl.FRAGMENT_SHADER, fragSource);
@@ -25,19 +28,19 @@ export class ShaderProgram {
 
         gl.linkProgram(this.program);
         if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
-            throw new ShaderError(gl.getProgramInfoLog(this.program) ?? "Failed to link program");
+            throw new ShaderError(this.label, gl.getProgramInfoLog(this.program) ?? "Failed to link program");
         }
     }
 
     private compileShader(type: number, source: string) {
         const shader = this.gl.createShader(type);
-        if (!shader) throw new ShaderError("Failed to create shader");
+        if (!shader) throw new ShaderError(this.label, "Failed to create shader");
 
         this.gl.shaderSource(shader, source);
         this.gl.compileShader(shader);
 
         if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
-            throw new ShaderError(this.gl.getShaderInfoLog(shader) ?? "Failed to compile shader");
+            throw new ShaderError(this.label, this.gl.getShaderInfoLog(shader) ?? "Failed to compile shader");
         }
 
         return shader;
