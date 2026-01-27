@@ -759,7 +759,7 @@ class WebglRendererLayer {
         this.drawCalls = [];
         this.lifetime = LAYER_LIFETIME;
 
-        this.instanceData = new ArrayBuffer(geometry.spriteStride * (isStatic ? limits.staticLayerMaxSprites : limits.dynamicLayerMaxSprites));
+        this.instanceData = new ArrayBuffer(geometry.spriteStride * 4 * (isStatic ? limits.staticLayerMaxSprites : limits.dynamicLayerMaxSprites));
 
         this.spriteBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.spriteBuffer);

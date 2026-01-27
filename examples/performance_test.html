@@ -57,18 +57,23 @@
 </head>
 
 <body>
+    <script src="https://mrdoob.github.io/stats.js/build/stats.min.js"></script>
+
     <div id="fpsinfo">FPS: 0</div>
     <div id="sceneinfo"></div>
     <div id="frametimeinfo"></div>
 
     <script type="module">
-        import { limits, createRenderer, initWasm, Vector, math, colliders, Sprite, Light, Camera, Scene, assets, Color, EMATimer, Tileset, TextureID } from "../src/index.ts";
+        import { limits, createRenderer, initWasm, Vector, math, colliders, Sprite, Light, Camera, Scene, assets, Color, Tileset, TextureID } from "../src/index.ts";
 
-        limits.dynamicLayerMaxSprites = 50000;
+        limits.dynamicLayerMaxSprites = 500000;
         limits.maxLights = 500;
 
+        const stats = new Stats();
+        document.body.appendChild(stats.dom);
+
         const assetsUrl = "";
-        const rendererContext = "webgpu";
+        const rendererContext = "webgl2";
 
         const main = async () => {
             let w = 1920, h = 1080;
@@ -144,10 +149,9 @@
                 }
             }
 
-            genSprites(40000, new Vector(0, 0), new Vector(2000, 2000));
-            genLights(400, new Vector(0, 0), new Vector(2000, 2000));
+            genSprites(500000, new Vector(0, 0), new Vector(2000, 2000));
+            genLights(50, new Vector(0, 0), new Vector(2000, 2000));
 
-            const cpuTimer = new EMATimer();
             const gpuTimer = renderer.getGpuTimer();
 
             gpuTimer.enable();
@@ -166,6 +170,7 @@
                         fps = frameCount;
                         frameCount = 0;
                         lastFPSUpdate = now;
+                        fpsinfo.textContent = `${rendererContext.toUpperCase()} - FPS: ${fps}`;
                     }
 
                     accTime += dt;
@@ -194,13 +199,12 @@
                         }
                     }
 
-                    cpuTimer.begin();
+                    stats.begin();
 
                     renderer.render(scene, camera);
 
-                    cpuTimer.end();
+                    stats.end();
 
-                    cpuTimer.poll();
                     gpuTimer.poll();
 
                 });
@@ -208,31 +212,31 @@
 
             draw();
 
-            setInterval(() => {
-                const formatSceneInfo = (info) => {
-                    const format = (elem, depth = 0) => {
-                        if (typeof elem === "object") {
-                            return "\n" + Object.entries(elem).map(([key, val]) => "\t".repeat(depth) + key + ": " + format(val, depth + 1)).join("")
-                        }
-                        return ("" + elem).padEnd(6) + "\n";
-                    }
-                    return format(info);
-                }
+            //             setInterval(() => {
+            //                 const formatSceneInfo = (info) => {
+            //                     const format = (elem, depth = 0) => {
+            //                         if (typeof elem === "object") {
+            //                             return "\n" + Object.entries(elem).map(([key, val]) => "\t".repeat(depth) + key + ": " + format(val, depth + 1)).join("")
+            //                         }
+            //                         return ("" + elem).padEnd(6) + "\n";
+            //                     }
+            //                     return format(info);
+            //                 }
 
-                fpsinfo.textContent = `${rendererContext.toUpperCase()} - FPS: ${fps}`;
+            //                 
 
-                sceneinfo.innerHTML = `<pre>${formatSceneInfo(scene.getInfo())}</pre>`;
+            //                 sceneinfo.innerHTML = `<pre>${formatSceneInfo(scene.getInfo())}</pre>`;
 
-                const avgGPU = gpuTimer.getAverage();
-                const peakGPU = gpuTimer.getPeak();
-                const avgCPU = cpuTimer.getAverage();
-                const peakCPU = cpuTimer.getPeak();
+            //                 const avgGPU = gpuTimer.getAverage();
+            //                 const peakGPU = gpuTimer.getPeak();
+            //                 const avgCPU = cpuTimer.getAverage();
+            //                 const peakCPU = cpuTimer.getPeak();
 
-                frametimeinfo.innerHTML = `
-<div>GPU: avg: ${avgGPU?.toFixed(2) ?? "-"} ms, peak: ${peakGPU.toFixed(2)}</div>
-<div>CPU: avg: ${avgCPU?.toFixed(2) ?? "-"} ms, peak: ${peakCPU.toFixed(2)}</div>
-`;
-            }, 100);
+            //                 frametimeinfo.innerHTML = `
+            // <div>GPU: avg: ${avgGPU?.toFixed(2) ?? "-"} ms, peak: ${peakGPU.toFixed(2)}</div>
+            // <div>CPU: avg: ${avgCPU?.toFixed(2) ?? "-"} ms, peak: ${peakCPU.toFixed(2)}</div>
+            // `;
+            //             }, 100);
         }
 
         main();
