@@ -98,7 +98,7 @@
                 this.body = new RigidBody({ mass: 1 });
                 collider.setParent(this.body);
                 this.body.position.set(x, y);
-                this.body.addCollider(collider);
+                this.body.setCollider(collider);
             }
 
             draw(ctx, active) { }

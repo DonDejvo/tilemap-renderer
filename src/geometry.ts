@@ -20,7 +20,7 @@ export const geometry = (() => {
         1, -1, 1, 1,
     ]);
 
-    const spriteStride = 44;
+    const spriteStride = 36;
 
     const createSpritesData = (out: ArrayBuffer, sprites: Sprite[], instanced: boolean = false) => {
         const count = instanced ? 1 : 4;
@@ -31,8 +31,8 @@ export const geometry = (() => {
         for (const sprite of sprites) {
             const { x, y } = sprite.worldPosition;
 
-            const scaleX = sprite.scale.x;
-            const scaleY = sprite.scale.y;
+            const scaleX = sprite.width;
+            const scaleY = sprite.height;
 
             const angle = sprite.worldAngle;
 
@@ -62,9 +62,6 @@ export const geometry = (() => {
                 view.setUint8(offset + 33, math.clamp(sprite.maskColor.g * 255, 0, 255));
                 view.setUint8(offset + 34, math.clamp(sprite.maskColor.b * 255, 0, 255));
                 view.setUint8(offset + 35, math.clamp(sprite.maskColor.a * 255, 0, 255));
-
-                view.setFloat32(offset + 36, sprite.offset.x, true);
-                view.setFloat32(offset + 40, sprite.offset.y, true);
 
                 offset += stride;
             }

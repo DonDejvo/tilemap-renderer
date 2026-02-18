@@ -27,7 +27,6 @@ attribute vec2 aTileScale;
 attribute vec4 aTileRegion;
 attribute vec4 aTintColor;
 attribute vec4 aMaskColor;
-attribute vec2 aTileOffset;
 
 uniform vec2 uViewportDimensions;
 uniform vec2 uCameraPos;
@@ -49,10 +48,10 @@ void main() {
 
     float c = cos(aTileAngle);
     float s = sin(aTileAngle);
-    vec2 offsetPos = (aVertexPos * abs(aTileScale) + aTileOffset) * sign(aTileScale);
+    vec2 scaledPos = aVertexPos * abs(aTileScale);
     vec2 rotatedPos = vec2(
-        offsetPos.x * c - offsetPos.y * s,
-        offsetPos.x * s + offsetPos.y * c
+        scaledPos.x * c - scaledPos.y * s,
+        scaledPos.x * s + scaledPos.y * c
     );
     vec2 worldPos = rotatedPos + aTilePos;
 
@@ -807,8 +806,7 @@ class WebglRendererLayer {
             tileAngle: shaderProgram.getAttrib("aTileAngle"),
             tileRegion: shaderProgram.getAttrib("aTileRegion"),
             tintColor: shaderProgram.getAttrib("aTintColor"),
-            maskColor: shaderProgram.getAttrib("aMaskColor"),
-            tileOffset: shaderProgram.getAttrib("aTileOffset"),
+            maskColor: shaderProgram.getAttrib("aMaskColor")
         };
 
         gl.enableVertexAttribArray(attribLocations.vertexPos);
@@ -832,8 +830,6 @@ class WebglRendererLayer {
         gl.vertexAttribPointer(attribLocations.tintColor, 4, gl.UNSIGNED_BYTE, true, stride, 28);
         gl.enableVertexAttribArray(attribLocations.maskColor);
         gl.vertexAttribPointer(attribLocations.maskColor, 4, gl.UNSIGNED_BYTE, true, stride, 32);
-        gl.enableVertexAttribArray(attribLocations.tileOffset);
-        gl.vertexAttribPointer(attribLocations.tileOffset, 2, gl.FLOAT, false, stride, 36);
 
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.renderer.getEBO());
 

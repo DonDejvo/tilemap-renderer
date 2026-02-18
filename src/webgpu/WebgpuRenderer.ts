@@ -27,9 +27,7 @@ struct VSInput {
     @location(5) tileRegion: vec4<u32>,
 
     @location(6) tintColor: vec4f,
-    @location(7) maskColor: vec4f,
-
-    @location(8) tileOffset: vec2f
+    @location(7) maskColor: vec4f
 }
 
 struct Camera {
@@ -71,10 +69,10 @@ fn vs_main(input: VSInput) -> VSOutput {
 
     let c = cos(input.tileAngle);
     let s = sin(input.tileAngle);
-    let offsetPos = (input.vertexPos * abs(input.tileScale) + input.tileOffset) * sign(input.tileScale);
+    let scaledPos = input.vertexPos * input.tileScale;
     let rotatedPos = vec2f(
-        offsetPos.x * c - offsetPos.y * s,
-        offsetPos.x * s + offsetPos.y * c
+        scaledPos.x * c - scaledPos.y * s,
+        scaledPos.x * s + scaledPos.y * c
     );
     let worldPos = rotatedPos + input.tilePos;
 
@@ -752,8 +750,7 @@ export class WebgpuRenderer implements Renderer {
                             { shaderLocation: 4, offset: 16, format: "float32" },
                             { shaderLocation: 5, offset: 20, format: "uint16x4" },
                             { shaderLocation: 6, offset: 28, format: "unorm8x4" },
-                            { shaderLocation: 7, offset: 32, format: "unorm8x4" },
-                            { shaderLocation: 8, offset: 36, format: "float32x2" }
+                            { shaderLocation: 7, offset: 32, format: "unorm8x4" }
                         ]
                     }
                 ]

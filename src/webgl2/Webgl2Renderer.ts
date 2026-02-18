@@ -21,16 +21,12 @@ const mainVertex = `#version 300 es
 
 layout(location = 0) in vec2 aVertexPos;
 layout(location = 1) in vec2 aTexCoord;
-
 layout(location = 2) in vec2 aTilePos;
 layout(location = 3) in vec2 aTileScale;
 layout(location = 4) in float aTileAngle;
 layout(location = 5) in uvec4 aTileRegion;
-
 layout(location = 6) in vec4 aTintColor;
 layout(location = 7) in vec4 aMaskColor;
-
-layout(location = 8) in vec2 aTileOffset;
 
 uniform vec2 uViewportDimensions;
 uniform vec2 uCameraPos;
@@ -52,10 +48,10 @@ void main() {
 
     float c = cos(aTileAngle);
     float s = sin(aTileAngle);
-    vec2 offsetPos = (aVertexPos * abs(aTileScale) + aTileOffset) * sign(aTileScale);
+    vec2 scaledPos = aVertexPos * abs(aTileScale);
     vec2 rotatedPos = vec2(
-        offsetPos.x * c - offsetPos.y * s,
-        offsetPos.x * s + offsetPos.y * c
+        scaledPos.x * c - scaledPos.y * s,
+        scaledPos.x * s + scaledPos.y * c
     );
     vec2 worldPos = rotatedPos + aTilePos;
 
@@ -796,7 +792,7 @@ class WebglRendererLayer {
         const stride = geometry.spriteStride;
         gl.bufferData(gl.ARRAY_BUFFER, (this.isStatic ? limits.staticLayerMaxSprites : limits.dynamicLayerMaxSprites) * stride, this.isStatic ? gl.STATIC_DRAW : gl.DYNAMIC_DRAW);
 
-        for (let i = 2; i <= 8; ++i) {
+        for (let i = 2; i <= 7; ++i) {
             gl.enableVertexAttribArray(i);
             gl.vertexAttribDivisor(i, 1);
         }
@@ -855,7 +851,6 @@ class WebglRendererLayer {
             gl.vertexAttribIPointer(5, 4, gl.UNSIGNED_SHORT, stride, 20 + instanceByteOffset);
             gl.vertexAttribPointer(6, 4, gl.UNSIGNED_BYTE, true, stride, 28 + instanceByteOffset);
             gl.vertexAttribPointer(7, 4, gl.UNSIGNED_BYTE, true, stride, 32 + instanceByteOffset);
-            gl.vertexAttribPointer(8, 2, gl.FLOAT, false, stride, 36 + instanceByteOffset);
 
             gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, drawCall.count);
         }

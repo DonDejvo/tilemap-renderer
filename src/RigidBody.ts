@@ -10,30 +10,22 @@ export class RigidBody extends SceneNode {
     velocity: Vector;
     angularVelocity: number;
     mass: number;
-    colliders: Collider[];
+    collider: Collider | null;
 
     constructor(params: RigidBodyParams) {
         super();
         this.velocity = new Vector();
         this.angularVelocity = 0;
         this.mass = params.mass;
-        this.colliders = [];
+        this.collider = null;
     }
 
-    public removeCollider(collider: Collider) {
-        const i = this.colliders.indexOf(collider);
-        if (i !== -1) {
-            collider.body = null;
-            this.colliders.splice(i, 1);
-        }
-    }
-
-    public addCollider(collider: Collider) {
+    public setCollider(collider: Collider) {
         if (collider.body) {
-            collider.body.removeCollider(collider);
+            collider.body.collider = null;
         }
         collider.body = this;
-        this.colliders.push(collider);
+        this.collider = collider;
     }
 
     public fixedUpdate(dt: number): void {
@@ -52,8 +44,8 @@ export class RigidBody extends SceneNode {
         const i = this.scene.getRigidbodies().indexOf(this);
         if (i !== -1) {
 
-            for (const collider of this.colliders) {
-                collider.body = null;
+            if (this.collider) {
+                this.collider.body = null;
             }
 
             this.scene.getRigidbodies().splice(i, 1);

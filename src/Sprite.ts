@@ -16,8 +16,8 @@ export class Sprite extends SceneNode {
     tileset: Tileset;
     tilesetRegion: TilesetRegion;
     isStatic: boolean;
-    offset: Vector;
-    scale: Vector;
+    width: number;
+    height: number;
     tintColor: Color;
     maskColor: Color;
 
@@ -27,11 +27,8 @@ export class Sprite extends SceneNode {
         this.tileset = params.tileset;
         this.tilesetRegion = params.tilesetRegion || { x: 0, y: 0 };
         this.isStatic = params.isStatic || false;
-        this.offset = new Vector();
-        this.scale = new Vector(
-            this.tileset.tileWidth * (this.tilesetRegion.width || 1),
-            this.tileset.tileHeight * (this.tilesetRegion.height || 1)
-        );
+        this.width = this.tileset.tileWidth * (this.tilesetRegion.width || 1);
+        this.height = this.tileset.tileHeight * (this.tilesetRegion.height || 1);
         this.tintColor = new Color(1, 1, 1, 1);
         this.maskColor = new Color(0, 0, 0, 1);
     }
@@ -48,9 +45,9 @@ export class Sprite extends SceneNode {
     }
 
     public getBounds(): Bounds {
-        const radius = Math.max(Math.abs(this.scale.x), Math.abs(this.scale.y));
+        const radius = Math.max(Math.abs(this.width), Math.abs(this.height));
         const vec = new Vector(radius, radius);
-        const min = this.worldPosition.clone().add(this.offset).sub(vec);
+        const min = this.worldPosition.clone().sub(vec);
         const max = min.clone().add(vec).add(vec);
         return {
             min,

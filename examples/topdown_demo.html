@@ -224,6 +224,13 @@
 
         class Player {
             constructor(scene, x, y, zIndex, emitter, tileset) {
+                this.collider = new colliders.BoxCollider({
+                    width: 24,
+                    height: 12,
+                    offset: new Vector(-12, -6)
+                });
+                scene.addNode(this.collider);
+
                 this.sprite = new Sprite({
                     tileset,
                     tilesetRegion: { x: 0, y: 0 },
@@ -231,29 +238,23 @@
                     zIndex
                 });
                 this.sprite.maskColor.set(1, 1, 1, 1);
-                scene.addNode(this.sprite);
 
                 this.animator = new Animator(this.sprite);
-                scene.addNode(this.animator);
+                this.collider.addNode(this.animator);
 
                 this.position = new Vector(x, y);
                 this.velocity = new Vector();
 
                 this.speed = 80;
 
-                this.sprite.position.copy(this.position);
-                this.sprite.offset.set(-32, -64);
+                this.collider.position.copy(this.position);
+                this.sprite.position.set(-32, -64);
 
                 this.direction = 2;
                 this.isCasting = false;
                 this.emitter = emitter;
 
-                this.collider = new colliders.BoxCollider({
-                    width: 24,
-                    height: 12,
-                    offset: new Vector(-12, -6)
-                });
-                scene.addNode(this.collider);
+                this.collider.addNode(this.sprite);
             }
 
             update(input, dt) {
@@ -288,7 +289,6 @@
                         this.animator.play([0, this.direction], { repeat: true, restart: false }); // idle
                     }
 
-                    this.sprite.position.copy(this.position);
                     this.collider.position.copy(this.position);
                 }
             }
@@ -422,7 +422,7 @@
                                 zIndex,
                                 isStatic: false
                             });
-                            tree.offset.set(-1.5 * layer.tilemap.tileWidth, -4 * layer.tilemap.tileHeight + 4);
+                            // tree.offset.set(-1.5 * layer.tilemap.tileWidth, -4 * layer.tilemap.tileHeight + 4);
                             tree.position.set(x, y);
                             scene.addNode(tree);
                             const width = 2 * layer.tilemap.tileWidth - 12;

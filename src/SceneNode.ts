@@ -9,6 +9,7 @@ export abstract class SceneNode {
     public name: string;
     public position: Vector;
     public angle: number;
+    public scale: Vector;
     public scene!: Scene;
     private _messageHandlers: Map<string, { handler: MessageHandler, options: MessageHandlerOptions }[]>;
     private _parent: SceneNode | null;
@@ -19,6 +20,7 @@ export abstract class SceneNode {
         this.name = "";
         this.position = new Vector();
         this.angle = 0;
+        this.scale = new Vector(1, 1);
         this._messageHandlers = new Map();
         this._parent = null;
         this._nodes = [];
@@ -112,6 +114,13 @@ export abstract class SceneNode {
         } else {
             this.position.copy(pos);
         }
+    }
+
+    public get worldScale(): Vector {
+        if (this._parent) {
+            return this._parent.worldScale.clone().mul(this.scale);
+        }
+        return this.scale.clone();
     }
 
     public setParent(newParent: SceneNode | null, worldPositionStays: boolean = true) {

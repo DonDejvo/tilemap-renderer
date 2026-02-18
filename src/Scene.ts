@@ -118,7 +118,8 @@ export class Scene {
                             });
 
                             s.position.set((j + layer.x) * tileWidth, (i + layer.y) * tileHeight);
-                            s.scale.set(tileWidth, tileHeight);
+                            s.width = tileWidth;
+                            s.height = tileHeight;
 
                             sprites.push(this.addNode(s));
 
@@ -203,7 +204,7 @@ export class Scene {
     }
 
     public syncColliders() {
-        for(let collider of this.colliders) {
+        for (let collider of this.colliders) {
             collider.calculateWorldPoints();
 
             const client = collider.getHashGridClient();
