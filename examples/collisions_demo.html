@@ -41,25 +41,12 @@
             padding: 2px 6px;
             border-radius: 4px;
         }
-
-        #frametimeinfo {
-            position: fixed;
-            left: 10px;
-            top: 40px;
-            color: white;
-            font: 14px monospace;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 2px 6px;
-            border-radius: 4px;
-            z-index: 9999;
-        }
     </style>
 </head>
 
 <body>
     <div id="fpsinfo">FPS: 0</div>
     <div id="sceneinfo"></div>
-    <div id="frametimeinfo"></div>
 
     <script type="module">
         import {
@@ -73,11 +60,10 @@
             RigidBody,
             PhysicsWorld,
             Light,
-            EMATimer,
             colliders
         } from "../src/index.ts";
 
-        const rendererContext = "webgpu";
+        const rendererContext = "webgl";
 
         class Input {
             constructor() {
@@ -291,11 +277,6 @@
 
             setActiveShape(shapes[activeIndex]);
 
-            const cpuTimer = new EMATimer();
-            const gpuTimer = renderer.getGpuTimer();
-
-            gpuTimer.enable();
-
             const draw = () => {
                 requestAnimationFrame(now => {
                     draw();
@@ -386,15 +367,8 @@
                             drawNormal(ctx, p, collision.dir);
                         }
                     }
-
-                    cpuTimer.begin();
-
+                    
                     renderer.render(scene, camera);
-
-                    cpuTimer.end();
-
-                    cpuTimer.poll();
-                    gpuTimer.poll();
                 });
             };
 
@@ -414,16 +388,6 @@
                 fpsinfo.textContent = `${rendererContext.toUpperCase()} - FPS: ${fps}`;
 
                 sceneinfo.innerHTML = `<pre>${formatSceneInfo(scene.getInfo())}</pre>`;
-
-                const avgGPU = gpuTimer.getAverage();
-                const peakGPU = gpuTimer.getPeak();
-                const avgCPU = cpuTimer.getAverage();
-                const peakCPU = cpuTimer.getPeak();
-
-                frametimeinfo.innerHTML = `
-<div>GPU: avg: ${avgGPU?.toFixed(2) ?? "-"} ms, peak: ${peakGPU.toFixed(2)}</div>
-<div>CPU: avg: ${avgCPU?.toFixed(2) ?? "-"} ms, peak: ${peakCPU.toFixed(2)}</div>
-`;
             }, 100);
         };
 

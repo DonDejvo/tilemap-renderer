@@ -53,7 +53,7 @@ export abstract class Collider extends SceneNode {
             this.scene.getColliders().splice(i, 1);
         }
         if (this.body) {
-            this.body.removeCollider(this);
+            this.body.collider = null;
         }
         if (this._hashGridClient) {
             this.scene.getColliderHashGrid().removeClient(this._hashGridClient);

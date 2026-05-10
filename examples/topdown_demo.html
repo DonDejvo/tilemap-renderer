@@ -200,8 +200,7 @@
             constructor(scene, x, y, zIndex, emitter, tileset) {
                 this.collider = new colliders.BoxCollider({
                     width: 24,
-                    height: 12,
-                    offset: new Vector(-12, -6)
+                    height: 12
                 });
                 scene.addNode(this.collider);
 
@@ -291,7 +290,6 @@
                 this.sprite.position.set(x, y);
                 light.position.set(x, y);
                 this.sprite.angle = direction.angle();
-                this.sprite.offset.set(-32, -32);
 
                 this.direction = direction;
 
@@ -396,7 +394,7 @@
                                 zIndex,
                                 isStatic: false
                             });
-                            // tree.offset.set(-1.5 * layer.tilemap.tileWidth, -4 * layer.tilemap.tileHeight + 4);
+                            
                             tree.position.set(x, y);
                             scene.addNode(tree);
                             const width = 2 * layer.tilemap.tileWidth - 12;
@@ -404,7 +402,6 @@
                             const treeCollider = new colliders.BoxCollider({
                                 width,
                                 height,
-                                offset: new Vector(width * -0.5, height * -0.5),
                                 castShadow: true
                             });
                             treeCollider.position.copy(tree.position);
@@ -508,10 +505,9 @@
                 { shader: "blurY", inputs: [k], output: k + 1 },
                 { shader: "neonComposite", inputs: [TextureID.SCENE, k + 1], output: TextureID.MASK },
                 // Light
-                { shader: "colorCut", inputs: [TextureID.LIGHTMAP], output: TextureID.LIGHTMAP + 1, uniforms: [{ name: "interval", value: 6 }] },
-                // { shader: "blurX", inputs: [TEXID_LIGHTMAP + 1], output: 4 },
-                // { shader: "blurY", inputs: [4], output: 5 },
-                { shader: "light", inputs: [TextureID.MASK, TextureID.LIGHTMAP + 1], output: -1 },
+                { shader: "blurX", inputs: [TextureID.LIGHTMAP], output: 4 },
+                { shader: "blurY", inputs: [4], output: 5 },
+                { shader: "light", inputs: [TextureID.MASK, 5], output: -1 },
             ];
 
             const draw = () => {
@@ -531,11 +527,6 @@
                     }
 
                     accTime += dt;
-
-                    // while (accTime >= fixedDeltaTime) {
-                    //     accTime -= fixedDeltaTime;
-                    //     scene.fixedUpdate(fixedDeltaTime);
-                    // }
 
                     input.update();
 
