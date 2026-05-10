@@ -4,13 +4,12 @@ import { getHeight, getWidth, overlaps } from "../bounds";
 import { geometry } from "../geometry";
 import { LineRenderer } from "../LineRenderer";
 import { math } from "../math";
-import { BlendMode, defaultPass, getOffscreenTextureSizeFactor, GPUTimer, LAYER_LIFETIME, maskClearColor, Renderer, RendererBuilderOptions, RendererType, RenderPass, TEXTURE_CHANNELS, TextureInfo } from "../Renderer";
+import { BlendMode, defaultPass, getOffscreenTextureSizeFactor, LAYER_LIFETIME, maskClearColor, Renderer, RendererBuilderOptions, RendererType, RenderPass, TEXTURE_CHANNELS, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
 import { ShaderBuilder, ShaderBuilderOutput, shaders } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
 import { GPUConfig, requestConfig, textureChannels, worldToClipVertex } from "./common";
-import { WebgpuGPUTimer } from "./WebgpuGPUTimer";
 import { WebgpuLineRendrer } from "./WebgpuLineRenderer";
 import { shadowGeometryModule } from "../wasm/shadowGeometryModule";
 import { TextureID } from "../TextureID";
@@ -302,7 +301,6 @@ export class WebgpuRenderer implements Renderer {
     private textureDimBuffer!: GPUBuffer;
     private nextTextureIdx: number = 0;
     private spriteBindGroups: Map<string, GPUBindGroup> = new Map();
-    private gpuTimer!: WebgpuGPUTimer;
     public enableSpector: boolean = false;
 
     constructor(canvas: HTMLCanvasElement) {
@@ -321,34 +319,6 @@ export class WebgpuRenderer implements Renderer {
             lightAdditive: { shader: "default_additive", inputs: [TextureID.LIGHTMAP + 1], output: TextureID.LIGHTMAP }
         };
         this.resizeRequested = false;
-    }
-
-    public getReport() {
-        const mapToObject = (obj: any): any => {
-            if (typeof obj !== "object") return obj;
-
-            if (Array.isArray(obj)) {
-                return obj.filter(e => e !== null).map(e => mapToObject(e));
-            }
-
-            const copy: any = {};
-            for (let k in obj) {
-                if (obj[k] === null) continue;
-
-                copy[k] = mapToObject(obj[k]);
-            }
-            return copy;
-        }
-
-        return {
-            context: this.getType(),
-            info: mapToObject(this.cfg.adapter.info),
-            limits: mapToObject(this.cfg.device.limits)
-        };
-    }
-
-    public getGpuTimer(): GPUTimer {
-        return this.gpuTimer;
     }
 
     public getLineRenderer(): LineRenderer {
@@ -710,8 +680,6 @@ export class WebgpuRenderer implements Renderer {
         this.lineRenderer = new WebgpuLineRendrer(ctx, this.cfg);
         this.lineRenderer.init();
 
-        this.gpuTimer = new WebgpuGPUTimer(this.cfg);
-
         this.initialized = true;
     }
 
@@ -997,10 +965,6 @@ export class WebgpuRenderer implements Renderer {
 
         const encoder = this.cfg.device.createCommandEncoder();
 
-        if (this.gpuTimer.isEnabled()) {
-            this.gpuTimer.begin(encoder);
-        }
-
         const layers: WebgpuRendererLayer[] = [];
         for (const sceneLayer of scene.getLayersOrdered()) {
             if (!this.layersMap.has(sceneLayer)) {
@@ -1037,10 +1001,6 @@ export class WebgpuRenderer implements Renderer {
 
         this.lineRenderer.render(encoder, camera);
         this.lineRenderer.clear();
-
-        if (this.gpuTimer.isEnabled()) {
-            this.gpuTimer.end(encoder);
-        }
 
         const commandBuffer = encoder.finish();
         this.cfg.device.queue.submit([commandBuffer]);

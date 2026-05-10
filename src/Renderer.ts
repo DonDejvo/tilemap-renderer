@@ -4,8 +4,7 @@ import { LineRenderer } from "./LineRenderer";
 import { Scene } from "./Scene";
 import { FunctionArg, ShaderBuilder, VariableType } from "./ShaderBuilder";
 import { Tileset } from "./Tileset";
-import { WebglRenderer } from "./webgl/WebglRenderer";
-import { Webgl2Renderer } from "./webgl2/Webgl2Renderer";
+import { Webgl2Renderer } from "./webgl/Webgl2Renderer";
 import { WebgpuRenderer } from "./webgpu/WebgpuRenderer";
 
 export const LAYER_LIFETIME = 60;
@@ -46,17 +45,6 @@ export interface RendererBuilderOptions {
     declareVar(name: string, type: VariableType, isUniform?: boolean): string;
 }
 
-export interface GPUTimer {
-    isSupported(): boolean;
-    isEnabled(): boolean;
-    enable(): void;
-    disable(): void;
-    poll(): number | null;
-    getAverage(): number;
-    getPeak(): number;
-    resetAverage(): void;
-}
-
 export interface Renderer {
     getType(): RendererType;
     addTextures(tilesets: Tileset[], images: Record<string, TexImageSource>): void;
@@ -67,8 +55,6 @@ export interface Renderer {
     getBuilderOptions(): RendererBuilderOptions;
     registerShader(name: string, builder: ShaderBuilder, blendMode?: BlendMode): void;
     getLineRenderer(): LineRenderer;
-    getGpuTimer(): GPUTimer;
-    getReport(): any;
 
     pipeline: RenderPass[];
     clearColor: Color;
@@ -80,8 +66,6 @@ export const createRenderer = (type: RendererType): Renderer => {
 
     switch (type) {
         case "webgl":
-            return new WebglRenderer(canvas);
-        case "webgl2":
             return new Webgl2Renderer(canvas);
         case "webgpu":
             return new WebgpuRenderer(canvas);

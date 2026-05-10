@@ -4,7 +4,6 @@ import { bounds } from "./bounds";
 import { Camera } from "./Camera";
 import { colliders } from "./Collider";
 import { Color } from "./Color";
-import { EMATimer } from "./EMATimer";
 import { Light } from "./Light";
 import { limits } from "./limits";
 import { math } from "./math";
@@ -20,7 +19,5 @@ import { Tilemap } from "./Tilemap";
 import { Tileset } from "./Tileset";
 import { Vector } from "./Vector";
 import { initWasm } from "./wasmLoader";
-import { WebglGPUTimer } from "./webgl/WebglGPUTimer";
-import { WebgpuGPUTimer } from "./webgpu/WebgpuGPUTimer";
 
-export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, Animator, ShaderBuilder, Light, RigidBody, PhysicsWorld, SceneNode, EMATimer, WebglGPUTimer, WebgpuGPUTimer, limits, colliders, assets, math, bounds, createRenderer, initWasm, TextureID };
+export { Sprite, Scene, Camera, Tileset, Vector, Color, Tilemap, Animator, ShaderBuilder, Light, RigidBody, PhysicsWorld, SceneNode, limits, colliders, assets, math, bounds, createRenderer, initWasm, TextureID };

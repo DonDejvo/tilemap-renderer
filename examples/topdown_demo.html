@@ -114,38 +114,12 @@
         .action:active {
             background: rgba(255, 100, 100, 0.7);
         }
-
-        #frametimeinfo {
-            position: fixed;
-            left: 10px;
-            top: 40px;
-            color: white;
-            font: 12px monospace;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 2px 6px;
-            border-radius: 4px;
-            z-index: 9999;
-        }
-
-        #rendererinfo {
-            position: fixed;
-            left: 10px;
-            top: 80px;
-            color: white;
-            font: 12px monospace;
-            background: rgba(0, 0, 0, 0.3);
-            padding: 2px 6px;
-            border-radius: 4px;
-            z-index: 9999;
-        }
     </style>
 </head>
 
 <body>
     <div id="fpsinfo">FPS: 0</div>
     <div id="sceneinfo"></div>
-    <div id="frametimeinfo"></div>
-    <div id="rendererinfo"></div>
 
     <div class="controls" id="controls">
         <div class="btn up" data-key="w">▲</div>
@@ -156,12 +130,12 @@
     </div>
 
     <script type="module">
-        import { createRenderer, initWasm, Tileset, Tilemap, Vector, math, colliders, Sprite, Light, ShaderBuilder, Camera, Scene, assets, Animator, Color, EMATimer, TextureID } from "../src/index.ts";
+        import { createRenderer, initWasm, Tileset, Tilemap, Vector, math, colliders, Sprite, Light, ShaderBuilder, Camera, Scene, assets, Animator, Color, TextureID } from "../src/index.ts";
 
         ShaderBuilder.LOG_SHADERS = true;
 
         const assetsUrl = "";
-        const rendererContext = "webgpu";
+        const rendererContext = "webgl";
         let k = 6;
 
         const formatInfoObject = (info) => {
@@ -511,8 +485,6 @@
 
             await renderer.init();
 
-            rendererinfo.innerHTML = formatInfoObject(renderer.getReport());
-
             renderer.clearColor = new Color(0.5, 0.5, 0.5);
 
             const observer = new ResizeObserver(entries => {
@@ -541,11 +513,6 @@
                 // { shader: "blurY", inputs: [4], output: 5 },
                 { shader: "light", inputs: [TextureID.MASK, TextureID.LIGHTMAP + 1], output: -1 },
             ];
-
-            const cpuTimer = new EMATimer();
-            const gpuTimer = renderer.getGpuTimer();
-
-            gpuTimer.enable();
 
             const draw = () => {
                 requestAnimationFrame(now => {
@@ -610,14 +577,7 @@
                         }
                     }
 
-                    cpuTimer.begin();
-
                     renderer.render(scene, camera);
-
-                    cpuTimer.end();
-
-                    cpuTimer.poll();
-                    gpuTimer.poll();
                 });
             }
 
@@ -627,16 +587,6 @@
                 fpsinfo.textContent = `${rendererContext.toUpperCase()} - FPS: ${fps}`;
 
                 sceneinfo.innerHTML = formatInfoObject(scene.getInfo());
-
-                const avgGPU = gpuTimer.getAverage();
-                const peakGPU = gpuTimer.getPeak();
-                const avgCPU = cpuTimer.getAverage();
-                const peakCPU = cpuTimer.getPeak();
-
-                frametimeinfo.innerHTML = `
-<div>GPU: avg: ${avgGPU?.toFixed(2) ?? "-"} ms, peak: ${peakGPU.toFixed(2)}</div>
-<div>CPU: avg: ${avgCPU?.toFixed(2) ?? "-"} ms, peak: ${peakCPU.toFixed(2)}</div>
-`;
             }, 100);
         };
 

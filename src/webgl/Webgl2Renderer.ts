@@ -3,18 +3,17 @@ import { Color } from "../Color";
 import { getHeight, getWidth, overlaps } from "../bounds";
 import { geometry } from "../geometry";
 import { LineRenderer } from "../LineRenderer";
-import { BlendMode, defaultPass, getOffscreenTextureSizeFactor, GPUTimer, LAYER_LIFETIME, maskClearColor, Renderer, RendererBuilderOptions, RendererType, RenderPass, TEXTURE_CHANNELS, TextureInfo } from "../Renderer";
+import { BlendMode, defaultPass, getOffscreenTextureSizeFactor, LAYER_LIFETIME, maskClearColor, Renderer, RendererBuilderOptions, RendererType, RenderPass, TEXTURE_CHANNELS, TextureInfo } from "../Renderer";
 import { Scene, SceneLayer } from "../Scene";
 import { ShaderBuilderOutput, ShaderBuilder, shaders } from "../ShaderBuilder";
 import { Sprite } from "../Sprite";
 import { Tileset } from "../Tileset";
-import { Framebuffer } from "../webgl/Framebuffer";
-import { ShaderProgram } from "../webgl/ShaderProgram";
-import { WebglGPUTimer } from "../webgl/WebglGPUTimer";
-import { WebglLineRenderer } from "../webgl/WebglLineRenderer";
+import { Framebuffer } from "./Framebuffer";
+import { ShaderProgram } from "./ShaderProgram";
+import { WebglLineRenderer } from "./WebglLineRenderer";
 import { shadowGeometryModule } from "../wasm/shadowGeometryModule";
 import { limits } from "../limits";
-import { getRendererReport, lightStruct, textureChannels, worldToClipVertex } from "../webgl/common";
+import { lightStruct, textureChannels, worldToClipVertex } from "./common";
 import { TextureID } from "../TextureID";
 
 const mainVertex = `#version 300 es
@@ -236,7 +235,6 @@ export class Webgl2Renderer implements Renderer {
     private resizeRequested: boolean;
     private lineRenderer!: WebglLineRenderer;
     private nextTextureIdx: number = 0;
-    private gpuTimer!: WebglGPUTimer;
     private fbo: Framebuffer | null = null;
     public enableSpector: boolean = false;
 
@@ -252,14 +250,6 @@ export class Webgl2Renderer implements Renderer {
         this.time = 0;
         this.shaderCache = new Map();
         this.resizeRequested = false;
-    }
-
-    public getReport() {
-        return getRendererReport(this.getType(), this.gl);
-    }
-
-    public getGpuTimer(): GPUTimer {
-        return this.gpuTimer;
     }
 
     public getLineRenderer(): LineRenderer {
@@ -407,8 +397,6 @@ export class Webgl2Renderer implements Renderer {
 
         this.lineRenderer = new WebglLineRenderer(gl);
         this.lineRenderer.init();
-
-        this.gpuTimer = new WebglGPUTimer(gl);
 
         this.initialized = true;
 
@@ -645,10 +633,6 @@ export class Webgl2Renderer implements Renderer {
         const cameraBounds = camera.getBounds();
         this.time = performance.now() * 0.001;
 
-        if (this.gpuTimer.isEnabled()) {
-            this.gpuTimer.begin();
-        }
-
         const layers: WebglRendererLayer[] = [];
         for (const sceneLayer of scene.getLayersOrdered()) {
             let layer: WebglRendererLayer;
@@ -676,10 +660,6 @@ export class Webgl2Renderer implements Renderer {
 
         this.lineRenderer.render(camera);
         this.lineRenderer.clear();
-
-        if (this.gpuTimer.isEnabled()) {
-            this.gpuTimer.end();
-        }
 
         for (const [sceneLayer, rendererLayer] of this.layersMap) {
             if (rendererLayer.lifetime <= 0) {
